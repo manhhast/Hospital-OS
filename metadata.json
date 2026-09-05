@@ -1,0 +1,6 @@
+{
+  "name": "CLS WorkHub",
+  "description": "Cận Lâm Sàng Work Management System - Quản lý công việc, lịch trực, lịch họp, kế hoạch tuần và tài liệu chuyên biệt Khoa Cận Lâm Sàng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
