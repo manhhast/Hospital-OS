@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -388,6 +388,11 @@ Trả về JSON chuẩn theo cấu trúc:
       ]
     }
   ],
+  "departmentBreakdown": {
+    "cdha": 3450,
+    "xetNghiem": 4680,
+    "thamDoChucNang": 810
+  },
   "tatOptimizationInsights": [
     "Khuyến nghị chuyển 2 KTV ca chiều sang ca sáng Thứ Hai để giảm TAT giờ cao điểm xuống 37%",
     "Thiết lập luồng ưu tiên kết quả xét nghiệm tiền phẫu thuật trước 09:00"
@@ -403,6 +408,13 @@ Trả về JSON chuẩn theo cấu trúc:
 
         const parsed = JSON.parse(response.text || "{}");
         if (parsed && parsed.dailyForecasts) {
+          if (!parsed.departmentBreakdown || typeof parsed.departmentBreakdown.xetNghiem !== 'number') {
+            parsed.departmentBreakdown = {
+              cdha: parsed.dailyForecasts.reduce((sum: number, d: any) => sum + (d.cdhaPredicted || 0), 0) || fallbackData.departmentBreakdown.cdha,
+              xetNghiem: parsed.dailyForecasts.reduce((sum: number, d: any) => sum + (d.xetNghiemPredicted || 0), 0) || fallbackData.departmentBreakdown.xetNghiem,
+              thamDoChucNang: parsed.dailyForecasts.reduce((sum: number, d: any) => sum + (d.thamDoCnPredicted || 0), 0) || fallbackData.departmentBreakdown.thamDoChucNang
+            };
+          }
           return res.json({ success: true, data: parsed, source: usedModel });
         }
       } catch (geminiError: any) {

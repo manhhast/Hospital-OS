@@ -119,18 +119,29 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Cơ cấu dự báo chuyên khoa</div>
               <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-2 space-y-1">
-                <div className="flex justify-between">
-                  <span>Xét nghiệm:</span>
-                  <span className="text-blue-600 font-black">{forecastData.departmentBreakdown.xetNghiem.toLocaleString()} ca (52%)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Chẩn đoán H.Ảnh:</span>
-                  <span className="text-indigo-600 font-black">{forecastData.departmentBreakdown.cdha.toLocaleString()} ca (39%)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Thăm dò CN & Nội soi:</span>
-                  <span className="text-purple-600 font-black">{forecastData.departmentBreakdown.thamDoChucNang.toLocaleString()} ca (9%)</span>
-                </div>
+                {(() => {
+                  const breakdown = forecastData.departmentBreakdown || {
+                    xetNghiem: forecastData.dailyForecasts?.reduce((sum, d) => sum + (d.xetNghiemPredicted || 0), 0) || 4680,
+                    cdha: forecastData.dailyForecasts?.reduce((sum, d) => sum + (d.cdhaPredicted || 0), 0) || 3450,
+                    thamDoChucNang: forecastData.dailyForecasts?.reduce((sum, d) => sum + (d.thamDoCnPredicted || 0), 0) || 810
+                  };
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Xét nghiệm:</span>
+                        <span className="text-blue-600 font-black">{(breakdown.xetNghiem || 0).toLocaleString()} ca (52%)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Chẩn đoán H.Ảnh:</span>
+                        <span className="text-indigo-600 font-black">{(breakdown.cdha || 0).toLocaleString()} ca (39%)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Thăm dò CN & Nội soi:</span>
+                        <span className="text-purple-600 font-black">{(breakdown.thamDoChucNang || 0).toLocaleString()} ca (9%)</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
