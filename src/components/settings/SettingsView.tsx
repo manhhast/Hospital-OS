@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { Settings, Save, RefreshCw, Key, Folder, Database, Mail, Shield, AlertTriangle, FileSpreadsheet, Link, Sun, Moon, Monitor, Palette } from 'lucide-react';
+import { 
+  Settings, Save, RefreshCw, Key, Folder, Database, Mail, Shield, AlertTriangle, 
+  FileSpreadsheet, Link, Sun, Moon, Monitor, Palette, CheckCircle2, Trash2, 
+  PlayCircle, Layers, Building2, UserCheck, Stethoscope
+} from 'lucide-react';
 import { AppSettings } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 
@@ -19,10 +23,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [settings, setSettings] = useState<AppSettings>(() => {
     const s = storageService.getSettings();
     if (!s.googleSheetUrl) {
-      s.googleSheetUrl = localStorage.getItem('google_sheet_url') || 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit';
-    }
-    if (!s.reportGoogleSheetId) {
-      s.reportGoogleSheetId = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms';
+      s.googleSheetUrl = localStorage.getItem('google_sheet_url') || '';
     }
     return s;
   });
@@ -101,17 +102,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     onShowToast('Cấu hình đã lưu', 'Đã cập nhật các tham số hệ thống và phân tách rõ 2 Google Sheets thành công', 'success');
   };
 
-  const handleResetDatabase = () => {
+  const usersCount = storageService.getUsers().length;
+  const tasksCount = storageService.getTasks().length;
+  const equipmentCount = storageService.getEquipment().length;
+  const docsCount = storageService.getDocuments().length;
+  const isCleanProduction = tasksCount === 0 && equipmentCount === 0;
+
+  const handlePurgeTrialData = () => {
     onConfirmAction(
-      'Khôi phục dữ liệu mặc định',
-      'CẢNH BÁO: Thao tác này sẽ xóa toàn bộ thay đổi và đặt lại dữ liệu mẫu Bệnh viện ban đầu. Bạn có chắc chắn không?',
+      'Kích hoạt Chế độ Vận hành Thực tế (Xóa sạch dữ liệu mẫu)',
+      'CẢNH BÁO: Thao tác này sẽ xóa sạch 100% dữ liệu dùng thử (công việc, văn bản, lịch trực, máy móc mẫu). Hệ thống sẽ đưa về trạng thái sạch sẵn sàng cho khoa vận hành thực tế với tài khoản Quản trị: admin@hospital.vn (mật khẩu: admin). Bạn có chắc chắn muốn thực hiện?',
       () => {
-        storageService.resetToDefault();
+        storageService.purgeAllTrialData();
         setSettings(storageService.getSettings());
-        onShowToast('Đã khôi phục', 'Dữ liệu đã được đặt lại về mặc định', 'warning');
+        onShowToast('Đã chuyển sang Chế độ Thực tế', 'Toàn bộ dữ liệu dùng thử đã được loại bỏ hoàn toàn. Hệ thống sẵn sàng vận hành.', 'success');
       },
       true
     );
+  };
+
+  const handleLoadSampleData = () => {
+    onConfirmAction(
+      'Nạp lại dữ liệu dùng thử (Demo / Đào tạo)',
+      'Thao tác này sẽ nạp lại bộ dữ liệu mẫu ban đầu để bạn thử nghiệm tính năng hoặc hướng dẫn sử dụng cho nhân sự khoa. Bạn có chắc chắn không?',
+      () => {
+        storageService.loadSampleDemoData();
+        setSettings(storageService.getSettings());
+        onShowToast('Đã nạp dữ liệu mẫu', 'Bộ dữ liệu minh họa đã được khôi phục thành công.', 'info');
+      },
+      false
+    );
+  };
+
+  const handleResetDatabase = () => {
+    handlePurgeTrialData();
   };
 
   return (
@@ -394,6 +418,119 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
+        {/* PRODUCTION READINESS & DATA CLEANUP CARD */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border-2 border-emerald-500/30 dark:border-emerald-600/40 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <span>Trạng Thái Vận Hành Bệnh Viện Thực Tế</span>
+                  {isCleanProduction ? (
+                    <span className="px-2 py-0.5 text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-full inline-flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Sẵn sàng thực tế (Clean State)
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded-full inline-flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-600" /> Đang chứa dữ liệu mẫu
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Quản lý dọn sạch dữ liệu dùng thử để chuyển giao cho Khoa Cận Lâm Sàng vận hành chính thức
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLoadSampleData}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors inline-flex items-center gap-1.5"
+                title="Nạp lại bộ dữ liệu mẫu để thử nghiệm tính năng hoặc đào tạo nhân sự"
+              >
+                <PlayCircle className="w-3.5 h-3.5 text-blue-600" />
+                <span>Nạp dữ liệu mẫu</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePurgeTrialData}
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5"
+                title="Xóa toàn bộ dữ liệu dùng thử"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Làm sạch dữ liệu (Áp dụng thực tế)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics of current database state */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-blue-600" /> Tài khoản nhân sự
+              </div>
+              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {usersCount} <span className="text-xs font-normal text-slate-400">người</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                <Stethoscope className="w-3.5 h-3.5 text-indigo-600" /> Máy móc & Thiết bị
+              </div>
+              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {equipmentCount} <span className="text-xs font-normal text-slate-400">thiết bị</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-amber-600" /> Nhiệm vụ & Công việc
+              </div>
+              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {tasksCount} <span className="text-xs font-normal text-slate-400">công việc</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                <Folder className="w-3.5 h-3.5 text-emerald-600" /> Văn bản & Chứng chỉ
+              </div>
+              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
+                {docsCount} <span className="text-xs font-normal text-slate-400">tài liệu</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Start Checklist for Production */}
+          <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+            <div className="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+              <span>📋</span> Các bước khởi tạo dữ liệu thực tế cho Bệnh viện:
+            </div>
+            <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400 text-[11.5px] leading-relaxed">
+              <li>
+                <strong>Tài khoản Quản trị:</strong> Đăng nhập bằng email <code className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 font-mono text-emerald-900 dark:text-emerald-200">admin@hospital.vn</code> (mật khẩu: <code className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 font-mono text-emerald-900 dark:text-emerald-200">admin</code>). Bạn có thể đổi mật khẩu bất kỳ lúc nào qua menu tài khoản ở góc trên.
+              </li>
+              <li>
+                <strong>Nhân sự khoa:</strong> Vào mục <em>Quản lý Nhân sự</em> để thêm danh sách Bác sĩ, Kỹ thuật viên thật của khoa.
+              </li>
+              <li>
+                <strong>Thiết bị cận lâm sàng:</strong> Vào mục <em>Thiết bị & Máy móc</em> để thêm máy hoặc dùng tính năng <em>Nhập từ file Excel</em> để nạp danh mục máy toàn viện nhanh chóng.
+              </li>
+              <li>
+                <strong>Phân ca trực:</strong> Vào mục <em>Lịch trực & Phân công</em> để tạo lịch ca trực và phân bổ phòng máy tuần mới.
+              </li>
+              <li>
+                <strong>Báo cáo số ca:</strong> Dán đường dẫn Google Sheet thật của bệnh viện vào ô bên trên để liên kết số liệu trực tiếp.
+              </li>
+            </ul>
+          </div>
+        </div>
+
         {/* Save & Reset Buttons */}
         <div className="flex items-center justify-between pt-2">
           <button
@@ -402,7 +539,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             className="flex items-center space-x-2 px-4 py-2.5 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 hover:bg-rose-100 rounded-xl text-xs font-semibold transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
-            <span>Reset Database Mẫu</span>
+            <span>Làm sạch về Chế độ Thực tế</span>
           </button>
 
           <button

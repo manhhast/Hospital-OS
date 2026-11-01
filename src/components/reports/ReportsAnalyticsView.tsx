@@ -218,13 +218,13 @@ export const ReportsAnalyticsView: React.FC = () => {
   // Google Sheets integration state
   const [sheetUrl, setSheetUrl] = useState<string>(() => {
     const s = storageService.getSettings();
-    return s.googleSheetUrl || localStorage.getItem('google_sheet_url') || 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit';
+    return s.googleSheetUrl || localStorage.getItem('google_sheet_url') || '';
   });
 
   // Sync sheetUrl when settings or localStorage change
   useEffect(() => {
     const s = storageService.getSettings();
-    const currentUrl = s.googleSheetUrl || localStorage.getItem('google_sheet_url') || 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit';
+    const currentUrl = s.googleSheetUrl || localStorage.getItem('google_sheet_url') || '';
     if (currentUrl !== sheetUrl) {
       setSheetUrl(currentUrl);
     }

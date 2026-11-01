@@ -246,7 +246,17 @@ export const OeeReliabilityTab: React.FC<OeeReliabilityTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
-              {filteredData.map(({ eq, oee, reliability }) => (
+              {filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                    <p className="font-semibold text-sm">Chưa có thiết bị nào trong hệ thống</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Hãy thêm thiết bị cận lâm sàng mới hoặc dùng tính năng &quot;Nhập từ Excel&quot; để đồng bộ danh mục máy thực tế của khoa.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filteredData.map(({ eq, oee, reliability }) => (
                 <tr key={eq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   {/* Name & Code */}
                   <td className="py-3.5 px-4 align-middle">
@@ -324,7 +334,7 @@ export const OeeReliabilityTab: React.FC<OeeReliabilityTabProps> = ({
                     </button>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

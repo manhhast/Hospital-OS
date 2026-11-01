@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   Users, Award, Calendar, BookOpen, CheckCircle2, Clock, AlertCircle, 
   Search, Check, X, Edit3, Building2, Grid, Layers, History, Plus, Briefcase, ChevronRight, UserCheck, Phone, Mail,
-  Trash2, AlertTriangle, ShieldCheck, Filter, FileText
+  Trash2, AlertTriangle, ShieldCheck, Filter, FileText, FileSpreadsheet, Download, Upload, FileUp, Sparkles, CheckSquare, PlusCircle
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { 
   StaffProfile, LeaveRequest, TrainingCourse, EmploymentStatus, WorkStatusHistoryItem, CLSTitle, UserRole,
-  MedicalCertificate
+  MedicalCertificate, ParaclinicalRoom
 } from '../../types/hospital';
 
 export const StaffManagementView: React.FC = () => {
@@ -69,6 +70,58 @@ export const StaffManagementView: React.FC = () => {
     staffName: string;
   } | null>(null);
 
+  // Paraclinical Rooms from Quản lý phòng ban
+  const [rooms, setRooms] = useState<ParaclinicalRoom[]>([]);
+
+  // Add Staff Modal State
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [newStaffForm, setNewStaffForm] = useState({
+    userId: '',
+    fullName: '',
+    title: 'Kỹ thuật viên' as CLSTitle,
+    role: 'Staff' as UserRole,
+    departmentSection: '',
+    room: '',
+    phone: '',
+    email: '',
+    dob: '1990-01-01',
+    gender: 'Nam' as 'Nam' | 'Nữ' | 'Khác',
+    specialty: '',
+    joinDate: new Date().toISOString().split('T')[0],
+    experienceYears: 3,
+    currentStatus: 'Đang làm việc' as EmploymentStatus,
+    certName: '',
+    certCode: ''
+  });
+
+  // Delete Staff State
+  const [deleteConfirmStaff, setDeleteConfirmStaff] = useState<StaffProfile | null>(null);
+
+  // Import Excel Modal State
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false);
+  const [excelFileName, setExcelFileName] = useState('');
+  const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [excelImportStep, setExcelImportStep] = useState<'upload' | 'preview'>('upload');
+  const [parsedExcelStaff, setParsedExcelStaff] = useState<Array<{
+    userId: string;
+    fullName: string;
+    title: string;
+    role: string;
+    departmentSection: string;
+    room: string;
+    phone: string;
+    email: string;
+    dob: string;
+    gender: 'Nam' | 'Nữ' | 'Khác';
+    specialty: string;
+    joinDate: string;
+    experienceYears: number;
+    currentStatus: EmploymentStatus;
+    certCode: string;
+    isValid: boolean;
+    errorReason?: string;
+  }>>([]);
+
   const currentUser = storageService.getCurrentUser();
   const isAdmin = currentUser.role === 'Admin' || currentUser.title?.includes('Trưởng khoa');
 
@@ -91,6 +144,7 @@ export const StaffManagementView: React.FC = () => {
       setProfiles(storageService.getStaffProfiles());
       setLeaveRequests(storageService.getLeaveRequests());
       setTrainingCourses(storageService.getTrainingCourses());
+      setRooms(storageService.getRooms());
     };
     loadData();
     return storageService.subscribe(loadData);
@@ -337,20 +391,23 @@ export const StaffManagementView: React.FC = () => {
     }
   };
 
-  // Extract unique departments & rooms for dropdown suggestions and filter
-  const existingDepartments = Array.from(
-    new Set(profiles.map(p => p.departmentSection).filter(Boolean))
-  );
-  const existingRooms = Array.from(
-    new Set(profiles.map(p => p.room).filter(Boolean) as string[])
-  );
+  // Extract unique departments & rooms from Room Management AND staff profiles
+  const roomDepts = Array.from(new Set(rooms.map(r => r.departmentSection).filter(Boolean)));
+  const profileDepts = Array.from(new Set(profiles.map(p => p.departmentSection).filter(Boolean)));
+  const allDepartments = Array.from(new Set([
+    ...roomDepts,
+    ...profileDepts,
+    'Chẩn đoán hình ảnh',
+    'Xét nghiệm',
+    'Thăm dò chức năng',
+    'Hành chính Khoa'
+  ]));
 
-  const allDepartmentsAndRooms = Array.from(
-    new Set([
-      ...existingDepartments,
-      ...existingRooms
-    ])
-  );
+  const roomNames = Array.from(new Set(rooms.map(r => r.name).filter(Boolean)));
+  const profileRooms = Array.from(new Set(profiles.map(p => p.room).filter(Boolean) as string[]));
+  const allRoomNames = Array.from(new Set([...roomNames, ...profileRooms]));
+
+  const allDepartmentsAndRooms = Array.from(new Set([...allDepartments, ...allRoomNames]));
 
   // Filter staff profiles
   const filteredProfiles = profiles.filter(p => {
@@ -373,6 +430,402 @@ export const StaffManagementView: React.FC = () => {
     acc[key].push(profile);
     return acc;
   }, {});
+
+  // Reset Add Staff Form
+  const resetNewStaffForm = () => {
+    setNewStaffForm({
+      userId: `NV-${Math.floor(1000 + Math.random() * 9000)}`,
+      fullName: '',
+      title: 'Kỹ thuật viên' as CLSTitle,
+      role: 'Staff' as UserRole,
+      departmentSection: allDepartments[0] || 'Chẩn đoán hình ảnh',
+      room: allRoomNames[0] || (rooms[0]?.name ?? 'Phòng Chụp X-Quang Kỹ Thuật Số'),
+      phone: '',
+      email: '',
+      dob: '1990-01-01',
+      gender: 'Nam',
+      specialty: '',
+      joinDate: new Date().toISOString().split('T')[0],
+      experienceYears: 3,
+      currentStatus: 'Đang làm việc',
+      certName: '',
+      certCode: ''
+    });
+  };
+
+  const handleOpenAddStaffModal = () => {
+    resetNewStaffForm();
+    setShowAddStaffModal(true);
+  };
+
+  // --- Download Excel Template ---
+  const handleDownloadExcelTemplate = () => {
+    const sampleRoom1 = rooms[0]?.name || 'Phòng Chụp X-Quang Kỹ Thuật Số';
+    const sampleDept1 = rooms[0]?.departmentSection || 'Chẩn đoán hình ảnh';
+    const sampleRoom2 = rooms[1]?.name || 'Phòng Siêu Âm Tổng Quát & Màu';
+    const sampleDept2 = rooms[1]?.departmentSection || 'Thăm dò chức năng';
+    const sampleRoom3 = rooms[2]?.name || 'Phòng Lấy Mẫu Xét Nghiệm';
+    const sampleDept3 = rooms[2]?.departmentSection || 'Xét nghiệm';
+
+    const headers = [
+      'Mã NV',
+      'Họ và Tên (*)',
+      'Chức danh (*)',
+      'Vai trò hệ thống',
+      'Bộ phận / Khoa (*)',
+      'Phòng làm việc',
+      'Số điện thoại',
+      'Email',
+      'Giới tính',
+      'Ngày sinh (YYYY-MM-DD)',
+      'Chuyên môn',
+      'Ngày vào làm (YYYY-MM-DD)',
+      'Số năm kinh nghiệm',
+      'Trạng thái làm việc',
+      'Số CCHN'
+    ];
+
+    const sampleRows = [
+      [
+        'NV-001',
+        'BS.CKI Nguyễn Văn An',
+        'Bác sĩ',
+        'Doctor',
+        sampleDept1,
+        sampleRoom1,
+        '0912345678',
+        'an.nguyen@hospital.vn',
+        'Nam',
+        '1985-05-15',
+        'Chẩn đoán hình ảnh & X-Quang can thiệp',
+        '2018-03-01',
+        7,
+        'Đang làm việc',
+        '012345/BYT-CCHN'
+      ],
+      [
+        'NV-002',
+        'KTV. Trần Thị Mai',
+        'Kỹ thuật viên',
+        'Staff',
+        sampleDept2,
+        sampleRoom2,
+        '0987654321',
+        'mai.tran@hospital.vn',
+        'Nữ',
+        '1992-08-20',
+        'Kỹ thuật siêu âm Doppler màu',
+        '2020-06-15',
+        5,
+        'Đang làm việc',
+        '023456/BYT-CCHN'
+      ],
+      [
+        'NV-003',
+        'KTV. Lê Hoàng Nam',
+        'Kỹ thuật viên',
+        'Staff',
+        sampleDept3,
+        sampleRoom3,
+        '0903112233',
+        'nam.le@hospital.vn',
+        'Nam',
+        '1989-11-10',
+        'Kỹ thuật lấy & xử lý mẫu xét nghiệm',
+        '2019-09-01',
+        6,
+        'Đang làm việc',
+        '034567/BYT-CCHN'
+      ]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
+    ws['!cols'] = [
+      { wch: 12 },
+      { wch: 25 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 24 },
+      { wch: 32 },
+      { wch: 15 },
+      { wch: 25 },
+      { wch: 10 },
+      { wch: 22 },
+      { wch: 35 },
+      { wch: 24 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 20 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mau_Nhan_Vien');
+    XLSX.writeFile(wb, 'Mau_Danh_Sach_Nhan_Vien_Khoa_CLS.xlsx');
+  };
+
+  // --- Excel File Upload & Parse ---
+  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExcelFileName(file.name);
+    setIsParsingExcel(true);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const rawData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!rawData || rawData.length === 0) {
+          alert('Tệp Excel không có dữ liệu hàng nào!');
+          setIsParsingExcel(false);
+          return;
+        }
+
+        const normalizeKey = (row: any, candidates: string[]): string => {
+          for (const key of Object.keys(row)) {
+            const cleanKey = key.toLowerCase().replace(/[\s_*()]/g, '');
+            for (const cand of candidates) {
+              const cleanCand = cand.toLowerCase().replace(/[\s_*()]/g, '');
+              if (cleanKey.includes(cleanCand)) {
+                return String(row[key]).trim();
+              }
+            }
+          }
+          return '';
+        };
+
+        const parsed = rawData.map((row, index) => {
+          const fullName = normalizeKey(row, ['họvàtên', 'hoten', 'họtên', 'fullname', 'tên', 'họ']) || '';
+          const rawTitle = normalizeKey(row, ['chứcdanh', 'chucdanh', 'vịtrí', 'vitri', 'title']) || 'Kỹ thuật viên';
+          const rawRole = normalizeKey(row, ['vaitrò', 'vaitro', 'role']) || (rawTitle.toLowerCase().includes('bác sĩ') ? 'Doctor' : rawTitle.toLowerCase().includes('trưởng khoa') ? 'Manager' : 'Staff');
+          const dept = normalizeKey(row, ['bộphận', 'bophan', 'khoa', 'phânkhoa', 'department']) || (rooms[0]?.departmentSection || 'Chẩn đoán hình ảnh');
+          const room = normalizeKey(row, ['phòng', 'phong', 'room']) || (rooms[0]?.name || 'Phòng xét nghiệm');
+          const phone = normalizeKey(row, ['sốđiệnthoại', 'sđt', 'phone', 'dienthoai']) || '';
+          const email = normalizeKey(row, ['email', 'thưđiệntử', 'mail']) || '';
+          const gender = normalizeKey(row, ['giớitính', 'gioitinh', 'gender']) || 'Nam';
+          let dob = normalizeKey(row, ['ngàysinh', 'ngaysinh', 'dob', 'birth']) || '';
+          if (dob && typeof dob === 'string' && dob.includes('T')) {
+            dob = dob.split('T')[0];
+          }
+          const specialty = normalizeKey(row, ['chuyênmôn', 'chuyenmon', 'specialty']) || `Kỹ thuật ${dept}`;
+          let joinDate = normalizeKey(row, ['ngàyvàolàm', 'ngayvaolam', 'joindate', 'ngàyvào']) || '';
+          if (joinDate && typeof joinDate === 'string' && joinDate.includes('T')) {
+            joinDate = joinDate.split('T')[0];
+          }
+          const expRaw = normalizeKey(row, ['kinhnghiệm', 'kinhnghiem', 'nămkinhnghiệm', 'exp']) || '0';
+          const experienceYears = parseInt(expRaw, 10) || (joinDate ? calculateYearsOfService(joinDate, 1) : 1);
+          const rawStatus = normalizeKey(row, ['trạngthái', 'trangthai', 'status']) || 'Đang làm việc';
+          const certCode = normalizeKey(row, ['cchn', 'chứngchỉ', 'chungchi', 'giấyphép']) || '';
+          const codeCandidate = normalizeKey(row, ['mãnv', 'manv', 'mãnhânviên', 'id', 'code']);
+          const userId = codeCandidate || `NV-${Date.now().toString().slice(-4)}${index + 1}`;
+
+          const isValid = Boolean(fullName && fullName.length >= 2);
+
+          return {
+            userId,
+            fullName,
+            title: rawTitle,
+            role: rawRole,
+            departmentSection: dept,
+            room,
+            phone,
+            email,
+            dob: String(dob),
+            gender: (gender.toLowerCase().includes('nữ') ? 'Nữ' : 'Nam') as 'Nam' | 'Nữ' | 'Khác',
+            specialty,
+            joinDate: String(joinDate),
+            experienceYears,
+            currentStatus: (rawStatus.includes('thử việc') ? 'Đang thử việc' : rawStatus.includes('thai sản') ? 'Nghỉ thai sản' : rawStatus.includes('không lương') ? 'Nghỉ không lương' : 'Đang làm việc') as EmploymentStatus,
+            certCode,
+            isValid,
+            errorReason: !isValid ? 'Thiếu họ và tên' : undefined
+          };
+        });
+
+        setParsedExcelStaff(parsed);
+        setExcelImportStep('preview');
+        setIsParsingExcel(false);
+      } catch (err: any) {
+        console.error(err);
+        alert('Có lỗi khi đọc file Excel: ' + (err?.message || 'Định dạng file không hỗ trợ'));
+        setIsParsingExcel(false);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  // --- Confirm Import Excel to Storage ---
+  const handleConfirmImportExcel = () => {
+    const validRows = parsedExcelStaff.filter(r => r.isValid);
+    if (validRows.length === 0) {
+      alert('Không có bản ghi hợp lệ nào để nhập!');
+      return;
+    }
+
+    const newProfiles: StaffProfile[] = validRows.map(r => {
+      const certificates: MedicalCertificate[] = r.certCode ? [{
+        id: `CERT-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        name: `Chứng chỉ Hành Nghề Cận Lâm Sàng (${r.specialty || r.departmentSection})`,
+        code: r.certCode,
+        issuedBy: 'Sở Y Tế / Bộ Y Tế',
+        issuedDate: r.joinDate || new Date().toISOString().split('T')[0],
+        expiryDate: new Date(new Date().setFullYear(new Date().getFullYear() + 5)).toISOString().split('T')[0],
+        status: 'Còn hiệu lực'
+      }] : [];
+
+      const initialHistory: WorkStatusHistoryItem = {
+        id: `SH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        startDate: r.joinDate || new Date().toISOString().split('T')[0],
+        endDate: 'Hiện tại',
+        status: r.currentStatus,
+        departmentSection: r.departmentSection,
+        room: r.room,
+        positionOrTitle: r.title,
+        note: 'Nhập tự động từ tệp danh sách Excel',
+        updatedBy: currentUser.name,
+        createdAt: new Date().toLocaleDateString('vi-VN')
+      };
+
+      return {
+        userId: r.userId,
+        fullName: r.fullName,
+        title: r.title,
+        role: r.role,
+        departmentSection: r.departmentSection,
+        room: r.room,
+        phone: r.phone,
+        email: r.email,
+        dob: r.dob,
+        gender: r.gender,
+        specialty: r.specialty,
+        experienceYears: r.experienceYears,
+        joinDate: r.joinDate,
+        degrees: [r.title.includes('Bác sĩ') ? 'Bác sĩ Đa khoa / Chuyên khoa' : 'Cử nhân Kỹ thuật Y học'],
+        certificates,
+        totalShiftsThisMonth: 0,
+        leaveBalanceDays: 12,
+        currentStatus: r.currentStatus,
+        statusHistory: [initialHistory]
+      };
+    });
+
+    storageService.saveStaffProfilesBatch(newProfiles);
+
+    // Sync to Users list so they can be assigned tasks/shifts
+    const existingUsers = storageService.getUsers();
+    validRows.forEach(r => {
+      if (!existingUsers.some(u => u.id === r.userId)) {
+        storageService.saveUser({
+          id: r.userId,
+          name: r.fullName,
+          email: r.email || `${r.userId.toLowerCase()}@hospital.vn`,
+          role: (r.role as UserRole) || 'Staff',
+          title: (r.title as CLSTitle) || 'Kỹ thuật viên',
+          department: r.departmentSection,
+          room: r.room,
+          avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150',
+          phone: r.phone || '',
+          status: 'Active'
+        });
+      }
+    });
+
+    setProfiles(storageService.getStaffProfiles());
+    setShowImportExcelModal(false);
+    setParsedExcelStaff([]);
+    setExcelImportStep('upload');
+    alert(`Đã nhập thành công ${validRows.length} nhân viên vào hệ thống!`);
+  };
+
+  // --- Create Single Staff Member ---
+  const handleCreateNewStaff = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStaffForm.fullName.trim()) {
+      alert('Vui lòng nhập họ và tên nhân viên!');
+      return;
+    }
+    const finalUserId = newStaffForm.userId.trim() || `NV-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const certs: MedicalCertificate[] = newStaffForm.certCode ? [{
+      id: `CERT-${Date.now()}`,
+      name: newStaffForm.certName.trim() || `Chứng chỉ Hành Nghề (${newStaffForm.specialty || newStaffForm.departmentSection})`,
+      code: newStaffForm.certCode.trim(),
+      issuedBy: 'Sở Y Tế / Bộ Y Tế',
+      issuedDate: newStaffForm.joinDate || new Date().toISOString().split('T')[0],
+      expiryDate: new Date(new Date().setFullYear(new Date().getFullYear() + 5)).toISOString().split('T')[0],
+      status: 'Còn hiệu lực'
+    }] : [];
+
+    const initialHistory: WorkStatusHistoryItem = {
+      id: `SH-${Date.now()}`,
+      startDate: newStaffForm.joinDate || new Date().toISOString().split('T')[0],
+      endDate: 'Hiện tại',
+      status: newStaffForm.currentStatus,
+      departmentSection: newStaffForm.departmentSection,
+      room: newStaffForm.room,
+      positionOrTitle: newStaffForm.title,
+      note: 'Khởi tạo hồ sơ nhân sự mới',
+      updatedBy: currentUser.name,
+      createdAt: new Date().toLocaleDateString('vi-VN')
+    };
+
+    const newProfile: StaffProfile = {
+      userId: finalUserId,
+      fullName: newStaffForm.fullName.trim(),
+      title: newStaffForm.title,
+      role: newStaffForm.role,
+      departmentSection: newStaffForm.departmentSection,
+      room: newStaffForm.room,
+      phone: newStaffForm.phone.trim(),
+      email: newStaffForm.email.trim(),
+      dob: newStaffForm.dob,
+      gender: newStaffForm.gender,
+      specialty: newStaffForm.specialty.trim() || `Chuyên môn ${newStaffForm.departmentSection}`,
+      experienceYears: newStaffForm.joinDate ? calculateYearsOfService(newStaffForm.joinDate, newStaffForm.experienceYears) : newStaffForm.experienceYears,
+      joinDate: newStaffForm.joinDate,
+      degrees: [newStaffForm.title.includes('Bác sĩ') ? 'Bác sĩ Đa khoa' : 'Cử nhân Kỹ thuật Y học'],
+      certificates: certs,
+      totalShiftsThisMonth: 0,
+      leaveBalanceDays: 12,
+      currentStatus: newStaffForm.currentStatus,
+      statusHistory: [initialHistory]
+    };
+
+    storageService.saveStaffProfile(newProfile);
+
+    // Sync to Users
+    const existingUsers = storageService.getUsers();
+    if (!existingUsers.some(u => u.id === finalUserId)) {
+      storageService.saveUser({
+        id: finalUserId,
+        name: newProfile.fullName,
+        email: newProfile.email || `${finalUserId.toLowerCase()}@hospital.vn`,
+        role: (newProfile.role as UserRole) || 'Staff',
+        title: (newProfile.title as CLSTitle) || 'Kỹ thuật viên',
+        department: newProfile.departmentSection,
+        room: newProfile.room,
+        avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150',
+        phone: newProfile.phone || '',
+        status: 'Active'
+      });
+    }
+
+    setProfiles(storageService.getStaffProfiles());
+    setShowAddStaffModal(false);
+    alert(`Đã thêm nhân viên ${newProfile.fullName} thành công!`);
+  };
+
+  // --- Delete Staff Profile ---
+  const handleConfirmDeleteStaff = () => {
+    if (!deleteConfirmStaff) return;
+    storageService.deleteStaffProfile(deleteConfirmStaff.userId);
+    setProfiles(prev => prev.filter(p => p.userId !== deleteConfirmStaff.userId));
+    setDeleteConfirmStaff(null);
+  };
 
   // Save edited profile (Admin action)
   const handleSaveProfileEdit = (e: React.FormEvent) => {
@@ -450,17 +903,45 @@ export const StaffManagementView: React.FC = () => {
             Quản lý trình độ chuyên môn, phân loại theo phòng/bộ phận, theo dõi trạng thái làm việc (thử việc, nghỉ phép, thai sản) & lịch sử công tác.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && (
-            <span className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-bold flex items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Quyền Admin: Có thể chỉnh sửa thông tin nhân viên
+            <span className="hidden lg:flex px-3 py-1.5 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-bold items-center gap-1">
+              <UserCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Quyền Admin
             </span>
           )}
           <button
-            onClick={() => setShowLeaveModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-semibold text-sm transition-all shadow-sm shadow-indigo-200"
+            onClick={handleDownloadExcelTemplate}
+            title="Tải tệp mẫu Excel danh sách nhân viên (.xlsx)"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-xs transition-all border border-slate-200 dark:border-slate-700 shadow-sm"
           >
-            <Calendar className="w-4 h-4" /> Tạo Đơn Xin Nghỉ Phép
+            <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+            <span>Tải File Mẫu Excel</span>
+          </button>
+          <button
+            onClick={() => {
+              setExcelImportStep('upload');
+              setParsedExcelStaff([]);
+              setShowImportExcelModal(true);
+            }}
+            title="Nhập danh sách nhân viên từ tệp Excel"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-xl font-semibold text-xs transition-all border border-emerald-200 dark:border-emerald-800 shadow-sm"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Nhập từ Excel</span>
+          </button>
+          <button
+            onClick={handleOpenAddStaffModal}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-semibold text-xs transition-all shadow-sm shadow-indigo-200"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Thêm Nhân Viên</span>
+          </button>
+          <button
+            onClick={() => setShowLeaveModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs transition-all"
+          >
+            <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Đơn Nghỉ Phép</span>
           </button>
         </div>
       </div>
@@ -553,18 +1034,29 @@ export const StaffManagementView: React.FC = () => {
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             {activeTab === 'profiles' && (
               <>
-                {/* Department/Room Filter */}
+                {/* Department/Room Filter with Optgroups */}
                 <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs">
-                  <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                  <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                   <select
                     value={selectedDepartmentFilter}
                     onChange={e => setSelectedDepartmentFilter(e.target.value)}
-                    className="bg-transparent outline-none font-medium text-slate-700 dark:text-slate-200 cursor-pointer text-xs"
+                    className="bg-transparent outline-none font-medium text-slate-700 dark:text-slate-200 cursor-pointer text-xs max-w-[210px] sm:max-w-[260px] truncate"
                   >
-                    <option value="all" className="dark:bg-slate-900">Tất cả Phòng / Bộ phận</option>
-                    {allDepartmentsAndRooms.map(dept => (
-                      <option key={dept} value={dept} className="dark:bg-slate-900">{dept}</option>
-                    ))}
+                    <option value="all" className="dark:bg-slate-900 font-bold">Tất cả Phòng / Bộ phận</option>
+                    {allDepartments.length > 0 && (
+                      <optgroup label="── Bộ phận / Phân khoa ──" className="dark:bg-slate-900 font-bold text-slate-500">
+                        {allDepartments.map(dept => (
+                          <option key={`dept-${dept}`} value={dept} className="dark:bg-slate-900 font-normal">{dept}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {allRoomNames.length > 0 && (
+                      <optgroup label="── Phòng làm việc (Quản lý phòng ban) ──" className="dark:bg-slate-900 font-bold text-slate-500">
+                        {allRoomNames.map(room => (
+                          <option key={`rm-${room}`} value={room} className="dark:bg-slate-900 font-normal">{room}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
 
@@ -585,6 +1077,28 @@ export const StaffManagementView: React.FC = () => {
                     <Layers className="w-4 h-4" />
                   </button>
                 </div>
+
+                {/* Quick Add Employee & Import Buttons */}
+                <button
+                  onClick={handleOpenAddStaffModal}
+                  title="Thêm nhân viên mới"
+                  className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shadow-sm shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Thêm NV</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setExcelImportStep('upload');
+                    setParsedExcelStaff([]);
+                    setShowImportExcelModal(true);
+                  }}
+                  title="Nhập danh sách từ Excel"
+                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="hidden md:inline">Excel</span>
+                </button>
               </>
             )}
 
@@ -682,19 +1196,28 @@ export const StaffManagementView: React.FC = () => {
                           <h3 className="text-base font-bold text-slate-900 mt-1">{staff.fullName}</h3>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Admin Edit Button */}
+                          {/* Admin Edit & Delete Buttons */}
                           {isAdmin && (
-                            <button
-                              onClick={() => setEditingStaff({
-                                ...staff,
-                                experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
-                              })}
-                              title="Chỉnh sửa thông tin cán bộ (Dành cho Admin)"
-                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-all text-xs font-semibold flex items-center gap-1 border border-indigo-200"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                              <span>Sửa</span>
-                            </button>
+                            <>
+                              <button
+                                onClick={() => setEditingStaff({
+                                  ...staff,
+                                  experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
+                                })}
+                                title="Chỉnh sửa thông tin cán bộ (Dành cho Admin)"
+                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-all text-xs font-semibold flex items-center gap-1 border border-indigo-200"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Sửa</span>
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmStaff(staff)}
+                                title="Xóa nhân viên khỏi hệ thống"
+                                className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
                           <span className="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-700 rounded-lg border border-slate-200">
                             {staff.experienceYears} năm công tác
@@ -871,15 +1394,24 @@ export const StaffManagementView: React.FC = () => {
                                     <History className="w-3.5 h-3.5 text-indigo-600" /> Lịch sử
                                   </button>
                                   {isAdmin && (
-                                    <button
-                                      onClick={() => setEditingStaff({
-                                        ...staff,
-                                        experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
-                                      })}
-                                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200 shrink-0"
-                                    >
-                                      <Edit3 className="w-3.5 h-3.5" /> Sửa
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => setEditingStaff({
+                                          ...staff,
+                                          experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
+                                        })}
+                                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200 shrink-0"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" /> Sửa
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteConfirmStaff(staff)}
+                                        title="Xóa nhân viên"
+                                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </td>
@@ -890,6 +1422,61 @@ export const StaffManagementView: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Empty State when no profiles found */}
+            {filteredProfiles.length === 0 && (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-12 text-center max-w-xl mx-auto my-6 shadow-sm">
+                <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1.5">
+                  {profiles.length === 0 
+                    ? 'Chưa có nhân viên nào trong danh sách' 
+                    : 'Không tìm thấy nhân viên phù hợp với bộ lọc'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                  {profiles.length === 0
+                    ? 'Hệ thống đã sẵn sàng đưa vào vận hành thực tế. Bạn có thể thêm từng nhân viên mới hoặc nhập nhanh toàn bộ danh sách cán bộ từ file Excel.'
+                    : 'Thử tìm kiếm với từ khóa khác hoặc bấm nút "Xóa lọc" để xem toàn bộ danh sách nhân sự.'}
+                </p>
+                {profiles.length === 0 ? (
+                  <div className="flex flex-wrap items-center justify-center gap-2.5">
+                    <button
+                      onClick={handleOpenAddStaffModal}
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Thêm Nhân Viên Mới
+                    </button>
+                    <button
+                      onClick={() => {
+                        setExcelImportStep('upload');
+                        setParsedExcelStaff([]);
+                        setShowImportExcelModal(true);
+                      }}
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" /> Nhập Từ File Excel
+                    </button>
+                    <button
+                      onClick={handleDownloadExcelTemplate}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 border border-slate-200 dark:border-slate-700"
+                    >
+                      <Download className="w-4 h-4" /> Tải File Mẫu (.xlsx)
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSelectedDepartmentFilter('all');
+                    }}
+                    className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-semibold transition-all"
+                  >
+                    Xóa bộ lọc
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1295,16 +1882,16 @@ export const StaffManagementView: React.FC = () => {
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
                   />
                   <datalist id="existing-dept-datalist">
-                    {existingDepartments.map(dept => (
+                    {allDepartments.map(dept => (
                       <option key={dept} value={dept} />
                     ))}
                   </datalist>
 
                   {/* Suggestion dropdown/chips */}
-                  {existingDepartments.length > 0 && (
+                  {allDepartments.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1 mt-1.5">
                       <span className="text-[10px] text-slate-400 font-bold mr-0.5">Danh sách hiện có:</span>
-                      {existingDepartments.map(dept => (
+                      {allDepartments.map(dept => (
                         <button
                           key={dept}
                           type="button"
@@ -1336,16 +1923,16 @@ export const StaffManagementView: React.FC = () => {
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
                   />
                   <datalist id="existing-room-datalist">
-                    {existingRooms.map(r => (
+                    {allRoomNames.map(r => (
                       <option key={r} value={r} />
                     ))}
                   </datalist>
 
                   {/* Suggestion dropdown/chips */}
-                  {existingRooms.length > 0 && (
+                  {allRoomNames.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1 mt-1.5">
                       <span className="text-[10px] text-slate-400 font-bold mr-0.5">Danh sách phòng:</span>
-                      {existingRooms.map(r => (
+                      {allRoomNames.map(r => (
                         <button
                           key={r}
                           type="button"
@@ -2014,6 +2601,534 @@ export const StaffManagementView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmDeleteCert}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-all shadow-sm text-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Xác Nhận Xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal: Thêm Nhân Viên Mới */}
+      {showAddStaffModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 flex items-center justify-center font-bold">
+                  <PlusCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    Thêm Nhân Viên / Cán Bộ Mới
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Khởi tạo hồ sơ nhân sự, phân phòng làm việc và cấp chứng chỉ ban đầu
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddStaffModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateNewStaff} className="p-6 space-y-4 overflow-y-auto text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Họ và tên */}
+                <div className="md:col-span-2">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Họ và Tên Nhân Viên <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="VD: BS.CKI Nguyễn Văn An..."
+                    value={newStaffForm.fullName}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, fullName: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Mã nhân viên */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Mã Nhân Viên (ID)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: NV-1001"
+                    value={newStaffForm.userId}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, userId: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-slate-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Chức danh */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Chức Danh <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newStaffForm.title}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, title: e.target.value as CLSTitle })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  >
+                    <option value="Bác sĩ">Bác sĩ</option>
+                    <option value="Kỹ thuật viên">Kỹ thuật viên</option>
+                    <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
+                    <option value="Trưởng khoa">Trưởng khoa</option>
+                    <option value="Phó khoa">Phó khoa</option>
+                    <option value="Nhân viên hành chính">Nhân viên hành chính</option>
+                  </select>
+                </div>
+
+                {/* Vai trò tài khoản */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Vai Trò Phân Quyền
+                  </label>
+                  <select
+                    value={newStaffForm.role}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, role: e.target.value as UserRole })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  >
+                    <option value="Staff">Staff (Nhân viên)</option>
+                    <option value="Doctor">Doctor (Bác sĩ)</option>
+                    <option value="Manager">Manager (Quản lý)</option>
+                    <option value="Admin">Admin (Quản trị viên)</option>
+                  </select>
+                </div>
+
+                {/* Bộ phận / Phân khoa */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Bộ Phận / Khoa (Từ Quản lý phòng ban) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newStaffForm.departmentSection}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, departmentSection: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  >
+                    {allDepartments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Phòng làm việc */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Phòng Làm Việc Cụ Thể <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newStaffForm.room}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, room: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  >
+                    <option value="">-- Chưa phân phòng --</option>
+                    {allRoomNames.map(room => (
+                      <option key={room} value={room}>{room}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Trạng thái công tác */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Trạng Thái Làm Việc
+                  </label>
+                  <select
+                    value={newStaffForm.currentStatus}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, currentStatus: e.target.value as EmploymentStatus })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  >
+                    <option value="Đang làm việc">Đang làm việc</option>
+                    <option value="Đang thử việc">Đang thử việc</option>
+                    <option value="Nghỉ không lương">Nghỉ không lương</option>
+                    <option value="Nghỉ thai sản">Nghỉ thai sản</option>
+                    <option value="Đã nghỉ việc">Đã nghỉ việc</option>
+                  </select>
+                </div>
+
+                {/* Giới tính */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Giới Tính
+                  </label>
+                  <select
+                    value={newStaffForm.gender}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, gender: e.target.value as 'Nam' | 'Nữ' | 'Khác' })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  >
+                    <option value="Nam">Nam</option>
+                    <option value="Nữ">Nữ</option>
+                    <option value="Khác">Khác</option>
+                  </select>
+                </div>
+
+                {/* Ngày sinh */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Ngày Sinh
+                  </label>
+                  <input
+                    type="date"
+                    value={newStaffForm.dob}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, dob: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Số điện thoại */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Số Điện Thoại
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="VD: 0912345678"
+                    value={newStaffForm.phone}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, phone: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="VD: an.nguyen@hospital.vn"
+                    value={newStaffForm.email}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, email: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Chuyên môn chính */}
+                <div className="md:col-span-2">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Chuyên Môn Chính
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Chẩn đoán hình ảnh kỹ thuật cao, X-Quang can thiệp, Siêu âm tim mạch..."
+                    value={newStaffForm.specialty}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, specialty: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Ngày vào làm */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Ngày Vào Làm
+                  </label>
+                  <input
+                    type="date"
+                    value={newStaffForm.joinDate}
+                    onChange={e => {
+                      const d = e.target.value;
+                      setNewStaffForm({
+                        ...newStaffForm,
+                        joinDate: d,
+                        experienceYears: calculateYearsOfService(d, newStaffForm.experienceYears)
+                      });
+                    }}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
+                  />
+                </div>
+
+                {/* Số CCHN nếu có */}
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Số Chứng Chỉ Hành Nghề (CCHN)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: 012345/BYT-CCHN (Tùy chọn)"
+                    value={newStaffForm.certCode}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, certCode: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-slate-800 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddStaffModal(false)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-sm flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Lưu Hồ Sơ Nhân Viên</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Nhập Danh Sách Từ File Excel */}
+      {showImportExcelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    Nhập Danh Sách Nhân Viên Từ File Excel (.xlsx)
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Tự động tạo hồ sơ cán bộ, phân công phòng ban và khởi tạo chứng chỉ
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowImportExcelModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Template Download Banner */}
+            <div className="bg-emerald-50/80 dark:bg-emerald-950/30 p-4 border-b border-emerald-100 dark:border-emerald-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Bạn chưa có file mẫu chuẩn?</span>
+                </div>
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                  Tải ngay file mẫu Excel đã được định dạng sẵn các cột thông tin và danh mục phòng ban từ Quản lý phòng ban.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadExcelTemplate}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tải File Mẫu (.xlsx)</span>
+              </button>
+            </div>
+
+            {/* Body: Step 1 Upload or Step 2 Preview */}
+            <div className="p-6 overflow-y-auto flex-1">
+              {excelImportStep === 'upload' && (
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center hover:border-emerald-500 dark:hover:border-emerald-500 transition-colors bg-slate-50/50 dark:bg-slate-800/20">
+                    <input
+                      type="file"
+                      id="staff-excel-file-input"
+                      accept=".xlsx, .xls, .csv"
+                      onChange={handleExcelFileUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="staff-excel-file-input"
+                      className="cursor-pointer flex flex-col items-center justify-center space-y-3"
+                    >
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shadow-inner">
+                        <FileUp className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-slate-800 dark:text-slate-100 hover:text-emerald-600 transition-colors">
+                          Nhấn để chọn tệp Excel hoặc kéo thả vào đây
+                        </span>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                          Hỗ trợ định dạng: .xlsx, .xls, .csv (dung lượng tối đa 10MB)
+                        </p>
+                      </div>
+                      <span className="inline-block px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all">
+                        Chọn tệp từ máy tính
+                      </span>
+                    </label>
+                  </div>
+
+                  {isParsingExcel && (
+                    <div className="flex items-center justify-center gap-2 p-4 text-xs font-semibold text-emerald-600 animate-pulse">
+                      <Clock className="w-4 h-4 animate-spin" />
+                      <span>Đang phân tích cấu trúc dữ liệu Excel...</span>
+                    </div>
+                  )}
+
+                  {/* Column guideline */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
+                    <p className="font-bold text-slate-800 dark:text-white">Các cột dữ liệu được hệ thống tự động nhận diện:</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>• Họ và tên (Bắt buộc)</span>
+                      <span>• Chức danh (Bác sĩ, KTV...)</span>
+                      <span>• Bộ phận / Khoa</span>
+                      <span>• Phòng làm việc</span>
+                      <span>• Số điện thoại & Email</span>
+                      <span>• Giới tính & Ngày sinh</span>
+                      <span>• Chuyên môn chính</span>
+                      <span>• Ngày vào làm</span>
+                      <span>• Số CCHN hành nghề</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {excelImportStep === 'preview' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Xem Trước Dữ Liệu Nhân Sự ({parsedExcelStaff.length} bản ghi)
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Từ tệp: <strong>{excelFileName}</strong> • {parsedExcelStaff.filter(r => r.isValid).length} hợp lệ, {parsedExcelStaff.filter(r => !r.isValid).length} lỗi
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExcelImportStep('upload');
+                        setParsedExcelStaff([]);
+                      }}
+                      className="text-xs font-semibold text-indigo-600 hover:underline"
+                    >
+                      Chọn lại tệp khác
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-xl max-h-80">
+                    <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
+                      <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold uppercase tracking-wider text-[10px] sticky top-0 border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <th className="p-2.5">#</th>
+                          <th className="p-2.5">Mã NV</th>
+                          <th className="p-2.5">Họ & Tên</th>
+                          <th className="p-2.5">Chức Danh</th>
+                          <th className="p-2.5">Bộ Phận / Khoa</th>
+                          <th className="p-2.5">Phòng Làm Việc</th>
+                          <th className="p-2.5">SĐT / Email</th>
+                          <th className="p-2.5">Số CCHN</th>
+                          <th className="p-2.5 text-center">Trạng Thái</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {parsedExcelStaff.map((row, idx) => (
+                          <tr key={idx} className={row.isValid ? 'hover:bg-slate-50 dark:hover:bg-slate-800/40' : 'bg-rose-50/50 dark:bg-rose-950/20'}>
+                            <td className="p-2.5 text-[11px] font-mono text-slate-400">{idx + 1}</td>
+                            <td className="p-2.5 font-mono font-medium">{row.userId}</td>
+                            <td className="p-2.5 font-bold text-slate-900 dark:text-white">{row.fullName}</td>
+                            <td className="p-2.5">{row.title}</td>
+                            <td className="p-2.5 font-medium text-indigo-600 dark:text-indigo-400">{row.departmentSection}</td>
+                            <td className="p-2.5">{row.room || '---'}</td>
+                            <td className="p-2.5 text-[11px]">
+                              <div>{row.phone || '---'}</div>
+                              <div className="text-slate-400">{row.email}</div>
+                            </td>
+                            <td className="p-2.5 font-mono text-[11px]">{row.certCode || '---'}</td>
+                            <td className="p-2.5 text-center whitespace-nowrap">
+                              {row.isValid ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <Check className="w-3 h-3" /> Hợp lệ
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  {row.errorReason}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowImportExcelModal(false)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all text-xs"
+              >
+                Đóng
+              </button>
+              {excelImportStep === 'preview' && (
+                <button
+                  type="button"
+                  onClick={handleConfirmImportExcel}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-all shadow-sm text-xs flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Xác Nhận Nhập {parsedExcelStaff.filter(r => r.isValid).length} Cán Bộ Vào Hệ Thống</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Xác Nhận Xóa Nhân Viên */}
+      {deleteConfirmStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/50 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Xác Nhận Xóa Hồ Sơ Nhân Viên</h3>
+                <p className="text-xs text-slate-500">Hành động này sẽ xóa cán bộ khỏi danh sách nhân sự</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs space-y-1.5">
+              <div>
+                <span className="text-slate-400 font-medium">Họ và tên cán bộ:</span>
+                <p className="font-bold text-slate-800 dark:text-white text-sm">{deleteConfirmStaff.fullName}</p>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300 pt-1 border-t border-slate-200/60 dark:border-slate-700">
+                <span>Mã NV: <strong className="font-mono text-slate-800 dark:text-white">{deleteConfirmStaff.userId}</strong></span>
+                <span>Chức danh: <strong className="text-indigo-600 dark:text-indigo-400">{deleteConfirmStaff.title}</strong></span>
+              </div>
+              <div className="text-slate-500 text-[11px]">
+                Bộ phận: {deleteConfirmStaff.departmentSection} {deleteConfirmStaff.room ? `• ${deleteConfirmStaff.room}` : ''}
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Bạn có chắc chắn muốn xóa hồ sơ nhân viên này không? Các ca trực và lịch sử công tác liên quan cũng sẽ không còn hiển thị.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmStaff(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all text-xs"
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteStaff}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-all shadow-sm text-xs flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />

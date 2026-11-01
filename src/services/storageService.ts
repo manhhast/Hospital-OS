@@ -10,6 +10,9 @@ import {
   initialEquipment, initialRooms, initialStaffProfiles, initialLeaveRequests, initialTrainingCourses,
   initialMeetings, initialIntegrationEndpoints, initialIntegrationPayloads
 } from './mockData';
+import * as sampleDemoData from './sampleDemoData';
+
+const PRODUCTION_MODE_KEY = 'cls_workhub_prod_clean_state_v2';
 
 const STORAGE_KEYS = {
   TASKS: 'cls_workhub_tasks',
@@ -55,6 +58,13 @@ class HospitalStorageService {
   }
 
   private initDefaultData() {
+    // Tự động dọn sạch toàn bộ dữ liệu dùng thử cũ (nếu có trên trình duyệt) để đưa vào áp dụng thực tế
+    if (localStorage.getItem(PRODUCTION_MODE_KEY) !== 'true') {
+      this.purgeAllTrialData();
+      localStorage.setItem(PRODUCTION_MODE_KEY, 'true');
+      return;
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.TASKS)) {
       localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(initialTasks));
     }
@@ -1344,6 +1354,32 @@ class HospitalStorageService {
     return profile;
   }
 
+  public saveStaffProfilesBatch(newProfiles: StaffProfile[]): void {
+    const list = this.getStaffProfiles();
+    for (const p of newProfiles) {
+      const idx = list.findIndex(s => s.userId === p.userId);
+      if (idx >= 0) {
+        list[idx] = p;
+      } else {
+        list.push(p);
+      }
+    }
+    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
+    this.logAudit('BATCH_IMPORT_STAFF', 'HR', undefined, { count: newProfiles.length });
+    this.notify();
+  }
+
+  public deleteStaffProfile(userId: string): boolean {
+    const list = this.getStaffProfiles();
+    const target = list.find(s => s.userId === userId);
+    if (!target) return false;
+    const filtered = list.filter(s => s.userId !== userId);
+    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(filtered));
+    this.logAudit('DELETE_STAFF_PROFILE', 'HR', target, undefined);
+    this.notify();
+    return true;
+  }
+
   public getLeaveRequests(): LeaveRequest[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.LEAVE_REQUESTS);
@@ -1465,8 +1501,12 @@ class HospitalStorageService {
     return payload;
   }
 
-  // --- Reset Database ---
-  public resetToDefault() {
+  // --- Quản Lý Dữ Liệu Thực Tế & Thử Nghiệm ---
+
+  /**
+   * Xóa sạch 100% dữ liệu dùng thử / demo, đưa hệ thống về trạng thái sẵn sàng vận hành thực tế
+   */
+  public purgeAllTrialData() {
     localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(initialTasks));
     localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(initialDocuments));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(initialUsers));
@@ -1474,8 +1514,11 @@ class HospitalStorageService {
     localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(initialAuditLogs));
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
     localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(initialShifts));
+    localStorage.setItem(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(initialWorkTaskRows));
     localStorage.setItem(STORAGE_KEYS.MEETINGS, JSON.stringify(initialWeeklyMeetings));
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(initialChatMessages));
+    localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(initialChannels));
+    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(initialAnnouncements));
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(initialEquipment));
     localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(initialRooms));
     localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(initialStaffProfiles));
@@ -1484,8 +1527,59 @@ class HospitalStorageService {
     localStorage.setItem(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(initialMeetings));
     localStorage.setItem(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(initialIntegrationEndpoints));
     localStorage.setItem(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(initialIntegrationPayloads));
-    this.logAudit('RESET_DATABASE', 'System');
+    
+    // Xóa bộ nhớ tạm Google Sheet demo
+    ['Tháng 1', 'Tháng 2', 'Tháng 3'].forEach(m => {
+      localStorage.removeItem(`google_sheet_data_${m}`);
+    });
+    localStorage.removeItem('google_sheet_url');
+
+    this.currentUser = initialUsers[0];
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, initialUsers[0].id);
+
+    this.logAudit('PURGE_TRIAL_DATA', 'System', undefined, { 
+      note: 'Đã dọn sạch toàn bộ dữ liệu dùng thử để áp dụng thực tế.' 
+    });
     this.notify();
+  }
+
+  /**
+   * Nạp lại dữ liệu dùng thử mẫu (dùng cho đào tạo hoặc thử nghiệm tính năng)
+   */
+  public loadSampleDemoData() {
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(sampleDemoData.initialTasks));
+    localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(sampleDemoData.initialDocuments));
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(sampleDemoData.initialUsers));
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(sampleDemoData.initialNotifications));
+    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(sampleDemoData.initialAuditLogs));
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(sampleDemoData.initialSettings));
+    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(sampleDemoData.initialShifts));
+    localStorage.setItem(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(sampleDemoData.initialWorkTaskRows));
+    localStorage.setItem(STORAGE_KEYS.MEETINGS, JSON.stringify(sampleDemoData.initialWeeklyMeetings));
+    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(sampleDemoData.initialChatMessages));
+    localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(sampleDemoData.initialChannels));
+    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(sampleDemoData.initialAnnouncements));
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(sampleDemoData.initialEquipment));
+    localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(sampleDemoData.initialRooms));
+    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(sampleDemoData.initialStaffProfiles));
+    localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(sampleDemoData.initialLeaveRequests));
+    localStorage.setItem(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(sampleDemoData.initialTrainingCourses));
+    localStorage.setItem(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(sampleDemoData.initialMeetings));
+    localStorage.setItem(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(sampleDemoData.initialIntegrationEndpoints));
+    localStorage.setItem(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(sampleDemoData.initialIntegrationPayloads));
+
+    this.currentUser = sampleDemoData.initialUsers[0];
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, sampleDemoData.initialUsers[0].id);
+
+    this.logAudit('LOAD_SAMPLE_DATA', 'System', undefined, { 
+      note: 'Đã nạp lại bộ dữ liệu dùng thử mẫu để minh họa tính năng.' 
+    });
+    this.notify();
+  }
+
+  // Khôi phục mặc định (tương đương dọn sạch sang chế độ thực tế)
+  public resetToDefault() {
+    this.purgeAllTrialData();
   }
 }
 
