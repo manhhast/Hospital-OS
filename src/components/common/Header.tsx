@@ -37,9 +37,12 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuth
 }) => {
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
+  const [users, setUsers] = useState<User[]>(storageService.getUsers());
+  const [accountSearchQuery, setAccountSearchQuery] = useState('');
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showThemeDropdown, setShowThemeDropdown] = useState(false);
   const themeDropdownRef = useRef<HTMLDivElement>(null);
+  const roleDropdownRef = useRef<HTMLDivElement>(null);
 
   // Live Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,12 +50,12 @@ export const Header: React.FC<HeaderProps> = ({
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  const users = storageService.getUsers();
   const settings = storageService.getSettings();
 
   useEffect(() => {
     const unsubscribe = storageService.subscribe(() => {
       setCurrentUser(storageService.getCurrentUser());
+      setUsers(storageService.getUsers());
     });
     return () => unsubscribe();
   }, []);
@@ -66,10 +69,38 @@ export const Header: React.FC<HeaderProps> = ({
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
         setIsSearchFocused(false);
       }
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target as Node)) {
+        setShowRoleDropdown(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Filter accounts live based on search query (diacritic-insensitive)
+  const filteredUsers = React.useMemo(() => {
+    if (!accountSearchQuery.trim()) return users;
+    const q = removeVietnameseTones(accountSearchQuery.toLowerCase().trim());
+    return users.filter((u) => {
+      const name = removeVietnameseTones((u.name || '').toLowerCase());
+      const dept = removeVietnameseTones((u.department || '').toLowerCase());
+      const role = removeVietnameseTones((u.role || '').toLowerCase());
+      const title = removeVietnameseTones((u.title || '').toLowerCase());
+      const phone = (u.phone || '').toLowerCase();
+      const room = removeVietnameseTones((u.room || '').toLowerCase());
+      const email = (u.email || '').toLowerCase();
+
+      return (
+        name.includes(q) ||
+        dept.includes(q) ||
+        role.includes(q) ||
+        title.includes(q) ||
+        phone.includes(q) ||
+        room.includes(q) ||
+        email.includes(q)
+      );
+    });
+  }, [users, accountSearchQuery]);
 
   // Update live search results
   useEffect(() => {
@@ -86,14 +117,23 @@ export const Header: React.FC<HeaderProps> = ({
     storageService.setCurrentUser(user);
     setCurrentUser(user);
     setShowRoleDropdown(false);
+    setAccountSearchQuery('');
   };
 
-  const getRoleBadgeColor = (role: UserRole) => {
+  const getRoleBadgeColor = (role: UserRole | string) => {
     switch (role) {
-      case 'Admin': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300';
-      case 'Manager': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
-      case 'Doctor': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-      case 'Staff': return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+      case 'Admin': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200/50 dark:border-purple-800/40';
+      case 'Manager':
+      case 'Trưởng khoa':
+      case 'Phó khoa':
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/40';
+      case 'Doctor':
+      case 'Bác sĩ':
+        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/40';
+      case 'Staff':
+      case 'Nhân viên':
+      default:
+        return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
     }
   };
 
@@ -370,7 +410,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Role & User Switcher */}
-        <div className="relative">
+        <div className="relative" ref={roleDropdownRef}>
           <button
             onClick={() => setShowRoleDropdown(!showRoleDropdown)}
             className="flex items-center space-x-2.5 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
@@ -391,16 +431,25 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {showRoleDropdown && (
-            <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700/60">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tài khoản & Phân quyền RBAC</p>
-                <div className="flex items-center justify-between mt-2 pt-1">
+            <div className="absolute right-0 mt-2 w-[360px] sm:w-[420px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200/90 dark:border-slate-700/80 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              {/* Header: Title & Quick Auth Actions */}
+              <div className="px-4 py-3 bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Tài khoản & Phân quyền RBAC</span>
+                  </p>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
+                    {filteredUsers.length} tài khoản
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-2 pt-1">
                   <button
                     onClick={() => {
                       setShowRoleDropdown(false);
                       onOpenAuth('login');
                     }}
-                    className="flex items-center space-x-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300 px-2.5 py-1 rounded-lg transition-colors"
+                    className="flex-1 flex items-center justify-center space-x-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/40 py-1.5 rounded-xl border border-blue-200/60 dark:border-blue-800/50 transition-colors"
                   >
                     <LogIn className="w-3.5 h-3.5" />
                     <span>Đăng nhập</span>
@@ -411,7 +460,7 @@ export const Header: React.FC<HeaderProps> = ({
                       setShowRoleDropdown(false);
                       onOpenAuth('change-password');
                     }}
-                    className="flex items-center space-x-1 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 dark:bg-slate-700 dark:text-slate-200 px-2.5 py-1 rounded-lg transition-colors"
+                    className="flex-1 flex items-center justify-center space-x-1 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors"
                   >
                     <KeyRound className="w-3.5 h-3.5 text-amber-500" />
                     <span>Đổi mật khẩu</span>
@@ -419,29 +468,127 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              <div className="px-4 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Chuyển nhanh tài khoản mẫu:
+              {/* Subheader & Quick Search Input */}
+              <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Chuyển nhanh tài khoản mẫu:
+                  </div>
+                  {accountSearchQuery && (
+                    <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                      Lọc {filteredUsers.length}/{users.length}
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative flex items-center">
+                  <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={accountSearchQuery}
+                    onChange={(e) => setAccountSearchQuery(e.target.value)}
+                    placeholder="Tìm nhanh họ tên, phòng ban, chức vụ, SĐT..."
+                    className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    autoFocus
+                  />
+                  {accountSearchQuery && (
+                    <button
+                      onClick={() => setAccountSearchQuery('')}
+                      className="absolute right-2.5 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                      title="Xóa tìm kiếm"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="py-1">
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => handleSwitchUser(u)}
-                    className={`w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${u.id === currentUser.id ? 'bg-blue-50/60 dark:bg-blue-900/20' : ''}`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <img src={u.avatar} alt={u.name} className="w-8 h-8 rounded-full object-cover" />
-                      <div>
-                        <div className="text-xs font-medium text-slate-800 dark:text-slate-200">{u.name}</div>
-                        <div className="text-[11px] text-slate-400">{u.department}</div>
-                      </div>
-                    </div>
-                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${getRoleBadgeColor(u.role)}`}>
-                      {u.role}
-                    </span>
-                  </button>
-                ))}
+              {/* Table Column Headers */}
+              <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                <span>Nhân sự & Phòng ban</span>
+                <span>Vai trò RBAC</span>
+              </div>
+
+              {/* Scrollable List / Table */}
+              <div className="max-h-[350px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/70 custom-scrollbar">
+                {filteredUsers.length === 0 ? (
+                  <div className="py-8 px-4 text-center">
+                    <Search className="w-6 h-6 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Không tìm thấy tài khoản phù hợp
+                    </p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      Thử tìm với từ khóa khác hoặc xóa bộ lọc
+                    </p>
+                    <button
+                      onClick={() => setAccountSearchQuery('')}
+                      className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Xóa bộ lọc tìm kiếm</span>
+                    </button>
+                  </div>
+                ) : (
+                  filteredUsers.map((u) => {
+                    const isSelected = u.id === currentUser.id;
+                    return (
+                      <button
+                        key={u.id}
+                        onClick={() => handleSwitchUser(u)}
+                        className={`w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-all ${
+                          isSelected
+                            ? 'bg-blue-50/80 dark:bg-blue-900/25 border-l-3 border-blue-600 dark:border-blue-400 pl-[13px]'
+                            : ''
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3 min-w-0 pr-2">
+                          <div className="relative shrink-0">
+                            <img
+                              src={u.avatar}
+                              alt={u.name}
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                            {isSelected && (
+                              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900" title="Đang sử dụng"></span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1.5">
+                              <span>{u.name}</span>
+                              {isSelected && (
+                                <span className="text-[9px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100/70 dark:bg-blue-950/70 px-1 py-0.2 rounded">
+                                  Hiện tại
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 dark:text-slate-400 truncate">
+                              {u.department || 'Khoa Cận Lâm Sàng'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${getRoleBadgeColor(u.role)}`}>
+                            {u.role}
+                          </span>
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer status */}
+              <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
+                <span>Nhấp chọn để chuyển phiên làm việc</span>
+                <span className="font-medium text-slate-500 dark:text-slate-400">
+                  Tổng {users.length} tài khoản
+                </span>
               </div>
             </div>
           )}
