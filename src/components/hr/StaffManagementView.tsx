@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Users, Award, Calendar, BookOpen, CheckCircle2, Clock, AlertCircle, 
@@ -10,6 +10,76 @@ import {
   StaffProfile, LeaveRequest, TrainingCourse, EmploymentStatus, WorkStatusHistoryItem, CLSTitle, UserRole,
   MedicalCertificate, ParaclinicalRoom
 } from '../../types/hospital';
+import { formatDateVN, toInputDateFormat, normalizeVietnamesePhone } from '../../utils/dateUtils';
+
+// Helper to parse dates from Excel (can be Date instance, Excel serial number, or string) strictly to dd/mm/yyyy
+const parseExcelDateToDDMMYYYY = (val: any): string => {
+  if (val === null || val === undefined || val === '') return '';
+
+  // 1. If JS Date instance
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '';
+    const d = String(val.getDate()).padStart(2, '0');
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const y = val.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+
+  // 2. If numeric Excel serial date number
+  if (typeof val === 'number') {
+    if (val > 0) {
+      try {
+        const parsed = XLSX.SSF.parse_date_code(val);
+        if (parsed && parsed.y && parsed.m && parsed.d) {
+          const d = String(parsed.d).padStart(2, '0');
+          const m = String(parsed.m).padStart(2, '0');
+          const y = parsed.y;
+          return `${d}/${m}/${y}`;
+        }
+      } catch (e) {
+        const dt = new Date(Math.round((val - 25569) * 86400 * 1000));
+        if (!isNaN(dt.getTime())) {
+          const d = String(dt.getUTCDate()).padStart(2, '0');
+          const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+          const y = dt.getUTCFullYear();
+          return `${d}/${m}/${y}`;
+        }
+      }
+    }
+  }
+
+  const s = String(val).trim();
+  if (!s) return '';
+
+  // 3. If ISO date: YYYY-MM-DD or YYYY-MM-DDT...
+  const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (isoMatch) {
+    const y = isoMatch[1];
+    const m = isoMatch[2].padStart(2, '0');
+    const d = isoMatch[3].padStart(2, '0');
+    return `${d}/${m}/${y}`;
+  }
+
+  // 4. If already DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    const y = dmyMatch[3];
+    return `${d}/${m}/${y}`;
+  }
+
+  // 5. If date string like "Mon May 15 1985..."
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) {
+    const d = String(dt.getDate()).padStart(2, '0');
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const y = dt.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+
+  return s;
+};
 
 export const StaffManagementView: React.FC = () => {
   const [profiles, setProfiles] = useState<StaffProfile[]>([]);
@@ -102,6 +172,8 @@ export const StaffManagementView: React.FC = () => {
   const [excelFileName, setExcelFileName] = useState('');
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [excelImportStep, setExcelImportStep] = useState<'upload' | 'preview'>('upload');
+  const [isDraggingExcel, setIsDraggingExcel] = useState(false);
+  const excelFileInputRef = useRef<HTMLInputElement>(null);
   const [parsedExcelStaff, setParsedExcelStaff] = useState<Array<{
     userId: string;
     fullName: string;
@@ -128,7 +200,14 @@ export const StaffManagementView: React.FC = () => {
   // Helper function to calculate years of service automatically based on join date
   const calculateYearsOfService = (joinDateStr?: string, defaultYears: number = 0): number => {
     if (!joinDateStr) return defaultYears;
-    const join = new Date(joinDateStr);
+    let join: Date;
+    const trimmed = String(joinDateStr).trim();
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
+      const [d, m, y] = trimmed.split('/').map(Number);
+      join = new Date(y, m - 1, d);
+    } else {
+      join = new Date(trimmed);
+    }
     if (isNaN(join.getTime())) return defaultYears;
     const now = new Date();
     let years = now.getFullYear() - join.getFullYear();
@@ -474,12 +553,12 @@ export const StaffManagementView: React.FC = () => {
       'Vai trò hệ thống',
       'Bộ phận / Khoa (*)',
       'Phòng làm việc',
-      'Số điện thoại',
+      'Số điện thoại (10 số)',
       'Email',
       'Giới tính',
-      'Ngày sinh (YYYY-MM-DD)',
+      'Ngày sinh (dd/mm/yyyy)',
       'Chuyên môn',
-      'Ngày vào làm (YYYY-MM-DD)',
+      'Ngày vào làm (dd/mm/yyyy)',
       'Số năm kinh nghiệm',
       'Trạng thái làm việc',
       'Số CCHN'
@@ -496,9 +575,9 @@ export const StaffManagementView: React.FC = () => {
         '0912345678',
         'an.nguyen@hospital.vn',
         'Nam',
-        '1985-05-15',
+        '15/05/1985',
         'Chẩn đoán hình ảnh & X-Quang can thiệp',
-        '2018-03-01',
+        '01/03/2018',
         7,
         'Đang làm việc',
         '012345/BYT-CCHN'
@@ -513,9 +592,9 @@ export const StaffManagementView: React.FC = () => {
         '0987654321',
         'mai.tran@hospital.vn',
         'Nữ',
-        '1992-08-20',
+        '20/08/1992',
         'Kỹ thuật siêu âm Doppler màu',
-        '2020-06-15',
+        '15/06/2020',
         5,
         'Đang làm việc',
         '023456/BYT-CCHN'
@@ -530,9 +609,9 @@ export const StaffManagementView: React.FC = () => {
         '0903112233',
         'nam.le@hospital.vn',
         'Nam',
-        '1989-11-10',
+        '10/11/1989',
         'Kỹ thuật lấy & xử lý mẫu xét nghiệm',
-        '2019-09-01',
+        '01/09/2019',
         6,
         'Đang làm việc',
         '034567/BYT-CCHN'
@@ -547,7 +626,7 @@ export const StaffManagementView: React.FC = () => {
       { wch: 16 },
       { wch: 24 },
       { wch: 32 },
-      { wch: 15 },
+      { wch: 18 },
       { wch: 25 },
       { wch: 10 },
       { wch: 22 },
@@ -558,15 +637,39 @@ export const StaffManagementView: React.FC = () => {
       { wch: 20 }
     ];
 
+    // Explicitly enforce text cell format for Phone (c=6) and Dates (c=9, c=11)
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:O4');
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      const phoneCell = XLSX.utils.encode_cell({ r: R, c: 6 });
+      if (ws[phoneCell]) {
+        ws[phoneCell].t = 's';
+        ws[phoneCell].z = '@';
+      }
+      const dobCell = XLSX.utils.encode_cell({ r: R, c: 9 });
+      if (ws[dobCell] && R > 0) {
+        ws[dobCell].t = 's';
+        ws[dobCell].z = '@';
+      }
+      const joinCell = XLSX.utils.encode_cell({ r: R, c: 11 });
+      if (ws[joinCell] && R > 0) {
+        ws[joinCell].t = 's';
+        ws[joinCell].z = '@';
+      }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Mau_Nhan_Vien');
     XLSX.writeFile(wb, 'Mau_Danh_Sach_Nhan_Vien_Khoa_CLS.xlsx');
   };
 
-  // --- Excel File Upload & Parse ---
-  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // --- Excel File Upload, Drag & Drop, and Parse ---
+  const processExcelFile = (file: File) => {
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.csv')) {
+      alert('Vui lòng chọn hoặc kéo thả tệp định dạng Excel (.xlsx, .xls) hoặc .csv!');
+      return;
+    }
+
     setExcelFileName(file.name);
     setIsParsingExcel(true);
 
@@ -585,13 +688,13 @@ export const StaffManagementView: React.FC = () => {
           return;
         }
 
-        const normalizeKey = (row: any, candidates: string[]): string => {
+        const normalizeKey = (row: any, candidates: string[]): any => {
           for (const key of Object.keys(row)) {
             const cleanKey = key.toLowerCase().replace(/[\s_*()]/g, '');
             for (const cand of candidates) {
               const cleanCand = cand.toLowerCase().replace(/[\s_*()]/g, '');
               if (cleanKey.includes(cleanCand)) {
-                return String(row[key]).trim();
+                return row[key];
               }
             }
           }
@@ -599,28 +702,33 @@ export const StaffManagementView: React.FC = () => {
         };
 
         const parsed = rawData.map((row, index) => {
-          const fullName = normalizeKey(row, ['họvàtên', 'hoten', 'họtên', 'fullname', 'tên', 'họ']) || '';
-          const rawTitle = normalizeKey(row, ['chứcdanh', 'chucdanh', 'vịtrí', 'vitri', 'title']) || 'Kỹ thuật viên';
-          const rawRole = normalizeKey(row, ['vaitrò', 'vaitro', 'role']) || (rawTitle.toLowerCase().includes('bác sĩ') ? 'Doctor' : rawTitle.toLowerCase().includes('trưởng khoa') ? 'Manager' : 'Staff');
-          const dept = normalizeKey(row, ['bộphận', 'bophan', 'khoa', 'phânkhoa', 'department']) || (rooms[0]?.departmentSection || 'Chẩn đoán hình ảnh');
-          const room = normalizeKey(row, ['phòng', 'phong', 'room']) || (rooms[0]?.name || 'Phòng xét nghiệm');
-          const phone = normalizeKey(row, ['sốđiệnthoại', 'sđt', 'phone', 'dienthoai']) || '';
-          const email = normalizeKey(row, ['email', 'thưđiệntử', 'mail']) || '';
-          const gender = normalizeKey(row, ['giớitính', 'gioitinh', 'gender']) || 'Nam';
-          let dob = normalizeKey(row, ['ngàysinh', 'ngaysinh', 'dob', 'birth']) || '';
-          if (dob && typeof dob === 'string' && dob.includes('T')) {
-            dob = dob.split('T')[0];
-          }
-          const specialty = normalizeKey(row, ['chuyênmôn', 'chuyenmon', 'specialty']) || `Kỹ thuật ${dept}`;
-          let joinDate = normalizeKey(row, ['ngàyvàolàm', 'ngayvaolam', 'joindate', 'ngàyvào']) || '';
-          if (joinDate && typeof joinDate === 'string' && joinDate.includes('T')) {
-            joinDate = joinDate.split('T')[0];
-          }
-          const expRaw = normalizeKey(row, ['kinhnghiệm', 'kinhnghiem', 'nămkinhnghiệm', 'exp']) || '0';
+          const fullName = String(normalizeKey(row, ['họvàtên', 'hoten', 'họtên', 'fullname', 'tên', 'họ']) || '').trim();
+          const rawTitle = String(normalizeKey(row, ['chứcdanh', 'chucdanh', 'vịtrí', 'vitri', 'title']) || 'Kỹ thuật viên').trim();
+          const rawRole = String(normalizeKey(row, ['vaitrò', 'vaitro', 'role']) || (rawTitle.toLowerCase().includes('bác sĩ') ? 'Doctor' : rawTitle.toLowerCase().includes('trưởng khoa') ? 'Manager' : 'Staff')).trim();
+          const dept = String(normalizeKey(row, ['bộphận', 'bophan', 'khoa', 'phânkhoa', 'department']) || (rooms[0]?.departmentSection || 'Chẩn đoán hình ảnh')).trim();
+          const room = String(normalizeKey(row, ['phòng', 'phong', 'room']) || (rooms[0]?.name || 'Phòng xét nghiệm')).trim();
+          
+          // Format phone number to 10 digits with leading 0 (e.g. 987218099 -> 0987218099)
+          const rawPhone = normalizeKey(row, ['sốđiệnthoại', 'sđt', 'phone', 'dienthoai', 'dienthoailienhe']);
+          const phone = normalizeVietnamesePhone(rawPhone);
+
+          const email = String(normalizeKey(row, ['email', 'thưđiệntử', 'mail']) || '').trim();
+          const gender = String(normalizeKey(row, ['giớitính', 'gioitinh', 'gender']) || 'Nam').trim();
+          
+          // Format DOB and Join Date strictly to dd/mm/yyyy
+          const rawDob = normalizeKey(row, ['ngàysinh', 'ngaysinh', 'dob', 'birth', 'nămsinh']);
+          const dob = parseExcelDateToDDMMYYYY(rawDob);
+
+          const specialty = String(normalizeKey(row, ['chuyênmôn', 'chuyenmon', 'specialty']) || `Kỹ thuật ${dept}`).trim();
+          
+          const rawJoin = normalizeKey(row, ['ngàyvàolàm', 'ngayvaolam', 'joindate', 'ngàyvào', 'ngayvao']);
+          const joinDate = parseExcelDateToDDMMYYYY(rawJoin);
+
+          const expRaw = String(normalizeKey(row, ['kinhnghiệm', 'kinhnghiem', 'nămkinhnghiệm', 'exp']) || '0').trim();
           const experienceYears = parseInt(expRaw, 10) || (joinDate ? calculateYearsOfService(joinDate, 1) : 1);
-          const rawStatus = normalizeKey(row, ['trạngthái', 'trangthai', 'status']) || 'Đang làm việc';
-          const certCode = normalizeKey(row, ['cchn', 'chứngchỉ', 'chungchi', 'giấyphép']) || '';
-          const codeCandidate = normalizeKey(row, ['mãnv', 'manv', 'mãnhânviên', 'id', 'code']);
+          const rawStatus = String(normalizeKey(row, ['trạngthái', 'trangthai', 'status']) || 'Đang làm việc').trim();
+          const certCode = String(normalizeKey(row, ['cchn', 'chứngchỉ', 'chungchi', 'giấyphép']) || '').trim();
+          const codeCandidate = String(normalizeKey(row, ['mãnv', 'manv', 'mãnhânviên', 'id', 'code']) || '').trim();
           const userId = codeCandidate || `NV-${Date.now().toString().slice(-4)}${index + 1}`;
 
           const isValid = Boolean(fullName && fullName.length >= 2);
@@ -634,10 +742,10 @@ export const StaffManagementView: React.FC = () => {
             room,
             phone,
             email,
-            dob: String(dob),
+            dob,
             gender: (gender.toLowerCase().includes('nữ') ? 'Nữ' : 'Nam') as 'Nam' | 'Nữ' | 'Khác',
             specialty,
-            joinDate: String(joinDate),
+            joinDate,
             experienceYears,
             currentStatus: (rawStatus.includes('thử việc') ? 'Đang thử việc' : rawStatus.includes('thai sản') ? 'Nghỉ thai sản' : rawStatus.includes('không lương') ? 'Nghỉ không lương' : 'Đang làm việc') as EmploymentStatus,
             certCode,
@@ -658,6 +766,49 @@ export const StaffManagementView: React.FC = () => {
     reader.readAsBinaryString(file);
   };
 
+  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processExcelFile(file);
+    e.target.value = '';
+  };
+
+  const handleExcelDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isDraggingExcel) {
+      setIsDraggingExcel(true);
+    }
+  };
+
+  const handleExcelDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDraggingExcel(true);
+  };
+
+  const handleExcelDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    setIsDraggingExcel(false);
+  };
+
+  const handleExcelDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingExcel(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processExcelFile(files[0]);
+    }
+  };
+
   // --- Confirm Import Excel to Storage ---
   const handleConfirmImportExcel = () => {
     const validRows = parsedExcelStaff.filter(r => r.isValid);
@@ -672,14 +823,14 @@ export const StaffManagementView: React.FC = () => {
         name: `Chứng chỉ Hành Nghề Cận Lâm Sàng (${r.specialty || r.departmentSection})`,
         code: r.certCode,
         issuedBy: 'Sở Y Tế / Bộ Y Tế',
-        issuedDate: r.joinDate || new Date().toISOString().split('T')[0],
+        issuedDate: r.joinDate ? toInputDateFormat(r.joinDate) : new Date().toISOString().split('T')[0],
         expiryDate: new Date(new Date().setFullYear(new Date().getFullYear() + 5)).toISOString().split('T')[0],
         status: 'Còn hiệu lực'
       }] : [];
 
       const initialHistory: WorkStatusHistoryItem = {
         id: `SH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-        startDate: r.joinDate || new Date().toISOString().split('T')[0],
+        startDate: r.joinDate || formatDateVN(new Date()),
         endDate: 'Hiện tại',
         status: r.currentStatus,
         departmentSection: r.departmentSection,
@@ -704,7 +855,7 @@ export const StaffManagementView: React.FC = () => {
         specialty: r.specialty,
         experienceYears: r.experienceYears,
         joinDate: r.joinDate,
-        degrees: [r.title.includes('Bác sĩ') ? 'Bác sĩ Đa khoa / Chuyên khoa' : 'Cử nhân Kỹ thuật Y học'],
+        degrees: [r.title.includes('Bác sĩ') ? 'Bác sĩ Đa khoa' : 'Cử nhân Kỹ thuật Y học'],
         certificates,
         totalShiftsThisMonth: 0,
         leaveBalanceDays: 12,
@@ -762,7 +913,7 @@ export const StaffManagementView: React.FC = () => {
 
     const initialHistory: WorkStatusHistoryItem = {
       id: `SH-${Date.now()}`,
-      startDate: newStaffForm.joinDate || new Date().toISOString().split('T')[0],
+      startDate: formatDateVN(newStaffForm.joinDate) || formatDateVN(new Date()),
       endDate: 'Hiện tại',
       status: newStaffForm.currentStatus,
       departmentSection: newStaffForm.departmentSection,
@@ -780,13 +931,13 @@ export const StaffManagementView: React.FC = () => {
       role: newStaffForm.role,
       departmentSection: newStaffForm.departmentSection,
       room: newStaffForm.room,
-      phone: newStaffForm.phone.trim(),
+      phone: normalizeVietnamesePhone(newStaffForm.phone),
       email: newStaffForm.email.trim(),
-      dob: newStaffForm.dob,
+      dob: formatDateVN(newStaffForm.dob),
       gender: newStaffForm.gender,
       specialty: newStaffForm.specialty.trim() || `Chuyên môn ${newStaffForm.departmentSection}`,
       experienceYears: newStaffForm.joinDate ? calculateYearsOfService(newStaffForm.joinDate, newStaffForm.experienceYears) : newStaffForm.experienceYears,
-      joinDate: newStaffForm.joinDate,
+      joinDate: formatDateVN(newStaffForm.joinDate),
       degrees: [newStaffForm.title.includes('Bác sĩ') ? 'Bác sĩ Đa khoa' : 'Cử nhân Kỹ thuật Y học'],
       certificates: certs,
       totalShiftsThisMonth: 0,
@@ -1249,11 +1400,11 @@ export const StaffManagementView: React.FC = () => {
                         </div>
                         <div className="text-slate-600 flex items-center gap-1">
                           <span className="font-semibold text-slate-500">Ngày sinh:</span>
-                          <strong className="text-slate-900 font-bold">{staff.dob || '---'}</strong>
+                          <strong className="text-slate-900 font-bold">{staff.dob ? formatDateVN(staff.dob) : '---'}</strong>
                         </div>
                         <div className="text-slate-600 flex items-center gap-1.5 col-span-2 sm:col-span-1 truncate" title={staff.phone}>
                           <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <strong className="text-slate-800 font-semibold truncate">{staff.phone || 'Chưa có SĐT'}</strong>
+                          <strong className="text-slate-800 font-semibold font-mono truncate">{normalizeVietnamesePhone(staff.phone) || 'Chưa có SĐT'}</strong>
                         </div>
                         <div className="text-slate-600 flex items-center gap-1.5 col-span-2 sm:col-span-1 truncate" title={staff.email}>
                           <Mail className="w-3 h-3 text-indigo-600 shrink-0" />
@@ -1263,7 +1414,7 @@ export const StaffManagementView: React.FC = () => {
 
                       {/* Join Date & Service Years Info */}
                       <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100 font-medium">
-                        <span className="text-slate-600">📅 Ngày vào làm: <strong className="text-slate-900">{staff.joinDate || 'Chưa cập nhật'}</strong></span>
+                        <span className="text-slate-600">📅 Ngày vào làm: <strong className="text-slate-900">{staff.joinDate ? formatDateVN(staff.joinDate) : 'Chưa cập nhật'}</strong></span>
                         <span className="text-slate-600">⏱️ Công tác: <strong className="text-indigo-600">{staff.experienceYears} năm</strong></span>
                       </div>
 
@@ -1355,11 +1506,11 @@ export const StaffManagementView: React.FC = () => {
                                 <div className="space-y-0.5 text-[11px]">
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold text-slate-800">{staff.gender || '---'}</span>
-                                    {staff.dob && <span className="text-slate-400">• {staff.dob}</span>}
+                                    {staff.dob && <span className="text-slate-400">• {formatDateVN(staff.dob)}</span>}
                                   </div>
                                   {(staff.phone || staff.email) && (
                                     <div className="flex items-center gap-2 text-slate-500 text-[10px]">
-                                      {staff.phone && <span className="flex items-center gap-1 text-slate-700"><Phone className="w-2.5 h-2.5 text-emerald-600" />{staff.phone}</span>}
+                                      {staff.phone && <span className="flex items-center gap-1 text-slate-700 font-mono"><Phone className="w-2.5 h-2.5 text-emerald-600" />{normalizeVietnamesePhone(staff.phone)}</span>}
                                       {staff.email && <span className="flex items-center gap-1 text-slate-600"><Mail className="w-2.5 h-2.5 text-indigo-500" />{staff.email}</span>}
                                     </div>
                                   )}
@@ -1380,7 +1531,7 @@ export const StaffManagementView: React.FC = () => {
                                 {staff.specialty}
                               </td>
                               <td className="p-3 font-medium text-slate-700 whitespace-nowrap">
-                                {staff.joinDate || '---'}
+                                {staff.joinDate ? formatDateVN(staff.joinDate) : '---'}
                               </td>
                               <td className="p-3 font-medium text-slate-900 whitespace-nowrap">
                                 {staff.experienceYears} năm
@@ -1630,10 +1781,10 @@ export const StaffManagementView: React.FC = () => {
                             </span>
                           </td>
                           <td className="p-3 text-slate-600">{cert.issuedBy}</td>
-                          <td className="p-3 text-slate-600 whitespace-nowrap">{cert.issuedDate}</td>
+                          <td className="p-3 text-slate-600 whitespace-nowrap">{formatDateVN(cert.issuedDate)}</td>
                           <td className="p-3 font-semibold text-slate-900 whitespace-nowrap">
                             <span className={cert.status === 'Hết hiệu lực' ? 'text-red-600 font-bold' : cert.status === 'Sắp hết hạn' ? 'text-amber-600 font-bold' : 'text-slate-900'}>
-                              {cert.expiryDate}
+                              {formatDateVN(cert.expiryDate)}
                             </span>
                           </td>
                           <td className="p-3 whitespace-nowrap">
@@ -1803,11 +1954,11 @@ export const StaffManagementView: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Ngày Sinh:</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Ngày Sinh (dd/mm/yyyy):</label>
                     <input
                       type="date"
-                      value={editingStaff.dob || ''}
-                      onChange={e => setEditingStaff({ ...editingStaff, dob: e.target.value })}
+                      value={toInputDateFormat(editingStaff.dob)}
+                      onChange={e => setEditingStaff({ ...editingStaff, dob: formatDateVN(e.target.value) })}
                       className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
                     />
                   </div>
@@ -1817,7 +1968,7 @@ export const StaffManagementView: React.FC = () => {
                       type="tel"
                       placeholder="e.g. 0912 345 678"
                       value={editingStaff.phone || ''}
-                      onChange={e => setEditingStaff({ ...editingStaff, phone: e.target.value })}
+                      onChange={e => setEditingStaff({ ...editingStaff, phone: normalizeVietnamesePhone(e.target.value) })}
                       className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
                     />
                   </div>
@@ -1964,12 +2115,12 @@ export const StaffManagementView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Ngày Vào Làm:</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Ngày Vào Làm (dd/mm/yyyy):</label>
                   <input
                     type="date"
-                    value={editingStaff.joinDate || ''}
+                    value={toInputDateFormat(editingStaff.joinDate)}
                     onChange={e => {
-                      const newJoinDate = e.target.value;
+                      const newJoinDate = formatDateVN(e.target.value);
                       const calculatedYears = calculateYearsOfService(newJoinDate, editingStaff.experienceYears);
                       setEditingStaff({
                         ...editingStaff,
@@ -2164,7 +2315,7 @@ export const StaffManagementView: React.FC = () => {
                 <div className="text-right">
                   {getEmploymentStatusBadge(historyViewingStaff.currentStatus)}
                   <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                    Vào làm: <strong>{historyViewingStaff.joinDate || '---'}</strong> • <strong>{historyViewingStaff.experienceYears} năm công tác</strong>
+                    Vào làm: <strong>{historyViewingStaff.joinDate ? formatDateVN(historyViewingStaff.joinDate) : '---'}</strong> • <strong>{historyViewingStaff.experienceYears} năm công tác</strong>
                   </p>
                 </div>
               </div>
@@ -2177,11 +2328,11 @@ export const StaffManagementView: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-slate-500 font-medium">Ngày sinh: </span>
-                  <strong className="text-slate-800">{historyViewingStaff.dob || '---'}</strong>
+                  <strong className="text-slate-800">{historyViewingStaff.dob ? formatDateVN(historyViewingStaff.dob) : '---'}</strong>
                 </div>
                 <div className="truncate" title={historyViewingStaff.phone}>
                   <span className="text-slate-500 font-medium">SĐT: </span>
-                  <strong className="text-slate-800">{historyViewingStaff.phone || '---'}</strong>
+                  <strong className="text-slate-800 font-mono">{normalizeVietnamesePhone(historyViewingStaff.phone) || '---'}</strong>
                 </div>
                 <div className="truncate" title={historyViewingStaff.email}>
                   <span className="text-slate-500 font-medium">Email: </span>
@@ -2206,7 +2357,7 @@ export const StaffManagementView: React.FC = () => {
                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 hover:border-indigo-300 transition-all shadow-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
                           <span className="font-extrabold text-slate-900 text-xs">
-                            📅 {hItem.startDate} ➔ {hItem.endDate || 'Hiện tại'}
+                            📅 {formatDateVN(hItem.startDate)} ➔ {hItem.endDate === 'Hiện tại' ? 'Hiện tại' : formatDateVN(hItem.endDate)}
                           </span>
                           {getEmploymentStatusBadge(hItem.status)}
                         </div>
@@ -2886,7 +3037,11 @@ export const StaffManagementView: React.FC = () => {
 
       {/* Modal: Nhập Danh Sách Từ File Excel */}
       {showImportExcelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+        <div 
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDrop={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn"
+        >
           <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] flex flex-col">
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
@@ -2936,33 +3091,57 @@ export const StaffManagementView: React.FC = () => {
             <div className="p-6 overflow-y-auto flex-1">
               {excelImportStep === 'upload' && (
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center hover:border-emerald-500 dark:hover:border-emerald-500 transition-colors bg-slate-50/50 dark:bg-slate-800/20">
+                  <div
+                    onDragOver={handleExcelDragOver}
+                    onDragEnter={handleExcelDragEnter}
+                    onDragLeave={handleExcelDragLeave}
+                    onDrop={handleExcelDrop}
+                    onClick={() => excelFileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer select-none relative ${
+                      isDraggingExcel
+                        ? 'border-emerald-500 bg-emerald-50/90 dark:bg-emerald-950/50 ring-4 ring-emerald-500/20 scale-[1.01]'
+                        : 'border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-slate-50/50 dark:bg-slate-800/20 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                    }`}
+                  >
                     <input
+                      ref={excelFileInputRef}
                       type="file"
                       id="staff-excel-file-input"
                       accept=".xlsx, .xls, .csv"
                       onChange={handleExcelFileUpload}
                       className="hidden"
                     />
-                    <label
-                      htmlFor="staff-excel-file-input"
-                      className="cursor-pointer flex flex-col items-center justify-center space-y-3"
-                    >
-                      <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shadow-inner">
-                        <FileUp className="w-7 h-7" />
+                    <div className="flex flex-col items-center justify-center space-y-3 pointer-events-none">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner transition-all duration-200 ${
+                        isDraggingExcel
+                          ? 'bg-emerald-600 text-white scale-110 shadow-lg shadow-emerald-600/30'
+                          : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                      }`}>
+                        <FileUp className={`w-7 h-7 ${isDraggingExcel ? 'animate-bounce' : ''}`} />
                       </div>
                       <div>
-                        <span className="text-sm font-bold text-slate-800 dark:text-slate-100 hover:text-emerald-600 transition-colors">
-                          Nhấn để chọn tệp Excel hoặc kéo thả vào đây
+                        <span className={`text-sm font-bold transition-colors ${
+                          isDraggingExcel
+                            ? 'text-emerald-600 dark:text-emerald-400 text-base'
+                            : 'text-slate-800 dark:text-slate-100 hover:text-emerald-600'
+                        }`}>
+                          {isDraggingExcel ? '✨ Thả tệp Excel vào đây để tải lên ngay!' : 'Nhấn để chọn tệp Excel hoặc kéo thả vào đây'}
                         </span>
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                           Hỗ trợ định dạng: .xlsx, .xls, .csv (dung lượng tối đa 10MB)
                         </p>
                       </div>
-                      <span className="inline-block px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          excelFileInputRef.current?.click();
+                        }}
+                        className="inline-block px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all pointer-events-auto"
+                      >
                         Chọn tệp từ máy tính
-                      </span>
-                    </label>
+                      </button>
+                    </div>
                   </div>
 
                   {isParsingExcel && (
@@ -2980,10 +3159,11 @@ export const StaffManagementView: React.FC = () => {
                       <span>• Chức danh (Bác sĩ, KTV...)</span>
                       <span>• Bộ phận / Khoa</span>
                       <span>• Phòng làm việc</span>
-                      <span>• Số điện thoại & Email</span>
-                      <span>• Giới tính & Ngày sinh</span>
-                      <span>• Chuyên môn chính</span>
-                      <span>• Ngày vào làm</span>
+                      <span>• Số điện thoại (chuẩn 10 số)</span>
+                      <span>• Email liên hệ</span>
+                      <span>• Giới tính & Ngày sinh (dd/mm/yyyy)</span>
+                      <span>• Ngày vào làm (dd/mm/yyyy)</span>
+                      <span>• Chuyên môn & Số năm công tác</span>
                       <span>• Số CCHN hành nghề</span>
                     </div>
                   </div>
@@ -3023,7 +3203,8 @@ export const StaffManagementView: React.FC = () => {
                           <th className="p-2.5">Chức Danh</th>
                           <th className="p-2.5">Bộ Phận / Khoa</th>
                           <th className="p-2.5">Phòng Làm Việc</th>
-                          <th className="p-2.5">SĐT / Email</th>
+                          <th className="p-2.5">SĐT (10 số) / Email</th>
+                          <th className="p-2.5 whitespace-nowrap">Ngày Sinh & Vào Làm (dd/mm/yyyy)</th>
                           <th className="p-2.5">Số CCHN</th>
                           <th className="p-2.5 text-center">Trạng Thái</th>
                         </tr>
@@ -3033,13 +3214,22 @@ export const StaffManagementView: React.FC = () => {
                           <tr key={idx} className={row.isValid ? 'hover:bg-slate-50 dark:hover:bg-slate-800/40' : 'bg-rose-50/50 dark:bg-rose-950/20'}>
                             <td className="p-2.5 text-[11px] font-mono text-slate-400">{idx + 1}</td>
                             <td className="p-2.5 font-mono font-medium">{row.userId}</td>
-                            <td className="p-2.5 font-bold text-slate-900 dark:text-white">{row.fullName}</td>
+                            <td className="p-2.5 font-bold text-slate-900 dark:text-white">
+                              {row.fullName}
+                              <div className="text-[10px] text-slate-400 font-normal">{row.gender}</div>
+                            </td>
                             <td className="p-2.5">{row.title}</td>
                             <td className="p-2.5 font-medium text-indigo-600 dark:text-indigo-400">{row.departmentSection}</td>
                             <td className="p-2.5">{row.room || '---'}</td>
                             <td className="p-2.5 text-[11px]">
-                              <div>{row.phone || '---'}</div>
-                              <div className="text-slate-400">{row.email}</div>
+                              <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                {row.phone || '---'}
+                              </div>
+                              <div className="text-slate-400 text-[10px]">{row.email || '---'}</div>
+                            </td>
+                            <td className="p-2.5 text-[11px] whitespace-nowrap">
+                              <div><span className="text-slate-400">Sinh:</span> <strong className="text-slate-800 dark:text-slate-200 font-semibold">{row.dob || '---'}</strong></div>
+                              <div><span className="text-slate-400">Vào:</span> <strong className="text-slate-800 dark:text-slate-200 font-semibold">{row.joinDate || '---'}</strong></div>
                             </td>
                             <td className="p-2.5 font-mono text-[11px]">{row.certCode || '---'}</td>
                             <td className="p-2.5 text-center whitespace-nowrap">

@@ -152,3 +152,77 @@ export function isDatePastVN(dateInput?: string | null): boolean {
 
   return targetDate.getTime() < todayStartVN.getTime();
 }
+
+/**
+ * Converts any date format (DD/MM/YYYY, ISO, timestamp) to YYYY-MM-DD for HTML <input type="date" />.
+ */
+export function toInputDateFormat(dateInput?: string | null): string {
+  if (!dateInput) return '';
+  const trimmed = dateInput.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    const y = dmyMatch[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  if (trimmed.includes('T')) {
+    return trimmed.split('T')[0];
+  }
+
+  try {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return '';
+}
+
+/**
+ * Normalizes Vietnamese phone numbers:
+ * - Drops unwanted spaces, dots, dashes
+ * - Converts +84 or 84 to 0
+ * - If 9 digits (when Excel drops the leading 0, e.g. 987218099), prepends 0 to make it 10 digits
+ * - Preserves valid 10-digit number e.g. 0987218099
+ */
+export function normalizeVietnamesePhone(raw: any): string {
+  if (raw === null || raw === undefined) return '';
+  let str = String(raw).trim();
+  if (!str) return '';
+
+  // Remove spaces, dots, dashes, parentheses
+  str = str.replace(/[\s.\-()]/g, '');
+
+  // If starts with +84, replace with 0
+  if (str.startsWith('+84')) {
+    str = '0' + str.slice(3);
+  } else if (str.startsWith('84') && (str.length === 11 || str.length === 12)) {
+    str = '0' + str.slice(2);
+  }
+
+  // Extract numeric digits
+  const digits = str.replace(/\D/g, '');
+
+  // If 9 digits (Excel dropped leading 0)
+  if (digits.length === 9) {
+    return '0' + digits;
+  }
+
+  // If 10 digits starting with 0
+  if (digits.length === 10 && digits.startsWith('0')) {
+    return digits;
+  }
+
+  return digits || str;
+}
