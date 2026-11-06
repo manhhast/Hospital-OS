@@ -3,12 +3,13 @@ import * as XLSX from 'xlsx';
 import { 
   Users, Award, Calendar, BookOpen, CheckCircle2, Clock, AlertCircle, 
   Search, Check, X, Edit3, Building2, Grid, Layers, History, Plus, Briefcase, ChevronRight, UserCheck, Phone, Mail,
-  Trash2, AlertTriangle, ShieldCheck, Filter, FileText, FileSpreadsheet, Download, Upload, FileUp, Sparkles, CheckSquare, PlusCircle
+  Trash2, AlertTriangle, ShieldCheck, Filter, FileText, FileSpreadsheet, Download, Upload, FileUp, Sparkles, CheckSquare, PlusCircle,
+  Shield, KeyRound, Lock, User as UserIcon
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { 
   StaffProfile, LeaveRequest, TrainingCourse, EmploymentStatus, WorkStatusHistoryItem, CLSTitle, UserRole,
-  MedicalCertificate, ParaclinicalRoom
+  MedicalCertificate, ParaclinicalRoom, User
 } from '../../types/hospital';
 import { formatDateVN, toInputDateFormat, normalizeVietnamesePhone } from '../../utils/dateUtils';
 
@@ -117,6 +118,15 @@ export const StaffManagementView: React.FC = () => {
 
   // View Work History Modal (for any user)
   const [historyViewingStaff, setHistoryViewingStaff] = useState<StaffProfile | null>(null);
+
+  // Staff Detail Modal & RBAC Permissions State
+  const [selectedDetailStaff, setSelectedDetailStaff] = useState<StaffProfile | null>(null);
+  const [detailModalTab, setDetailModalTab] = useState<'profile' | 'permissions' | 'history' | 'certs'>('profile');
+  const [assignedRole, setAssignedRole] = useState<UserRole>('Staff');
+  const [assignedTitle, setAssignedTitle] = useState<string>('');
+  const [assignedDept, setAssignedDept] = useState<string>('');
+  const [assignedRoom, setAssignedRoom] = useState<string>('');
+  const [permissionSuccessMsg, setPermissionSuccessMsg] = useState<string>('');
 
   // Certificate Management State (Add / Edit / Delete)
   const [certStatusFilter, setCertStatusFilter] = useState<'all' | 'Còn hiệu lực' | 'Sắp hết hạn' | 'Hết hiệu lực'>('all');
@@ -1041,6 +1051,80 @@ export const StaffManagementView: React.FC = () => {
     setHistNote('');
   };
 
+  // Open Staff Detail Modal
+  const handleOpenDetailModal = (staff: StaffProfile, defaultTab: 'profile' | 'permissions' | 'history' | 'certs' = 'profile') => {
+    setSelectedDetailStaff(staff);
+    setDetailModalTab(defaultTab);
+    const validRole = (['Admin', 'Manager', 'Doctor', 'Staff'].includes(staff.role) ? staff.role : 'Staff') as UserRole;
+    setAssignedRole(validRole);
+    setAssignedTitle(staff.title || '');
+    setAssignedDept(staff.departmentSection || '');
+    setAssignedRoom(staff.room || '');
+    setPermissionSuccessMsg('');
+  };
+
+  // Open Edit Modal from Detail Modal
+  const handleEditFromDetail = () => {
+    if (!selectedDetailStaff) return;
+    const staffToEdit = { ...selectedDetailStaff };
+    setSelectedDetailStaff(null);
+    setEditingStaff({
+      ...staffToEdit,
+      experienceYears: staffToEdit.joinDate ? calculateYearsOfService(staffToEdit.joinDate, staffToEdit.experienceYears) : staffToEdit.experienceYears
+    });
+  };
+
+  // Save RBAC Permissions for selected staff
+  const handleSavePermissions = () => {
+    if (!selectedDetailStaff) return;
+
+    // 1. Update StaffProfile
+    const updatedStaff: StaffProfile = {
+      ...selectedDetailStaff,
+      role: assignedRole,
+      title: assignedTitle || selectedDetailStaff.title,
+      departmentSection: assignedDept || selectedDetailStaff.departmentSection,
+      room: assignedRoom || selectedDetailStaff.room
+    };
+    storageService.saveStaffProfile(updatedStaff);
+
+    // 2. Sync to User accounts
+    const users = storageService.getUsers();
+    const idx = users.findIndex(u => u.id === selectedDetailStaff.userId || u.name.trim().toLowerCase() === selectedDetailStaff.fullName.trim().toLowerCase());
+    if (idx >= 0) {
+      storageService.saveUser({
+        ...users[idx],
+        name: updatedStaff.fullName,
+        role: assignedRole,
+        title: (assignedTitle as CLSTitle) || users[idx].title,
+        department: assignedDept || users[idx].department,
+        room: assignedRoom || users[idx].room,
+        phone: updatedStaff.phone || users[idx].phone,
+        email: updatedStaff.email || users[idx].email
+      });
+    } else {
+      const newUser: User = {
+        id: selectedDetailStaff.userId,
+        name: updatedStaff.fullName,
+        email: updatedStaff.email || `${selectedDetailStaff.userId.toLowerCase()}@hospital.vn`,
+        role: assignedRole,
+        title: (assignedTitle as CLSTitle) || 'Kỹ thuật viên',
+        department: assignedDept || updatedStaff.departmentSection,
+        room: assignedRoom || updatedStaff.room,
+        phone: updatedStaff.phone,
+        status: 'Active',
+        avatar: updatedStaff.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80'
+      };
+      storageService.saveUser(newUser);
+    }
+
+    // 3. Update local state
+    setSelectedDetailStaff(updatedStaff);
+    setProfiles(storageService.getStaffProfiles());
+    setPermissionSuccessMsg(`Đã cập nhật phân quyền "${assignedRole}" cho nhân sự ${updatedStaff.fullName} thành công!`);
+    setTimeout(() => setPermissionSuccessMsg(''), 4500);
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Banner */}
@@ -1338,14 +1422,12 @@ export const StaffManagementView: React.FC = () => {
                 {filteredProfiles.map(staff => (
                   <div key={staff.userId} className="bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-md transition-all p-5 space-y-4 flex flex-col justify-between">
                     <div className="space-y-3">
-                      {/* Top row: Title, Name, Status Badge & Admin Edit */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded uppercase">
-                            {staff.title}
-                          </span>
-                          <h3 className="text-base font-bold text-slate-900 mt-1">{staff.fullName}</h3>
-                        </div>
+                      {/* Top Row: Chức danh badge (trái) & Action buttons + Số năm công tác gọn (phải) */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 rounded uppercase whitespace-nowrap shrink-0 border border-indigo-100 dark:border-indigo-900/50">
+                          {staff.title}
+                        </span>
+
                         <div className="flex items-center gap-1.5 shrink-0">
                           {/* Admin Edit & Delete Buttons */}
                           {isAdmin && (
@@ -1356,24 +1438,45 @@ export const StaffManagementView: React.FC = () => {
                                   experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
                                 })}
                                 title="Chỉnh sửa thông tin cán bộ (Dành cho Admin)"
-                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-all text-xs font-semibold flex items-center gap-1 border border-indigo-200"
+                                className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-md transition-all text-xs font-semibold flex items-center gap-1 border border-indigo-200"
                               >
-                                <Edit3 className="w-3.5 h-3.5" />
+                                <Edit3 className="w-3 h-3" />
                                 <span>Sửa</span>
                               </button>
                               <button
                                 onClick={() => setDeleteConfirmStaff(staff)}
                                 title="Xóa nhân viên khỏi hệ thống"
-                                className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                                className="p-0.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded transition-colors"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </>
                           )}
-                          <span className="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-700 rounded-lg border border-slate-200">
-                            {staff.experienceYears} năm công tác
+                          {/* Số năm công tác hiển thị gọn trong ô */}
+                          <span
+                            className="text-[11px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-md border border-slate-200 dark:border-slate-700 whitespace-nowrap"
+                            title={`${staff.experienceYears} năm công tác`}
+                          >
+                            ⏱️ {staff.experienceYears} năm
                           </span>
                         </div>
+                      </div>
+
+                      {/* Full Name Row: Chiếm trọn 100% chiều rộng của ô, không bị chèn ép xuống dòng từng chữ */}
+                      <div className="pt-0.5">
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDetailModal(staff, 'profile')}
+                            className="w-full text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer flex items-center justify-between gap-1.5 group"
+                            title="Nhấn để mở chi tiết hồ sơ & phân quyền nhân viên"
+                          >
+                            <span className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:underline truncate">
+                              {staff.fullName}
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0 group-hover:translate-x-0.5 transition-all" />
+                          </button>
+                        </h3>
                       </div>
 
                       {/* Current Status Badge & Room */}
@@ -1444,12 +1547,28 @@ export const StaffManagementView: React.FC = () => {
                         <span>Phép còn: <strong className="text-indigo-600">{staff.leaveBalanceDays} ngày</strong></span>
                       </div>
 
+                      {/* Quick Detail & Permissions Action Buttons */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => handleOpenDetailModal(staff, 'profile')}
+                          className="py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 border border-indigo-200"
+                        >
+                          <UserCheck className="w-3.5 h-3.5 text-indigo-600" /> Chi tiết
+                        </button>
+                        <button
+                          onClick={() => handleOpenDetailModal(staff, 'permissions')}
+                          className="py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 border border-purple-200"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-purple-600" /> Phân quyền
+                        </button>
+                      </div>
+
                       {/* Career History Button */}
                       <button
                         onClick={() => setHistoryViewingStaff(staff)}
-                        className="w-full py-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 border border-slate-200"
+                        className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 border border-slate-200"
                       >
-                        <History className="w-3.5 h-3.5 text-indigo-600" /> Xem Lịch Sử Công Tác ({staff.statusHistory?.length || 0})
+                        <History className="w-3.5 h-3.5 text-slate-500" /> Diễn biến công tác ({staff.statusHistory?.length || 0})
                       </button>
                     </div>
                   </div>
@@ -1498,9 +1617,15 @@ export const StaffManagementView: React.FC = () => {
                           {deptStaffList.map(staff => (
                             <tr key={staff.userId} className="hover:bg-slate-50/80">
                               <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
-                                <div className="flex items-center gap-2">
-                                  <span>{staff.fullName}</span>
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDetailModal(staff, 'profile')}
+                                  className="flex items-center gap-1.5 text-left group hover:text-indigo-600 transition-colors cursor-pointer"
+                                  title="Nhấn để mở bảng chi tiết thông tin & phân quyền nhân viên"
+                                >
+                                  <span className="font-bold text-slate-900 group-hover:text-indigo-600 group-hover:underline underline-offset-2">{staff.fullName}</span>
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+                                </button>
                               </td>
                               <td className="p-3 text-slate-700">
                                 <div className="space-y-0.5 text-[11px]">
@@ -1538,6 +1663,13 @@ export const StaffManagementView: React.FC = () => {
                               </td>
                               <td className="p-3 text-right whitespace-nowrap">
                                 <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                  <button
+                                    onClick={() => handleOpenDetailModal(staff, 'permissions')}
+                                    className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-purple-200 shrink-0"
+                                    title="Phân quyền cho nhân viên"
+                                  >
+                                    <ShieldCheck className="w-3.5 h-3.5 text-purple-600" /> Phân quyền
+                                  </button>
                                   <button
                                     onClick={() => setHistoryViewingStaff(staff)}
                                     className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-slate-200 shrink-0"
@@ -1888,310 +2020,384 @@ export const StaffManagementView: React.FC = () => {
         )}
       </div>
 
-      {/* MODAL 1: Admin Edit Staff Profile Modal */}
+      {/* MODAL 1: Admin Edit Staff Profile Modal - Khoa học, cân đối, bố cục chuẩn công thái học */}
       {editingStaff && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-              <div className="flex items-center gap-2 text-indigo-600">
-                <Edit3 className="w-5 h-5" />
-                <h3 className="text-lg font-bold text-slate-900">Chỉnh Sửa Thông Tin Cán Bộ (Admin)</h3>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-7 space-y-5 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    Chỉnh Sửa Hồ Sơ Cán Bộ
+                    <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      {editingStaff.id}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Cập nhật thông tin định danh, chuyên môn công tác và phân quyền hệ thống
+                  </p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingStaff(null)}
-                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600"
+                className="w-9 h-9 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
+                title="Đóng cửa sổ"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProfileEdit} className="space-y-4 text-xs">
-              {/* Row 1: Full name & Title */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Họ và Tên Cán Bộ:</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingStaff.fullName}
-                    onChange={e => setEditingStaff({ ...editingStaff, fullName: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                  />
+            <form onSubmit={handleSaveProfileEdit} className="space-y-5 text-xs">
+              {/* SECTION 1: Thông tin cá nhân & Liên hệ (2x2 cân đối, không bị tràn email) */}
+              <div className="p-4 bg-slate-50/75 rounded-2xl border border-slate-200/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-indigo-600" />
+                    1. Thông Tin Cá Nhân & Liên Hệ
+                  </h4>
+                  <span className="text-[11px] text-slate-400">Thông tin cơ bản của cán bộ</span>
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Chức Danh Chuyên Môn:</label>
-                  <select
-                    value={editingStaff.title}
-                    onChange={e => setEditingStaff({ ...editingStaff, title: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  >
-                    <option value="Trưởng khoa">Trưởng khoa</option>
-                    <option value="Phó khoa">Phó khoa</option>
-                    <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
-                    <option value="Kỹ thuật viên">Kỹ thuật viên</option>
-                    <option value="Bác sĩ">Bác sĩ</option>
-                    <option value="Nhân viên hành chính">Nhân viên hành chính</option>
-                  </select>
-                </div>
-              </div>
 
-              {/* Personal Info & Contact Block */}
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
-                <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                  <UserCheck className="w-3.5 h-3.5 text-indigo-600" /> Thông Tin Cá Nhân & Liên Hệ
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* Họ và tên */}
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Giới Tính:</label>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Họ và Tên Cán Bộ <span className="text-rose-500">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editingStaff.fullName}
+                      onChange={e => setEditingStaff({ ...editingStaff, fullName: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900"
+                      placeholder="VD: BS.CKI Nguyễn Văn An"
+                    />
+                  </div>
+
+                  {/* Chức danh chuyên môn */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Chức Danh Chuyên Môn <span className="text-rose-500">*</span>:
+                    </label>
                     <select
-                      value={editingStaff.gender || 'Nam'}
-                      onChange={e => setEditingStaff({ ...editingStaff, gender: e.target.value as 'Nam' | 'Nữ' | 'Khác' })}
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      value={editingStaff.title}
+                      onChange={e => setEditingStaff({ ...editingStaff, title: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
                     >
-                      <option value="Nam">Nam</option>
-                      <option value="Nữ">Nữ</option>
-                      <option value="Khác">Khác</option>
+                      <option value="Trưởng khoa">Trưởng khoa</option>
+                      <option value="Phó khoa">Phó khoa</option>
+                      <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
+                      <option value="Kỹ thuật viên">Kỹ thuật viên</option>
+                      <option value="Bác sĩ">Bác sĩ</option>
+                      <option value="Nhân viên hành chính">Nhân viên hành chính</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Ngày Sinh (dd/mm/yyyy):</label>
-                    <input
-                      type="date"
-                      value={toInputDateFormat(editingStaff.dob)}
-                      onChange={e => setEditingStaff({ ...editingStaff, dob: formatDateVN(e.target.value) })}
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
-                    />
+
+                  {/* Giới tính & Ngày sinh cân đối 50/50 */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Giới Tính:</label>
+                      <select
+                        value={editingStaff.gender || 'Nam'}
+                        onChange={e => setEditingStaff({ ...editingStaff, gender: e.target.value as 'Nam' | 'Nữ' | 'Khác' })}
+                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      >
+                        <option value="Nam">Nam</option>
+                        <option value="Nữ">Nữ</option>
+                        <option value="Khác">Khác</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Ngày Sinh:</label>
+                      <input
+                        type="date"
+                        value={toInputDateFormat(editingStaff.dob)}
+                        onChange={e => setEditingStaff({ ...editingStaff, dob: formatDateVN(e.target.value) })}
+                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Số Điện Thoại:</label>
-                    <input
-                      type="tel"
-                      placeholder="e.g. 0912 345 678"
-                      value={editingStaff.phone || ''}
-                      onChange={e => setEditingStaff({ ...editingStaff, phone: normalizeVietnamesePhone(e.target.value) })}
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Email Liên Hệ:</label>
-                    <input
-                      type="email"
-                      placeholder="e.g. canbo@benhvien.vn"
-                      value={editingStaff.email || ''}
-                      onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value })}
-                      className="w-full p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
-                    />
+
+                  {/* Số điện thoại & Email liên hệ cân đối 50/50 - Đủ không gian không bị cắt ngắn */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Số Điện Thoại:</label>
+                      <div className="relative">
+                        <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="tel"
+                          placeholder="VD: 0912345678"
+                          value={editingStaff.phone || ''}
+                          onChange={e => setEditingStaff({ ...editingStaff, phone: normalizeVietnamesePhone(e.target.value) })}
+                          className="w-full pl-8 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Email Liên Hệ:</label>
+                      <div className="relative">
+                        <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="email"
+                          placeholder="canbo@benhvien.vn"
+                          value={editingStaff.email || ''}
+                          onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value })}
+                          className="w-full pl-8 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Row 2: Role & Current Status */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Phân Quyền Hệ Thống:</label>
-                  <select
-                    value={editingStaff.role}
-                    onChange={e => setEditingStaff({ ...editingStaff, role: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  >
-                    <option value="Admin">Admin (Quản trị viên khoa)</option>
-                    <option value="Manager">Manager (Quản lý chuyên môn)</option>
-                    <option value="Doctor">Doctor (Bác sĩ)</option>
-                    <option value="Staff">Staff (Kỹ thuật viên / Nhân viên)</option>
-                  </select>
+              {/* SECTION 2: Phân công đơn vị & Chuyên môn công tác (Đối xứng hoàn hảo 2 cột) */}
+              <div className="p-4 bg-slate-50/75 rounded-2xl border border-slate-200/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-indigo-600" />
+                    2. Phân Công Đơn Vị & Chuyên Môn
+                  </h4>
+                  <span className="text-[11px] text-slate-400">Khoa, phòng và thâm niên làm việc</span>
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Trạng Thái Làm Việc Hiện Tại:</label>
-                  <select
-                    value={editingStaff.currentStatus || 'Đang làm việc'}
-                    onChange={e => setEditingStaff({ ...editingStaff, currentStatus: e.target.value as EmploymentStatus })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-indigo-700"
-                  >
-                    <option value="Đang làm việc">🟢 Đang làm việc</option>
-                    <option value="Đang thử việc">🔵 Đang thử việc</option>
-                    <option value="Nghỉ không lương">🟠 Nghỉ không lương</option>
-                    <option value="Nghỉ thai sản">🟣 Nghỉ thai sản</option>
-                    <option value="Đã nghỉ việc">⚪ Đã nghỉ việc</option>
-                  </select>
-                </div>
-              </div>
 
-              {/* Row 3: Department Section & Room */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold text-slate-700">Bộ Phận / Khoa:</label>
-                    <span className="text-[10px] text-slate-400 font-medium">Chọn từ danh sách hoặc nhập mới</span>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    list="existing-dept-datalist"
-                    placeholder="Chọn từ danh sách hoặc nhập tên bộ phận mới..."
-                    value={editingStaff.departmentSection}
-                    onChange={e => setEditingStaff({ ...editingStaff, departmentSection: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
-                  />
-                  <datalist id="existing-dept-datalist">
-                    {allDepartments.map(dept => (
-                      <option key={dept} value={dept} />
-                    ))}
-                  </datalist>
-
-                  {/* Suggestion dropdown/chips */}
-                  {allDepartments.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                      <span className="text-[10px] text-slate-400 font-bold mr-0.5">Danh sách hiện có:</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* Cột trái: Bộ phận / Khoa */}
+                  <div className="space-y-1.5">
+                    <label className="block font-semibold text-slate-700">
+                      Bộ Phận / Khoa <span className="text-rose-500">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      list="existing-dept-datalist"
+                      placeholder="Nhập tên bộ phận hoặc chọn bên dưới..."
+                      value={editingStaff.departmentSection}
+                      onChange={e => setEditingStaff({ ...editingStaff, departmentSection: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                    />
+                    <datalist id="existing-dept-datalist">
                       {allDepartments.map(dept => (
-                        <button
-                          key={dept}
-                          type="button"
-                          onClick={() => setEditingStaff({ ...editingStaff, departmentSection: dept })}
-                          className={`text-[10px] px-2 py-0.5 rounded-md border transition-all ${
-                            editingStaff.departmentSection === dept
-                              ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 font-medium'
-                          }`}
-                        >
-                          {dept}
-                        </button>
+                        <option key={dept} value={dept} />
                       ))}
-                    </div>
-                  )}
-                </div>
+                    </datalist>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold text-slate-700">Phòng Làm Việc Trực Thuộc:</label>
-                    <span className="text-[10px] text-slate-400 font-medium">Chọn từ danh sách hoặc nhập mới</span>
+                    {/* Bộ chọn nhanh gọn gàng thay cho danh sách thẻ lộn xộn */}
+                    {allDepartments.length > 0 && (
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] text-slate-500 whitespace-nowrap">Chọn nhanh:</span>
+                        <select
+                          value={allDepartments.includes(editingStaff.departmentSection) ? editingStaff.departmentSection : ''}
+                          onChange={e => {
+                            if (e.target.value) {
+                              setEditingStaff({ ...editingStaff, departmentSection: e.target.value });
+                            }
+                          }}
+                          className="w-full text-[11px] px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 outline-none focus:border-indigo-500 cursor-pointer font-medium"
+                        >
+                          <option value="">-- Danh mục bộ phận ({allDepartments.length}) --</option>
+                          {allDepartments.map(dept => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    list="existing-room-datalist"
-                    placeholder="Chọn từ danh sách hoặc nhập tên phòng mới..."
-                    value={editingStaff.room || ''}
-                    onChange={e => setEditingStaff({ ...editingStaff, room: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
-                  />
-                  <datalist id="existing-room-datalist">
-                    {allRoomNames.map(r => (
-                      <option key={r} value={r} />
-                    ))}
-                  </datalist>
 
-                  {/* Suggestion dropdown/chips */}
-                  {allRoomNames.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                      <span className="text-[10px] text-slate-400 font-bold mr-0.5">Danh sách phòng:</span>
+                  {/* Cột phải: Phòng làm việc trực thuộc */}
+                  <div className="space-y-1.5">
+                    <label className="block font-semibold text-slate-700">
+                      Phòng Làm Việc Trực Thuộc:
+                    </label>
+                    <input
+                      type="text"
+                      list="existing-room-datalist"
+                      placeholder="Nhập tên phòng hoặc chọn bên dưới..."
+                      value={editingStaff.room || ''}
+                      onChange={e => setEditingStaff({ ...editingStaff, room: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                    />
+                    <datalist id="existing-room-datalist">
                       {allRoomNames.map(r => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setEditingStaff({ ...editingStaff, room: r })}
-                          className={`text-[10px] px-2 py-0.5 rounded-md border transition-all ${
-                            editingStaff.room === r
-                              ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 font-medium'
-                          }`}
-                        >
-                          {r}
-                        </button>
+                        <option key={r} value={r} />
                       ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+                    </datalist>
 
-              {/* Row 4: Specialty & Join Date & Service Years */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block font-semibold text-slate-700 mb-1">Chuyên Môn Chính:</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingStaff.specialty}
-                    onChange={e => setEditingStaff({ ...editingStaff, specialty: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Ngày Vào Làm (dd/mm/yyyy):</label>
-                  <input
-                    type="date"
-                    value={toInputDateFormat(editingStaff.joinDate)}
-                    onChange={e => {
-                      const newJoinDate = formatDateVN(e.target.value);
-                      const calculatedYears = calculateYearsOfService(newJoinDate, editingStaff.experienceYears);
-                      setEditingStaff({
-                        ...editingStaff,
-                        joinDate: newJoinDate,
-                        experienceYears: calculatedYears
-                      });
-                    }}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold text-slate-700">Số Năm Công Tác:</label>
-                    <span className="text-[10px] text-indigo-600 font-semibold">(Tự động tính)</span>
+                    {/* Bộ chọn nhanh gọn gàng thay cho danh sách thẻ lộn xộn */}
+                    {allRoomNames.length > 0 && (
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] text-slate-500 whitespace-nowrap">Chọn nhanh:</span>
+                        <select
+                          value={allRoomNames.includes(editingStaff.room || '') ? editingStaff.room : ''}
+                          onChange={e => {
+                            if (e.target.value) {
+                              setEditingStaff({ ...editingStaff, room: e.target.value });
+                            }
+                          }}
+                          className="w-full text-[11px] px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 outline-none focus:border-indigo-500 cursor-pointer font-medium"
+                        >
+                          <option value="">-- Danh mục phòng ({allRoomNames.length}) --</option>
+                          {allRoomNames.map(r => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
-                  <input
-                    type="number"
-                    min={0}
-                    value={editingStaff.experienceYears}
-                    onChange={e => setEditingStaff({ ...editingStaff, experienceYears: parseInt(e.target.value) || 0 })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                  />
+
+                  {/* Chuyên môn chính */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Chuyên Môn Chính <span className="text-rose-500">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="VD: Siêu âm Tim mạch & Doppler mạch máu"
+                      value={editingStaff.specialty}
+                      onChange={e => setEditingStaff({ ...editingStaff, specialty: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                    />
+                  </div>
+
+                  {/* Ngày vào làm & Số năm công tác (cân đối 50/50) */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Ngày Vào Làm:</label>
+                      <input
+                        type="date"
+                        value={toInputDateFormat(editingStaff.joinDate)}
+                        onChange={e => {
+                          const newJoinDate = formatDateVN(e.target.value);
+                          const calculatedYears = calculateYearsOfService(newJoinDate, editingStaff.experienceYears);
+                          setEditingStaff({
+                            ...editingStaff,
+                            joinDate: newJoinDate,
+                            experienceYears: calculatedYears
+                          });
+                        }}
+                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                        <span>Số Năm Công Tác:</span>
+                        <span className="text-[10px] text-indigo-600 font-semibold">(Tự tính)</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={0}
+                          value={editingStaff.experienceYears}
+                          onChange={e => setEditingStaff({ ...editingStaff, experienceYears: parseInt(e.target.value) || 0 })}
+                          className="w-full pl-3 pr-10 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                          năm
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Section: Status History Timeline Management inside Edit Modal */}
-              <div className="pt-4 border-t border-slate-200 space-y-3">
+              {/* SECTION 3: Phân quyền & Trạng thái hoạt động (2 cột cân đối) */}
+              <div className="p-4 bg-slate-50/75 rounded-2xl border border-slate-200/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                    3. Phân Quyền Hệ Thống & Trạng Thái Hoạt Động
+                  </h4>
+                  <span className="text-[11px] text-slate-400">Quyền truy cập & tình trạng công tác</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Phân Quyền Hệ Thống (RBAC):</label>
+                    <select
+                      value={editingStaff.role}
+                      onChange={e => setEditingStaff({ ...editingStaff, role: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
+                    >
+                      <option value="Admin">Admin (Quản trị viên toàn hệ thống / Ban Giám Đốc)</option>
+                      <option value="Manager">Manager (Ban Chủ Nhiệm / Quản lý khoa)</option>
+                      <option value="Doctor">Doctor (Bác sĩ chuyên khoa)</option>
+                      <option value="Staff">Staff (Kỹ thuật viên / Điều dưỡng / Nhân viên)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Trạng Thái Làm Việc Hiện Tại:</label>
+                    <select
+                      value={editingStaff.currentStatus || 'Đang làm việc'}
+                      onChange={e => setEditingStaff({ ...editingStaff, currentStatus: e.target.value as EmploymentStatus })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-indigo-700"
+                    >
+                      <option value="Đang làm việc">🟢 Đang làm việc bình thường</option>
+                      <option value="Đang thử việc">🔵 Đang trong thời gian thử việc</option>
+                      <option value="Nghỉ không lương">🟠 Tạm nghỉ không hưởng lương</option>
+                      <option value="Nghỉ thai sản">🟣 Chế độ nghỉ thai sản</option>
+                      <option value="Đã nghỉ việc">⚪ Đã kết thúc hợp đồng / Nghỉ việc</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 4: Diễn biến lịch sử công tác & Trạng thái */}
+              <div className="p-4 bg-slate-50/75 rounded-2xl border border-slate-200/80 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <History className="w-4 h-4 text-indigo-600" />
-                    <h4 className="font-bold text-slate-900">Diễn Biến Lịch Sử Công Tác & Trạng Thái</h4>
+                    <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                      4. Diễn Biến Lịch Sử Công Tác & Thuyên Chuyển
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200/70 text-slate-700 font-semibold">
+                      {editingStaff.statusHistory?.length || 0} mốc
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowAddHistoryForm(!showAddHistoryForm)}
-                    className="px-3 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-semibold flex items-center gap-1"
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                   >
                     <Plus className="w-3.5 h-3.5" /> Thêm Mốc Lịch Sử
                   </button>
                 </div>
 
-                {/* Subform to add a new history entry */}
+                {/* Khung thêm mốc lịch sử */}
                 {showAddHistoryForm && (
-                  <div className="p-3 bg-slate-50 rounded-xl border border-indigo-200 space-y-3">
-                    <h5 className="font-bold text-indigo-900 text-[11px] uppercase">Thêm mốc lịch sử công tác mới</h5>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="p-3.5 bg-white rounded-xl border border-indigo-200 shadow-sm space-y-3">
+                    <h5 className="font-bold text-indigo-900 text-xs">Ghi nhận mốc lịch sử công tác mới</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Từ ngày:</label>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Từ ngày:</label>
                         <input
                           type="date"
                           value={histStartDate}
                           onChange={e => setHistStartDate(e.target.value)}
-                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Đến ngày:</label>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Đến ngày:</label>
                         <input
                           type="text"
                           placeholder="YYYY-MM-DD hoặc Hiện tại"
                           value={histEndDate}
                           onChange={e => setHistEndDate(e.target.value)}
-                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Trạng thái làm việc:</label>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Trạng thái:</label>
                         <select
                           value={histStatus}
                           onChange={e => setHistStatus(e.target.value as EmploymentStatus)}
-                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
                         >
                           <option value="Đang làm việc">Đang làm việc</option>
                           <option value="Đang thử việc">Đang thử việc</option>
@@ -2202,42 +2408,42 @@ export const StaffManagementView: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Phòng / Bộ phận:</label>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Phòng / Bộ phận:</label>
                         <input
                           type="text"
                           list="existing-dept-datalist"
                           placeholder={editingStaff.departmentSection}
                           value={histDept}
                           onChange={e => setHistDept(e.target.value)}
-                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Ghi chú / Quyết định:</label>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Ghi chú / Số quyết định:</label>
                         <input
                           type="text"
-                          placeholder="Lý do chuyển đổi, số quyết định..."
+                          placeholder="VD: Quyết định điều chuyển số 12/QĐ-BV..."
                           value={histNote}
                           onChange={e => setHistNote(e.target.value)}
-                          className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                         />
                       </div>
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-1">
+                    <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
                       <button
                         type="button"
                         onClick={() => setShowAddHistoryForm(false)}
-                        className="px-2.5 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs"
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
                       >
                         Hủy
                       </button>
                       <button
                         type="button"
                         onClick={handleAddHistoryItem}
-                        className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-semibold"
+                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors"
                       >
                         Lưu Mốc Lịch Sử
                       </button>
@@ -2245,40 +2451,52 @@ export const StaffManagementView: React.FC = () => {
                   </div>
                 )}
 
-                {/* Render existing history list */}
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                  {editingStaff.statusHistory?.map((item) => (
-                    <div key={item.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900">{item.startDate} ➔ {item.endDate}</span>
-                          {getEmploymentStatusBadge(item.status)}
+                {/* Danh sách mốc lịch sử hiện có */}
+                <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                  {editingStaff.statusHistory && editingStaff.statusHistory.length > 0 ? (
+                    editingStaff.statusHistory.map((item) => (
+                      <div key={item.id} className="p-3 bg-white rounded-xl border border-slate-200/90 flex items-center justify-between text-xs hover:border-slate-300 transition-colors">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 font-mono">{item.startDate} ➔ {item.endDate}</span>
+                            {getEmploymentStatusBadge(item.status)}
+                          </div>
+                          <p className="text-slate-600">
+                            {item.positionOrTitle || editingStaff.title} • {item.departmentSection} {item.room ? `(${item.room})` : ''}
+                          </p>
+                          {item.note && <p className="text-[11px] text-slate-500 italic">📝 {item.note}</p>}
                         </div>
-                        <p className="text-slate-600">
-                          {item.positionOrTitle || editingStaff.title} - {item.departmentSection} {item.room ? `(${item.room})` : ''}
-                        </p>
-                        {item.note && <p className="text-[11px] text-slate-500 italic">📝 {item.note}</p>}
                       </div>
+                    ))
+                  ) : (
+                    <div className="p-3 bg-white rounded-xl border border-dashed border-slate-200 text-center text-slate-400 text-xs">
+                      Chưa ghi nhận diễn biến thay đổi phòng ban / trạng thái đặc biệt
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
-              {/* Form Buttons */}
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setEditingStaff(null)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-all"
-                >
-                  Hủy Thao Tác
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200"
-                >
-                  Lưu Thay Đổi (Admin)
-                </button>
+              {/* Modal Footer */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-200">
+                <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  Dữ liệu lưu sẽ đồng bộ tự động tới danh bạ và tài khoản hệ thống.
+                </p>
+                <div className="flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStaff(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
+                  >
+                    Hủy Thao Tác
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-md shadow-indigo-200 hover:shadow-lg transition-all"
+                  >
+                    Lưu Thay Đổi (Admin)
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -2396,6 +2614,705 @@ export const StaffManagementView: React.FC = () => {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2.5: BẢNG THÔNG TIN CHI TIẾT NHÂN VIÊN & PHÂN QUYỀN RBAC */}
+      {selectedDetailStaff && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 dark:from-slate-800/80 dark:via-indigo-950/30 dark:to-slate-800/80 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="relative shrink-0">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-500 text-white font-black text-xl flex items-center justify-center shadow-md shadow-indigo-200 dark:shadow-none border-2 border-white dark:border-slate-800">
+                      {selectedDetailStaff.avatar ? (
+                        <img 
+                          src={selectedDetailStaff.avatar} 
+                          alt={selectedDetailStaff.fullName} 
+                          className="w-full h-full rounded-2xl object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        selectedDetailStaff.fullName.charAt(0)
+                      )}
+                    </div>
+                    <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900" title="Trạng thái hoạt động"></span>
+                  </div>
+
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300 rounded-md">
+                        {selectedDetailStaff.title}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                        #{selectedDetailStaff.userId}
+                      </span>
+                      {getEmploymentStatusBadge(selectedDetailStaff.currentStatus)}
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${
+                        selectedDetailStaff.role === 'Admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' :
+                        selectedDetailStaff.role === 'Manager' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                        selectedDetailStaff.role === 'Doctor' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' :
+                        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
+                        Quyền: {selectedDetailStaff.role}
+                      </span>
+                    </div>
+
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white mt-1.5 flex items-center gap-2">
+                      <span>{selectedDetailStaff.fullName}</span>
+                    </h2>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                      <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      <span>{selectedDetailStaff.departmentSection}</span>
+                      {selectedDetailStaff.room && (
+                        <span className="text-slate-400 dark:text-slate-500">• Phòng: <strong className="text-slate-700 dark:text-slate-300">{selectedDetailStaff.room}</strong></span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Top Action Buttons (Chỉnh sửa & Phân quyền) */}
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                  <button
+                    onClick={handleEditFromDetail}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
+                    title="Chỉnh sửa toàn bộ thông tin nhân viên"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Sửa thông tin</span>
+                  </button>
+
+                  <button
+                    onClick={() => setDetailModalTab('permissions')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${
+                      detailModalTab === 'permissions' 
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-xs' 
+                        : 'bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                    }`}
+                    title="Phân quyền truy cập RBAC cho nhân viên"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Phân quyền</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedDetailStaff(null)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ml-1"
+                    title="Đóng bảng chi tiết"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Navigation Tabs */}
+              <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800/80 overflow-x-auto">
+                <button
+                  onClick={() => setDetailModalTab('profile')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                    detailModalTab === 'profile'
+                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <UserIcon className="w-3.5 h-3.5" />
+                  <span>Hồ Sơ & Chuyên Môn</span>
+                </button>
+
+                <button
+                  onClick={() => setDetailModalTab('permissions')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                    detailModalTab === 'permissions'
+                      ? 'bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Phân Quyền & Tài Khoản RBAC</span>
+                </button>
+
+                <button
+                  onClick={() => setDetailModalTab('history')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                    detailModalTab === 'history'
+                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Lịch Sử Công Tác ({selectedDetailStaff.statusHistory?.length || 0})</span>
+                </button>
+
+                <button
+                  onClick={() => setDetailModalTab('certs')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                    detailModalTab === 'certs'
+                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Chứng Chỉ & CCHN ({selectedDetailStaff.certificates?.length || 0})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body with Scrollable Area */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+              {/* TAB 1: HỒ SƠ CHI TIẾT */}
+              {detailModalTab === 'profile' && (
+                <div className="space-y-6">
+                  {/* Quick Stat Highlights */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Thâm Niên</span>
+                      <p className="text-base font-extrabold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                        {selectedDetailStaff.experienceYears} năm
+                      </p>
+                      <span className="text-[10px] text-slate-500">
+                        Từ {selectedDetailStaff.joinDate ? formatDateVN(selectedDetailStaff.joinDate) : '---'}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Ca trực tháng</span>
+                      <p className="text-base font-extrabold text-blue-600 dark:text-blue-400 mt-0.5">
+                        {selectedDetailStaff.totalShiftsThisMonth} ca
+                      </p>
+                      <span className="text-[10px] text-slate-500">Đã hoàn thành</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Phép năm còn</span>
+                      <p className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                        {selectedDetailStaff.leaveBalanceDays} ngày
+                      </p>
+                      <span className="text-[10px] text-slate-500">Chưa sử dụng</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Chứng chỉ CCHN</span>
+                      <p className="text-base font-extrabold text-purple-600 dark:text-purple-400 mt-0.5">
+                        {selectedDetailStaff.certificates?.length || 0} văn bằng
+                      </p>
+                      <span className="text-[10px] text-slate-500">Đã kiểm chuẩn</span>
+                    </div>
+                  </div>
+
+                  {/* 2-Column Info Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Card 1: Thông tin nhân thân & liên hệ */}
+                    <div className="bg-white dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                      <h4 className="text-xs font-bold uppercase text-slate-700 dark:text-slate-300 flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-700/80">
+                        <UserCheck className="w-4 h-4 text-indigo-500" />
+                        <span>Thông Tin Cá Nhân & Liên Hệ</span>
+                      </h4>
+
+                      <div className="space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Họ và tên:</span>
+                          <strong className="text-slate-900 dark:text-white font-bold">{selectedDetailStaff.fullName}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Giới tính:</span>
+                          <strong className="text-slate-800 dark:text-slate-200">{selectedDetailStaff.gender || '---'}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Ngày sinh:</span>
+                          <strong className="text-slate-800 dark:text-slate-200">{selectedDetailStaff.dob ? formatDateVN(selectedDetailStaff.dob) : '---'}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-emerald-600" /> Số điện thoại:
+                          </span>
+                          <strong className="text-slate-900 dark:text-slate-100 font-mono">
+                            {selectedDetailStaff.phone ? (
+                              <a href={`tel:${selectedDetailStaff.phone}`} className="hover:text-blue-600 underline">
+                                {normalizeVietnamesePhone(selectedDetailStaff.phone)}
+                              </a>
+                            ) : '---'}
+                          </strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <Mail className="w-3 h-3 text-indigo-500" /> Email:
+                          </span>
+                          <strong className="text-slate-800 dark:text-slate-200 truncate max-w-[200px]" title={selectedDetailStaff.email}>
+                            {selectedDetailStaff.email || '---'}
+                          </strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Mã nhân viên:</span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono">{selectedDetailStaff.userId}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Đơn vị công tác & phân công */}
+                    <div className="bg-white dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                      <h4 className="text-xs font-bold uppercase text-slate-700 dark:text-slate-300 flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-700/80">
+                        <Briefcase className="w-4 h-4 text-blue-500" />
+                        <span>Vị Trí Công Tác & Phân Công</span>
+                      </h4>
+
+                      <div className="space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Khoa / Bộ phận:</span>
+                          <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{selectedDetailStaff.departmentSection}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Phòng trực thuộc:</span>
+                          <strong className="text-slate-800 dark:text-slate-200">{selectedDetailStaff.room || 'Phòng làm việc chung'}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Chức vụ chuyên môn:</span>
+                          <strong className="text-slate-800 dark:text-slate-200">{selectedDetailStaff.title}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Vai trò RBAC:</span>
+                          <span className="px-2 py-0.5 font-bold rounded text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+                            {selectedDetailStaff.role}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Ngày vào làm:</span>
+                          <strong className="text-slate-800 dark:text-slate-200">{selectedDetailStaff.joinDate ? formatDateVN(selectedDetailStaff.joinDate) : '---'}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Trạng thái công tác:</span>
+                          {getEmploymentStatusBadge(selectedDetailStaff.currentStatus)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Chuyên môn & bằng cấp */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                    <h4 className="text-xs font-bold uppercase text-slate-700 dark:text-slate-300 flex items-center gap-1.5 pb-2 border-b border-slate-200/80 dark:border-slate-700">
+                      <Award className="w-4 h-4 text-amber-500" />
+                      <span>Trình Độ Chuyên Môn & Học Vị</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <span className="text-slate-400 uppercase text-[10px] font-bold block">Chuyên môn chính:</span>
+                        <p className="text-slate-900 dark:text-white font-medium mt-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                          {selectedDetailStaff.specialty || 'Chưa cập nhật chuyên môn'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 uppercase text-[10px] font-bold block">Bằng cấp & Học vị:</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {selectedDetailStaff.degrees && selectedDetailStaff.degrees.length > 0 ? (
+                            selectedDetailStaff.degrees.map((deg, idx) => (
+                              <span key={idx} className="px-2.5 py-1 bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 rounded-lg border border-indigo-100 dark:border-indigo-900 font-semibold text-xs">
+                                🎓 {deg}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-500 italic">Chưa có văn bằng bổ sung</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick CTAs in Tab */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900">
+                    <div className="text-xs">
+                      <span className="font-bold text-indigo-900 dark:text-indigo-200">Cần chỉnh sửa thông tin hoặc phân quyền tài khoản?</span>
+                      <p className="text-slate-500 dark:text-slate-400 mt-0.5">Nhấp nút dưới để thực hiện ngay lập tức</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleEditFromDetail}
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Sửa toàn bộ thông tin</span>
+                      </button>
+                      <button
+                        onClick={() => setDetailModalTab('permissions')}
+                        className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Phân quyền RBAC</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: PHÂN QUYỀN & TÀI KHOẢN RBAC */}
+              {detailModalTab === 'permissions' && (
+                <div className="space-y-6">
+                  {/* Alert Success */}
+                  {permissionSuccessMsg && (
+                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-200 flex items-center gap-2.5 text-xs font-semibold animate-in fade-in duration-150">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{permissionSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  {/* Account Summary Banner */}
+                  <div className="p-4 bg-purple-50/60 dark:bg-purple-950/30 rounded-2xl border border-purple-100 dark:border-purple-900/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-purple-600 dark:text-purple-400 tracking-wider">Tài khoản liên kết</span>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 flex items-center gap-2">
+                        <span>{selectedDetailStaff.fullName}</span>
+                        <span className="font-mono text-xs font-normal text-slate-500">({selectedDetailStaff.email || `${selectedDetailStaff.userId.toLowerCase()}@hospital.vn`})</span>
+                      </h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Quyền hiện tại: <strong className="text-purple-700 dark:text-purple-300">{selectedDetailStaff.role}</strong>
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+                      Active
+                    </span>
+                  </div>
+
+                  {/* Role Selection Cards */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
+                      Chọn Vai Trò RBAC (Role-Based Access Control):
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Role 1: Admin */}
+                      <div
+                        onClick={() => setAssignedRole('Admin')}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          assignedRole === 'Admin'
+                            ? 'bg-purple-50/80 border-purple-500 dark:bg-purple-950/40 dark:border-purple-500 ring-2 ring-purple-500/20 shadow-sm'
+                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300">
+                            Admin
+                          </span>
+                          <input
+                            type="radio"
+                            name="role"
+                            checked={assignedRole === 'Admin'}
+                            onChange={() => setAssignedRole('Admin')}
+                            className="text-purple-600 focus:ring-purple-500"
+                          />
+                        </div>
+                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Quản trị viên Hệ thống</h5>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Toàn quyền quản trị hệ thống, quản lý tài khoản & nhân sự, phân quyền người dùng, cấu hình và phê duyệt cấp cao.
+                        </p>
+                      </div>
+
+                      {/* Role 2: Manager */}
+                      <div
+                        onClick={() => setAssignedRole('Manager')}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          assignedRole === 'Manager'
+                            ? 'bg-blue-50/80 border-blue-500 dark:bg-blue-950/40 dark:border-blue-500 ring-2 ring-blue-500/20 shadow-sm'
+                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                            Manager
+                          </span>
+                          <input
+                            type="radio"
+                            name="role"
+                            checked={assignedRole === 'Manager'}
+                            onChange={() => setAssignedRole('Manager')}
+                            className="text-blue-600 focus:ring-blue-500"
+                          />
+                        </div>
+                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Trưởng khoa / Phó khoa / Quản lý</h5>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Quản lý công việc y vụ, phân lịch trực, duyệt đơn xin nghỉ phép, kiểm soát thiết bị và xem thống kê báo cáo toàn khoa.
+                        </p>
+                      </div>
+
+                      {/* Role 3: Doctor */}
+                      <div
+                        onClick={() => setAssignedRole('Doctor')}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          assignedRole === 'Doctor'
+                            ? 'bg-emerald-50/80 border-emerald-500 dark:bg-emerald-950/40 dark:border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
+                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                            Doctor
+                          </span>
+                          <input
+                            type="radio"
+                            name="role"
+                            checked={assignedRole === 'Doctor'}
+                            onChange={() => setAssignedRole('Doctor')}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Bác sĩ chuyên môn</h5>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Đọc và ký duyệt kết quả cận lâm sàng, hội chẩn chuyên môn ca khó, ký duyệt quy trình SOP và theo dõi ca bệnh.
+                        </p>
+                      </div>
+
+                      {/* Role 4: Staff */}
+                      <div
+                        onClick={() => setAssignedRole('Staff')}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          assignedRole === 'Staff'
+                            ? 'bg-slate-100 border-slate-500 dark:bg-slate-800 dark:border-slate-400 ring-2 ring-slate-400/20 shadow-sm'
+                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                            Staff
+                          </span>
+                          <input
+                            type="radio"
+                            name="role"
+                            checked={assignedRole === 'Staff'}
+                            onChange={() => setAssignedRole('Staff')}
+                            className="text-slate-600 focus:ring-slate-500"
+                          />
+                        </div>
+                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Kỹ thuật viên / Điều dưỡng / Nhân viên</h5>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Tiếp nhận bệnh nhân, lấy mẫu xét nghiệm, chụp chiếu XQ/CT/MRI, vận hành máy, cập nhật thiết bị và xin nghỉ phép.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Additional Role Attributes */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Chức danh hiển thị:
+                      </label>
+                      <input
+                        type="text"
+                        value={assignedTitle}
+                        onChange={e => setAssignedTitle(e.target.value)}
+                        placeholder="VD: Trưởng khoa, Bác sĩ, KTV..."
+                        className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Khoa / Bộ phận:
+                      </label>
+                      <input
+                        type="text"
+                        value={assignedDept}
+                        onChange={e => setAssignedDept(e.target.value)}
+                        placeholder="VD: XQ, Siêu âm, Xét nghiệm..."
+                        className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Phòng làm việc trực thuộc:
+                      </label>
+                      <select
+                        value={assignedRoom}
+                        onChange={e => setAssignedRoom(e.target.value)}
+                        className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
+                      >
+                        <option value="">-- Phòng chung khoa --</option>
+                        {rooms.map(r => (
+                          <option key={r.id} value={r.name}>{r.name} ({r.code})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Action Save Button */}
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-xs text-slate-500">
+                      * Thay đổi phân quyền sẽ cập nhật trực tiếp vào hệ thống RBAC và danh sách tài khoản đăng nhập.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSavePermissions}
+                      className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-purple-200 dark:shadow-none"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Lưu Phân Quyền Nhân Viên</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: LỊCH SỬ CÔNG TÁC */}
+              {detailModalTab === 'history' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                      Diễn Biến Quá Trình Công Tác & Thuyên Chuyển
+                    </h4>
+                    <span className="text-xs text-slate-500">
+                      Tổng {selectedDetailStaff.statusHistory?.length || 0} mốc ghi nhận
+                    </span>
+                  </div>
+
+                  {(!selectedDetailStaff.statusHistory || selectedDetailStaff.statusHistory.length === 0) ? (
+                    <div className="py-12 text-center text-slate-400 space-y-2">
+                      <History className="w-8 h-8 mx-auto opacity-40 text-slate-400" />
+                      <p className="text-xs">Chưa có dữ liệu lịch sử công tác trước đó.</p>
+                      <p className="text-[11px] text-slate-500">Nhân viên hiện đang giữ trạng thái: {selectedDetailStaff.currentStatus || 'Đang làm việc'}</p>
+                    </div>
+                  ) : (
+                    <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-indigo-200 dark:before:bg-indigo-900">
+                      {selectedDetailStaff.statusHistory.map((hItem, idx) => (
+                        <div key={hItem.id || idx} className="relative">
+                          <div className="absolute -left-[23px] top-1.5 w-3.5 h-3.5 rounded-full bg-indigo-600 ring-4 ring-indigo-100 dark:ring-indigo-950 flex items-center justify-center"></div>
+
+                          <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-1.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
+                              <span className="font-extrabold text-slate-900 dark:text-white text-xs">
+                                📅 {formatDateVN(hItem.startDate)} ➔ {hItem.endDate === 'Hiện tại' ? 'Hiện tại' : formatDateVN(hItem.endDate)}
+                              </span>
+                              {getEmploymentStatusBadge(hItem.status)}
+                            </div>
+
+                            <p className="font-bold text-indigo-950 dark:text-indigo-200 text-xs">
+                              {hItem.positionOrTitle || selectedDetailStaff.title} - {hItem.departmentSection}
+                            </p>
+                            {hItem.room && (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                                🏢 Phòng: <strong>{hItem.room}</strong>
+                              </p>
+                            )}
+                            {hItem.note && (
+                              <p className="text-[11px] text-slate-600 dark:text-slate-400 italic bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                                💬 {hItem.note}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 4: CHỨNG CHỈ & BẰNG CẤP */}
+              {detailModalTab === 'certs' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                      Chứng Chỉ Hành Nghề (CCHN) & Chứng Chỉ CME
+                    </h4>
+                    <span className="text-xs text-slate-500">
+                      {selectedDetailStaff.certificates?.length || 0} chứng chỉ
+                    </span>
+                  </div>
+
+                  {(!selectedDetailStaff.certificates || selectedDetailStaff.certificates.length === 0) ? (
+                    <div className="py-12 text-center text-slate-400 space-y-2">
+                      <Award className="w-8 h-8 mx-auto opacity-40 text-slate-400" />
+                      <p className="text-xs">Chưa có chứng chỉ nào được tải lên cho cán bộ này.</p>
+                      <button
+                        onClick={handleEditFromDetail}
+                        className="text-xs text-indigo-600 font-semibold hover:underline"
+                      >
+                        Bấm vào đây để cập nhật chứng chỉ trong form sửa
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      {selectedDetailStaff.certificates.map(cert => (
+                        <div key={cert.id} className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                                #{cert.code}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                cert.status === 'Còn hiệu lực' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                                cert.status === 'Sắp hết hạn' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+                                'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                              }`}>
+                                {cert.status}
+                              </span>
+                            </div>
+                            <h5 className="font-bold text-slate-900 dark:text-white text-xs">{cert.name}</h5>
+                            <p className="text-[11px] text-slate-500">Cấp bởi: {cert.issuedBy}</p>
+                            <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-3">
+                              <span>Ngày cấp: <strong>{formatDateVN(cert.issuedDate)}</strong></span>
+                              <span>Hạn dùng: <strong>{cert.expiryDate ? formatDateVN(cert.expiryDate) : 'Vô thời hạn'}</strong></span>
+                            </div>
+                          </div>
+                          {cert.fileUrl && (
+                            <a
+                              href={cert.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 shrink-0"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>Xem tệp</span>
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <button
+                onClick={handleEditFromDetail}
+                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Chỉnh sửa thông tin nhân viên</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                {detailModalTab !== 'permissions' ? (
+                  <button
+                    onClick={() => setDetailModalTab('permissions')}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Phân quyền nhân viên</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSavePermissions}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Lưu phân quyền</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setSelectedDetailStaff(null)}
+                  className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all"
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
           </div>
         </div>
