@@ -2052,222 +2052,195 @@ export const StaffManagementView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveProfileEdit} className="space-y-5 text-xs">
-              {/* SECTION 1: Thông tin cá nhân & Liên hệ (2x2 cân đối, không bị tràn email) */}
-              <div className="p-4 bg-slate-50/75 rounded-2xl border border-slate-200/80 space-y-3.5">
+            <form onSubmit={handleSaveProfileEdit} className="space-y-4 text-xs">
+              {/* SECTION 1: Định danh & Chức vụ (Cân đối 2 cột 60/40) */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                <div className="sm:col-span-7">
+                  <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                    Họ và Tên Cán Bộ <span className="text-rose-500 ml-0.5">*</span>:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingStaff.fullName}
+                    onChange={e => setEditingStaff({ ...editingStaff, fullName: e.target.value })}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 shadow-2xs"
+                    placeholder="VD: BS.CKI Nguyễn Văn An"
+                  />
+                </div>
+                <div className="sm:col-span-5">
+                  <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                    Chức Danh Chuyên Môn <span className="text-rose-500 ml-0.5">*</span>:
+                  </label>
+                  <select
+                    value={editingStaff.title}
+                    onChange={e => setEditingStaff({ ...editingStaff, title: e.target.value })}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 shadow-2xs cursor-pointer"
+                  >
+                    <option value="Trưởng khoa">Trưởng khoa</option>
+                    <option value="Phó khoa">Phó khoa</option>
+                    <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
+                    <option value="Kỹ thuật viên">Kỹ thuật viên</option>
+                    <option value="Bác sĩ">Bác sĩ</option>
+                    <option value="Nhân viên hành chính">Nhân viên hành chính</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* SECTION 2: Thông tin cá nhân & Liên hệ (Thẳng hàng tuyệt đối trên 1 hàng 12 cột) */}
+              <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                    <UserCheck className="w-4 h-4 text-indigo-600" />
-                    1. Thông Tin Cá Nhân & Liên Hệ
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    Thông Tin Cá Nhân & Liên Hệ
                   </h4>
-                  <span className="text-[11px] text-slate-400">Thông tin cơ bản của cán bộ</span>
+                  <span className="text-[10px] text-slate-400">Các ô nhập được căn chỉnh cân đối chuẩn</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {/* Họ và tên */}
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      Họ và Tên Cán Bộ <span className="text-rose-500">*</span>:
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={editingStaff.fullName}
-                      onChange={e => setEditingStaff({ ...editingStaff, fullName: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900"
-                      placeholder="VD: BS.CKI Nguyễn Văn An"
-                    />
-                  </div>
-
-                  {/* Chức danh chuyên môn */}
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      Chức Danh Chuyên Môn <span className="text-rose-500">*</span>:
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                  {/* Giới tính: 2/12 */}
+                  <div className="sm:col-span-2">
+                    <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                      Giới Tính:
                     </label>
                     <select
-                      value={editingStaff.title}
-                      onChange={e => setEditingStaff({ ...editingStaff, title: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      value={editingStaff.gender || 'Nam'}
+                      onChange={e => setEditingStaff({ ...editingStaff, gender: e.target.value as 'Nam' | 'Nữ' | 'Khác' })}
+                      className="w-full h-10 px-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 shadow-2xs cursor-pointer"
                     >
-                      <option value="Trưởng khoa">Trưởng khoa</option>
-                      <option value="Phó khoa">Phó khoa</option>
-                      <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
-                      <option value="Kỹ thuật viên">Kỹ thuật viên</option>
-                      <option value="Bác sĩ">Bác sĩ</option>
-                      <option value="Nhân viên hành chính">Nhân viên hành chính</option>
+                      <option value="Nam">Nam</option>
+                      <option value="Nữ">Nữ</option>
+                      <option value="Khác">Khác</option>
                     </select>
                   </div>
 
-                  {/* Giới tính & Ngày sinh cân đối 50/50 */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Giới Tính:</label>
-                      <select
-                        value={editingStaff.gender || 'Nam'}
-                        onChange={e => setEditingStaff({ ...editingStaff, gender: e.target.value as 'Nam' | 'Nữ' | 'Khác' })}
-                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
-                      >
-                        <option value="Nam">Nam</option>
-                        <option value="Nữ">Nữ</option>
-                        <option value="Khác">Khác</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Ngày Sinh:</label>
+                  {/* Ngày sinh: 3/12 */}
+                  <div className="sm:col-span-3">
+                    <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                      Ngày Sinh:
+                    </label>
+                    <input
+                      type="date"
+                      value={toInputDateFormat(editingStaff.dob)}
+                      onChange={e => setEditingStaff({ ...editingStaff, dob: formatDateVN(e.target.value) })}
+                      className="w-full h-10 px-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 shadow-2xs"
+                    />
+                  </div>
+
+                  {/* Số điện thoại: 3/12 */}
+                  <div className="sm:col-span-3">
+                    <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                      Số Điện Thoại:
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                       <input
-                        type="date"
-                        value={toInputDateFormat(editingStaff.dob)}
-                        onChange={e => setEditingStaff({ ...editingStaff, dob: formatDateVN(e.target.value) })}
-                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                        type="tel"
+                        placeholder="VD: 0987218099"
+                        value={editingStaff.phone || ''}
+                        onChange={e => setEditingStaff({ ...editingStaff, phone: normalizeVietnamesePhone(e.target.value) })}
+                        className="w-full h-10 pl-8 pr-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-medium text-slate-800 shadow-2xs"
                       />
                     </div>
                   </div>
 
-                  {/* Số điện thoại & Email liên hệ cân đối 50/50 - Đủ không gian không bị cắt ngắn */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Số Điện Thoại:</label>
-                      <div className="relative">
-                        <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="tel"
-                          placeholder="VD: 0912345678"
-                          value={editingStaff.phone || ''}
-                          onChange={e => setEditingStaff({ ...editingStaff, phone: normalizeVietnamesePhone(e.target.value) })}
-                          className="w-full pl-8 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 font-mono"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Email Liên Hệ:</label>
-                      <div className="relative">
-                        <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="email"
-                          placeholder="canbo@benhvien.vn"
-                          value={editingStaff.email || ''}
-                          onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value })}
-                          className="w-full pl-8 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
-                        />
-                      </div>
+                  {/* Email liên hệ: 4/12 (Đủ độ rộng không bị che khuất) */}
+                  <div className="sm:col-span-4">
+                    <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                      Email Liên Hệ:
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        placeholder="canbo@benhvien.vn"
+                        value={editingStaff.email || ''}
+                        onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value })}
+                        className="w-full h-10 pl-8 pr-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 shadow-2xs"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* SECTION 2: Phân công đơn vị & Chuyên môn công tác (Đối xứng hoàn hảo 2 cột) */}
-              <div className="p-4 bg-slate-50/75 rounded-2xl border border-slate-200/80 space-y-3.5">
+              {/* SECTION 3: Phân công đơn vị & Chuyên môn công tác (Ô lựa chọn gọn gàng, 2 bên cao bằng nhau) */}
+              <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                    <Building2 className="w-4 h-4 text-indigo-600" />
-                    2. Phân Công Đơn Vị & Chuyên Môn
+                    <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                    Phân Công Đơn Vị & Chuyên Môn
                   </h4>
-                  <span className="text-[11px] text-slate-400">Khoa, phòng và thâm niên làm việc</span>
+                  <span className="text-[10px] text-slate-400">Chọn nhanh từ danh mục hoặc nhập mới</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {/* Cột trái: Bộ phận / Khoa */}
-                  <div className="space-y-1.5">
-                    <label className="block font-semibold text-slate-700">
-                      Bộ Phận / Khoa <span className="text-rose-500">*</span>:
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Cột trái: Bộ Phận / Khoa (Menu dạng thả xuống) */}
+                  <div>
+                    <label className="h-5 flex items-center font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                      Bộ Phận / Khoa <span className="text-rose-500 ml-0.5">*</span>:
                     </label>
-                    <input
-                      type="text"
+                    <select
                       required
-                      list="existing-dept-datalist"
-                      placeholder="Nhập tên bộ phận hoặc chọn bên dưới..."
                       value={editingStaff.departmentSection}
                       onChange={e => setEditingStaff({ ...editingStaff, departmentSection: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
-                    />
-                    <datalist id="existing-dept-datalist">
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 shadow-2xs cursor-pointer"
+                    >
+                      <option value="">-- Chọn bộ phận / khoa ({allDepartments.length}) --</option>
+                      {editingStaff.departmentSection && !allDepartments.includes(editingStaff.departmentSection) && (
+                        <option value={editingStaff.departmentSection}>{editingStaff.departmentSection}</option>
+                      )}
                       {allDepartments.map(dept => (
-                        <option key={dept} value={dept} />
+                        <option key={dept} value={dept}>{dept}</option>
                       ))}
-                    </datalist>
-
-                    {/* Bộ chọn nhanh gọn gàng thay cho danh sách thẻ lộn xộn */}
-                    {allDepartments.length > 0 && (
-                      <div className="flex items-center gap-1.5 pt-0.5">
-                        <span className="text-[10px] text-slate-500 whitespace-nowrap">Chọn nhanh:</span>
-                        <select
-                          value={allDepartments.includes(editingStaff.departmentSection) ? editingStaff.departmentSection : ''}
-                          onChange={e => {
-                            if (e.target.value) {
-                              setEditingStaff({ ...editingStaff, departmentSection: e.target.value });
-                            }
-                          }}
-                          className="w-full text-[11px] px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 outline-none focus:border-indigo-500 cursor-pointer font-medium"
-                        >
-                          <option value="">-- Danh mục bộ phận ({allDepartments.length}) --</option>
-                          {allDepartments.map(dept => (
-                            <option key={dept} value={dept}>{dept}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                    </select>
                   </div>
 
-                  {/* Cột phải: Phòng làm việc trực thuộc */}
-                  <div className="space-y-1.5">
-                    <label className="block font-semibold text-slate-700">
+                  {/* Cột phải: Phòng Làm Việc Trực Thuộc (Menu dạng thả xuống) */}
+                  <div>
+                    <label className="h-5 flex items-center font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Grid className="w-3.5 h-3.5 text-indigo-600" />
                       Phòng Làm Việc Trực Thuộc:
                     </label>
-                    <input
-                      type="text"
-                      list="existing-room-datalist"
-                      placeholder="Nhập tên phòng hoặc chọn bên dưới..."
+                    <select
                       value={editingStaff.room || ''}
                       onChange={e => setEditingStaff({ ...editingStaff, room: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
-                    />
-                    <datalist id="existing-room-datalist">
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 shadow-2xs cursor-pointer"
+                    >
+                      <option value="">-- Chưa phân phòng làm việc --</option>
+                      {editingStaff.room && !allRoomNames.includes(editingStaff.room) && (
+                        <option value={editingStaff.room}>{editingStaff.room}</option>
+                      )}
                       {allRoomNames.map(r => (
-                        <option key={r} value={r} />
+                        <option key={r} value={r}>{r}</option>
                       ))}
-                    </datalist>
-
-                    {/* Bộ chọn nhanh gọn gàng thay cho danh sách thẻ lộn xộn */}
-                    {allRoomNames.length > 0 && (
-                      <div className="flex items-center gap-1.5 pt-0.5">
-                        <span className="text-[10px] text-slate-500 whitespace-nowrap">Chọn nhanh:</span>
-                        <select
-                          value={allRoomNames.includes(editingStaff.room || '') ? editingStaff.room : ''}
-                          onChange={e => {
-                            if (e.target.value) {
-                              setEditingStaff({ ...editingStaff, room: e.target.value });
-                            }
-                          }}
-                          className="w-full text-[11px] px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 outline-none focus:border-indigo-500 cursor-pointer font-medium"
-                        >
-                          <option value="">-- Danh mục phòng ({allRoomNames.length}) --</option>
-                          {allRoomNames.map(r => (
-                            <option key={r} value={r}>{r}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                    </select>
                   </div>
+                </div>
 
-                  {/* Chuyên môn chính */}
+                {/* Hàng dưới: Chuyên môn chính (50%) & Ngày vào làm + Số năm công tác (50%) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  {/* Cột trái: Chuyên môn chính */}
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      Chuyên Môn Chính <span className="text-rose-500">*</span>:
+                    <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                      Chuyên Môn Chính <span className="text-rose-500 ml-0.5">*</span>:
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="VD: Siêu âm Tim mạch & Doppler mạch máu"
+                      placeholder="VD: Kỹ thuật X-Quang & Chẩn đoán hình ảnh..."
                       value={editingStaff.specialty}
                       onChange={e => setEditingStaff({ ...editingStaff, specialty: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 shadow-2xs"
                     />
                   </div>
 
-                  {/* Ngày vào làm & Số năm công tác (cân đối 50/50) */}
+                  {/* Cột phải: 2 ô cân đối Ngày Vào Làm & Số Năm Công Tác */}
                   <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Ngày Vào Làm:</label>
+                      <label className="h-5 flex items-center font-semibold text-slate-700 mb-1">
+                        Ngày Vào Làm:
+                      </label>
                       <input
                         type="date"
                         value={toInputDateFormat(editingStaff.joinDate)}
@@ -2280,23 +2253,23 @@ export const StaffManagementView: React.FC = () => {
                             experienceYears: calculatedYears
                           });
                         }}
-                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                        className="w-full h-10 px-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 shadow-2xs"
                       />
                     </div>
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                        <span>Số Năm Công Tác:</span>
-                        <span className="text-[10px] text-indigo-600 font-semibold">(Tự tính)</span>
-                      </label>
+                      <div className="h-5 flex items-center justify-between mb-1">
+                        <label className="font-semibold text-slate-700">Số Năm Công Tác:</label>
+                        <span className="text-[10px] text-indigo-600 font-bold">(Tự tính)</span>
+                      </div>
                       <div className="relative">
                         <input
                           type="number"
                           min={0}
                           value={editingStaff.experienceYears}
                           onChange={e => setEditingStaff({ ...editingStaff, experienceYears: parseInt(e.target.value) || 0 })}
-                          className="w-full pl-3 pr-10 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900"
+                          className="w-full h-10 pl-3 pr-11 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 shadow-2xs"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">
                           năm
                         </span>
                       </div>
@@ -2305,45 +2278,41 @@ export const StaffManagementView: React.FC = () => {
                 </div>
               </div>
 
-              {/* SECTION 3: Phân quyền & Trạng thái hoạt động (2 cột cân đối) */}
-              <div className="p-4 bg-slate-50/75 rounded-2xl border border-slate-200/80 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                    3. Phân Quyền Hệ Thống & Trạng Thái Hoạt Động
-                  </h4>
-                  <span className="text-[11px] text-slate-400">Quyền truy cập & tình trạng công tác</span>
+              {/* SECTION 4: Phân quyền & Trạng thái hoạt động (Cân đối 50/50) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="h-5 flex items-center font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                    Phân Quyền Hệ Thống (RBAC):
+                  </label>
+                  <select
+                    value={editingStaff.role}
+                    onChange={e => setEditingStaff({ ...editingStaff, role: e.target.value })}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 shadow-2xs cursor-pointer"
+                  >
+                    <option value="Admin">Admin (Quản trị viên toàn hệ thống / Ban Giám Đốc)</option>
+                    <option value="Manager">Manager (Ban Chủ Nhiệm / Quản lý khoa)</option>
+                    <option value="Doctor">Doctor (Bác sĩ chuyên khoa)</option>
+                    <option value="Staff">Staff (Kỹ thuật viên / Điều dưỡng / Nhân viên)</option>
+                  </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Phân Quyền Hệ Thống (RBAC):</label>
-                    <select
-                      value={editingStaff.role}
-                      onChange={e => setEditingStaff({ ...editingStaff, role: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800"
-                    >
-                      <option value="Admin">Admin (Quản trị viên toàn hệ thống / Ban Giám Đốc)</option>
-                      <option value="Manager">Manager (Ban Chủ Nhiệm / Quản lý khoa)</option>
-                      <option value="Doctor">Doctor (Bác sĩ chuyên khoa)</option>
-                      <option value="Staff">Staff (Kỹ thuật viên / Điều dưỡng / Nhân viên)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Trạng Thái Làm Việc Hiện Tại:</label>
-                    <select
-                      value={editingStaff.currentStatus || 'Đang làm việc'}
-                      onChange={e => setEditingStaff({ ...editingStaff, currentStatus: e.target.value as EmploymentStatus })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-indigo-700"
-                    >
-                      <option value="Đang làm việc">🟢 Đang làm việc bình thường</option>
-                      <option value="Đang thử việc">🔵 Đang trong thời gian thử việc</option>
-                      <option value="Nghỉ không lương">🟠 Tạm nghỉ không hưởng lương</option>
-                      <option value="Nghỉ thai sản">🟣 Chế độ nghỉ thai sản</option>
-                      <option value="Đã nghỉ việc">⚪ Đã kết thúc hợp đồng / Nghỉ việc</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="h-5 flex items-center font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    Trạng Thái Làm Việc Hiện Tại:
+                  </label>
+                  <select
+                    value={editingStaff.currentStatus || 'Đang làm việc'}
+                    onChange={e => setEditingStaff({ ...editingStaff, currentStatus: e.target.value as EmploymentStatus })}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-indigo-700 shadow-2xs cursor-pointer"
+                  >
+                    <option value="Đang làm việc">🟢 Đang làm việc bình thường</option>
+                    <option value="Đang thử việc">🔵 Đang trong thời gian thử việc</option>
+                    <option value="Nghỉ không lương">🟠 Tạm nghỉ không hưởng lương</option>
+                    <option value="Nghỉ thai sản">🟣 Chế độ nghỉ thai sản</option>
+                    <option value="Đã nghỉ việc">⚪ Đã kết thúc hợp đồng / Nghỉ việc</option>
+                  </select>
                 </div>
               </div>
 
