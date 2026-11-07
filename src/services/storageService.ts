@@ -979,7 +979,13 @@ class HospitalStorageService {
   public getUsers(): User[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-      return raw ? JSON.parse(raw) : initialUsers;
+      const users: User[] = raw ? JSON.parse(raw) : initialUsers;
+      return users.map(u => ({
+        ...u,
+        avatar: u.avatar?.includes('1594824813566')
+          ? 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80'
+          : u.avatar
+      }));
     } catch (e) {
       return initialUsers;
     }
@@ -1334,7 +1340,13 @@ class HospitalStorageService {
   public getStaffProfiles(): StaffProfile[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.STAFF_PROFILES);
-      return raw ? JSON.parse(raw) : initialStaffProfiles;
+      const list: StaffProfile[] = raw ? JSON.parse(raw) : initialStaffProfiles;
+      return list.map(s => ({
+        ...s,
+        avatar: s.avatar?.includes('1594824813566')
+          ? 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=200&auto=format&fit=crop&q=80'
+          : s.avatar
+      }));
     } catch (e) {
       return initialStaffProfiles;
     }

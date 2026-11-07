@@ -59,37 +59,37 @@ export const AIEcosystemView: React.FC<AIEcosystemViewProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Ecosystem Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl border border-indigo-500/20 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-sky-50/80 dark:bg-gradient-to-r dark:from-slate-900 dark:via-indigo-950 dark:to-slate-900 text-slate-800 dark:text-white p-6 rounded-3xl border border-blue-200/70 dark:border-indigo-500/20 shadow-xs dark:shadow-xl relative overflow-hidden transition-colors">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-400/10 dark:bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full text-xs font-black tracking-wide flex items-center gap-1.5 shadow-md shadow-blue-500/20">
+              <span className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-xs font-black tracking-wide flex items-center gap-1.5 shadow-xs shadow-blue-500/20">
                 <Sparkles className="w-3.5 h-3.5" />
                 HỆ SINH THÁI AI KHOA CẬN LÂM SÀNG
               </span>
-              <span className="text-xs text-indigo-300 font-semibold bg-indigo-950/80 px-2.5 py-0.5 rounded-full border border-indigo-800">
+              <span className="text-xs text-indigo-700 dark:text-indigo-300 font-bold bg-white/90 dark:bg-indigo-950/80 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800 shadow-2xs">
                 Gemini 3.7 Flash Engine
               </span>
             </div>
-            <h1 className="text-xl md:text-2xl font-black text-white">
+            <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white">
               Trung Tâm Điều Hành Trí Tuệ Nhân Tạo (AI Clinical Diagnostics Hub)
             </h1>
-            <p className="text-xs text-slate-300 max-w-2xl">
+            <p className="text-xs text-slate-600 dark:text-slate-300 max-w-2xl font-normal leading-relaxed">
               Hệ thống tích hợp 4 trụ cột AI thực chiến: Tóm tắt giao ban tự động 07:00, Dự báo lưu lượng chuỗi thời gian, Trợ lý ISO 15189 RAG và Phân tích bảo trì dự đoán thiết bị.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 shrink-0">
+          <div className="flex items-center gap-3 bg-white/80 dark:bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-blue-200/70 dark:border-white/10 shrink-0 shadow-2xs">
             <div className="text-center px-2">
-              <div className="text-lg font-black text-white">4 / 4</div>
-              <div className="text-[10px] text-slate-300 font-semibold">Trụ cột AI Active</div>
+              <div className="text-lg font-black text-slate-900 dark:text-white">4 / 4</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-300 font-semibold">Trụ cột AI Active</div>
             </div>
-            <div className="w-px h-8 bg-white/20" />
+            <div className="w-px h-8 bg-slate-200 dark:bg-white/20" />
             <div className="text-center px-2">
-              <div className="text-lg font-black text-emerald-400">&lt; 30p</div>
-              <div className="text-[10px] text-slate-300 font-semibold">TAT Mục tiêu</div>
+              <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">&lt; 30p</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-300 font-semibold">TAT Mục tiêu</div>
             </div>
           </div>
         </div>

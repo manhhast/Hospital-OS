@@ -299,7 +299,7 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
                       <Clock className="w-3 h-3 text-blue-500" />
                       {slot.timeSlot}
                     </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
                       {slot.expectedVolume} ca
                     </span>
                   </div>

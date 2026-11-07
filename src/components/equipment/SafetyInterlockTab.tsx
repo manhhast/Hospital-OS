@@ -68,31 +68,31 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
   return (
     <div className="p-6 space-y-6 animate-in fade-in duration-300">
       {/* Top Banner: Cross-Validation Overview */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-rose-950 to-slate-900 text-white rounded-2xl p-6 shadow-lg border border-rose-800/40">
+      <div className="relative overflow-hidden bg-rose-50/90 dark:bg-gradient-to-r dark:from-slate-900 dark:via-rose-950 dark:to-slate-900 text-slate-800 dark:text-white rounded-2xl p-6 shadow-xs dark:shadow-lg border border-rose-200 dark:border-rose-800/40 transition-colors">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2 max-w-3xl">
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Hệ Thống Khóa Chéo An Toàn (Safety Interlock)
+              <span className="px-3 py-1 bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /> Hệ Thống Khóa Chéo An Toàn (Safety Interlock)
               </span>
-              <span className="text-xs text-slate-400">ISO 15189 & Cục An Toàn Bức Xạ</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">ISO 15189 & Cục An Toàn Bức Xạ</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               Ràng Buộc Dữ Liệu & Kiểm Soát Vi Phạm Hoạt Động (Data Cross-Validation)
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               Tự động đối soát trạng thái kiểm định, kiểm xạ, giấy phép hoạt động với số lượng ca thực hiện thực tế trong ngày. Khi phát hiện máy lỗi hoặc quá hạn mà vẫn ghi nhận ca, hệ thống lập tức kích hoạt khóa chéo an toàn và phát cảnh báo khẩn cấp tới Ban Chủ Nhiệm Khoa.
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <div className="bg-rose-900/60 border border-rose-700/60 p-4 rounded-xl text-center min-w-[130px]">
-              <div className="text-2xl font-black text-rose-300">{criticalCount}</div>
-              <div className="text-[11px] font-semibold text-rose-200 uppercase tracking-wider mt-0.5">Vi Phạm Khẩn Cấp</div>
+            <div className="bg-white/90 dark:bg-rose-900/60 border border-rose-200 dark:border-rose-700/60 p-4 rounded-xl text-center min-w-[130px] shadow-2xs">
+              <div className="text-2xl font-black text-rose-600 dark:text-rose-300">{criticalCount}</div>
+              <div className="text-[11px] font-bold text-rose-800 dark:text-rose-200 uppercase tracking-wider mt-0.5">Vi Phạm Khẩn Cấp</div>
             </div>
-            <div className="bg-amber-900/60 border border-amber-700/60 p-4 rounded-xl text-center min-w-[130px]">
-              <div className="text-2xl font-black text-amber-300">{warningCount}</div>
-              <div className="text-[11px] font-semibold text-amber-200 uppercase tracking-wider mt-0.5">Cảnh Báo Sắp Hạn</div>
+            <div className="bg-white/90 dark:bg-amber-900/60 border border-amber-200 dark:border-amber-700/60 p-4 rounded-xl text-center min-w-[130px] shadow-2xs">
+              <div className="text-2xl font-black text-amber-600 dark:text-amber-300">{warningCount}</div>
+              <div className="text-[11px] font-bold text-amber-800 dark:text-amber-200 uppercase tracking-wider mt-0.5">Cảnh Báo Sắp Hạn</div>
             </div>
           </div>
         </div>

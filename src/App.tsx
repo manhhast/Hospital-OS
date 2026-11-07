@@ -28,9 +28,12 @@ import { IntegrationHubView } from './components/integration/IntegrationHubView'
 import { AIEcosystemView } from './components/ai/AIEcosystemView';
 import { AuthModal } from './components/auth/AuthModal';
 import { storageService } from './services/storageService';
-import { ToastMessage, TaskItem, DocumentItem, NotificationLog } from './types/hospital';
+import { ToastMessage, TaskItem, DocumentItem, NotificationLog, User } from './types/hospital';
+
+const ADMIN_ONLY_MODULES = ['integration', 'notifications', 'users', 'settings', 'audit', 'gas-architecture'];
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
   const [activeModule, setActiveModule] = useState<string>('dashboard');
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
     const saved = localStorage.getItem('theme_mode') as 'light' | 'dark' | 'system';
@@ -121,9 +124,17 @@ export default function App() {
       setTasks(storageService.getTasks());
       setDocuments(storageService.getDocuments());
       setNotifications(storageService.getNotifications());
+      setCurrentUser(storageService.getCurrentUser());
     });
     return () => unsubscribe();
   }, []);
+
+  // Admin access guard: If non-admin attempts to view admin-only modules, redirect to dashboard
+  useEffect(() => {
+    if (currentUser?.role !== 'Admin' && ADMIN_ONLY_MODULES.includes(activeModule)) {
+      setActiveModule('dashboard');
+    }
+  }, [activeModule, currentUser]);
 
   // Global Keyboard Shortcut: Ctrl + K or Cmd + K to open search modal
   useEffect(() => {
@@ -148,6 +159,10 @@ export default function App() {
 
   // Navigate from Search
   const handleNavigateWithSearch = (module: string, targetId?: string, extraData?: any) => {
+    if (currentUser?.role !== 'Admin' && ADMIN_ONLY_MODULES.includes(module)) {
+      showToast('Phân quyền hạn chế', 'Chức năng này chỉ dành riêng cho tài khoản Quản trị viên (Admin).', 'warning');
+      return;
+    }
     setActiveModule(module);
     showToast('Điều hướng thành công', `Đã chuyển đến phân hệ ${module.toUpperCase()}${targetId ? ` (Mã: #${targetId})` : ''}`, 'info');
   };
@@ -185,7 +200,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[#f5f7fb] dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans overflow-hidden transition-colors">
+    <div className="flex h-screen bg-[#f8fafc] dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans overflow-hidden transition-colors">
       {/* Sidebar Navigation */}
       <Sidebar
         activeModule={activeModule}

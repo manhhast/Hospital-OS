@@ -105,25 +105,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
       
       {/* Notion + MS Teams Header Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-xl border border-indigo-900/40">
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-sky-50/80 dark:bg-gradient-to-r dark:from-slate-900 dark:via-indigo-950 dark:to-slate-900 text-slate-800 dark:text-white rounded-2xl p-6 sm:p-8 shadow-xs dark:shadow-xl border border-blue-200/70 dark:border-indigo-900/40 transition-colors">
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-1/3 -mb-8 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2 max-w-3xl">
             <div className="flex items-center space-x-3">
-              <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-indigo-400" /> CLS WorkHub &bull; Khoa Cận Lâm Sàng
+              <span className="px-3 py-1 bg-indigo-100/80 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30 rounded-full text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> CLS WorkHub &bull; Khoa Cận Lâm Sàng
               </span>
-              <span className="text-xs text-slate-400 hidden sm:inline-block">
+              <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline-block">
                 Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Xin chào, <span className="text-indigo-300">{currentUser?.name}</span> 👋
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Xin chào, <span className="text-indigo-600 dark:text-indigo-300">{currentUser?.name}</span> 👋
             </h1>
-            <p className="text-sm text-slate-300 leading-relaxed">
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               Hệ thống điều hành tác nghiệp Khoa Cận Lâm Sàng. Tích hợp Quản lý Lịch trực, Lịch họp, Kế hoạch tuần, Nhiệm vụ chuyên môn, Hồ sơ xét nghiệm SOP & Kênh trao đổi nội bộ.
             </p>
           </div>
@@ -131,23 +131,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             <button
               onClick={() => onNavigateModule('ai-ecosystem')}
-              className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-900/50 transition-all flex items-center space-x-2 border border-indigo-400/30"
+              className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-semibold text-sm rounded-xl shadow-xs transition-all flex items-center space-x-2 border border-indigo-400/30 cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-300" />
               <span>Hệ Sinh Thái AI CLS</span>
             </button>
             <button
               onClick={onOpenNewTask}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-xl shadow-md shadow-blue-900/40 transition-all flex items-center space-x-2"
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-xl shadow-xs transition-all flex items-center space-x-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Thêm công việc</span>
             </button>
             <button
               onClick={onOpenNewDoc}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 font-medium text-sm rounded-xl transition-all flex items-center space-x-2"
+              className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700 font-medium text-sm rounded-xl shadow-xs transition-all flex items-center space-x-2 cursor-pointer"
             >
-              <FileText className="w-4 h-4 text-slate-300" />
+              <FileText className="w-4 h-4 text-slate-500 dark:text-slate-300" />
               <span>Tải SOP / Hồ sơ</span>
             </button>
           </div>
@@ -157,30 +157,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* AI 4-Pillars Quick Access Widget */}
       <div 
         onClick={() => onNavigateModule('ai-ecosystem')}
-        className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 border border-indigo-500/30 rounded-2xl p-4 text-white shadow-lg cursor-pointer hover:border-indigo-400/60 transition-all flex flex-col md:flex-row items-center justify-between gap-4 group"
+        className="bg-white dark:bg-gradient-to-r dark:from-slate-900 dark:via-indigo-950 dark:to-blue-950 border border-blue-200/80 dark:border-indigo-500/30 rounded-2xl p-4 text-slate-800 dark:text-white shadow-xs dark:shadow-lg cursor-pointer hover:border-blue-400 dark:hover:border-indigo-400/60 transition-all flex flex-col md:flex-row items-center justify-between gap-4 group"
       >
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shrink-0 shadow-md shadow-blue-500/30 group-hover:scale-105 transition-transform">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shrink-0 shadow-md shadow-blue-500/30 group-hover:scale-105 transition-transform text-white">
             <Sparkles className="w-6 h-6 text-amber-300" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-300/20">
+              <span className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider bg-amber-100 dark:bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-300/20">
                 AI Trí Tuệ Nhân Tạo
               </span>
-              <span className="text-xs text-indigo-300">Gemini 3.7 & ML Operations</span>
+              <span className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">Gemini 3.7 & ML Operations</span>
             </div>
-            <h4 className="font-bold text-slate-100 text-base mt-0.5">
+            <h4 className="font-bold text-slate-900 dark:text-slate-100 text-base mt-0.5">
               4 Trụ Cột AI: Giao ban sáng 07:00 • Dự báo tải lượng & xếp lịch • ISO Copilot • Bảo trì máy RUL
             </h4>
           </div>
         </div>
 
         <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-          <span className="text-xs font-semibold text-indigo-200 group-hover:text-white transition-colors">
+          <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-200 group-hover:text-blue-600 dark:group-hover:text-white transition-colors">
             Khám phá Trung tâm AI
           </span>
-          <ChevronRight className="w-4 h-4 text-indigo-300 group-hover:translate-x-1 transition-transform" />
+          <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-1 transition-transform" />
         </div>
       </div>
 

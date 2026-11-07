@@ -41,7 +41,7 @@ export const initialUsers: User[] = [
     role: 'Staff',
     title: 'Điều dưỡng trưởng',
     department: 'Khoa Cận Lâm Sàng - Quản lý KTV & Vật tư',
-    avatar: 'https://images.unsplash.com/photo-1594824813566-88855ce78341?w=150&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80',
     telegramChatId: '765432109',
     phone: '0912345678',
     status: 'Active',
@@ -705,7 +705,7 @@ export const initialAnnouncements: DepartmentAnnouncement[] = [
     isPinned: true,
     reactions: [{ emoji: '👍', count: 5, users: ['ThS. BS. Nguyễn Hoài Nam', 'CN. Lê Thị Hương', 'KTV. Vũ Văn Hải'] }],
     comments: [
-      { id: 'CMT-01', senderId: 'USR-003', senderName: 'CN. Lê Thị Hương', senderRole: 'Điều dưỡng trưởng', avatar: 'https://images.unsplash.com/photo-1594824813566-88855ce78341?w=150&auto=format&fit=crop&q=80', content: 'Dạ tôi đã chuẩn bị xong đầy đủ hồ sơ nhật ký đo liều kế trình Trưởng khoa!', timestamp: '2026-07-26 08:15' }
+      { id: 'CMT-01', senderId: 'USR-003', senderName: 'CN. Lê Thị Hương', senderRole: 'Điều dưỡng trưởng', avatar: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80', content: 'Dạ tôi đã chuẩn bị xong đầy đủ hồ sơ nhật ký đo liều kế trình Trưởng khoa!', timestamp: '2026-07-26 08:15' }
     ]
   },
   {
@@ -759,7 +759,7 @@ export const initialChatMessages: ChatChannelMessage[] = [
     senderId: 'USR-003',
     senderName: 'CN. Lê Thị Hương',
     senderRole: 'Điều dưỡng trưởng',
-    avatar: 'https://images.unsplash.com/photo-1594824813566-88855ce78341?w=150&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80',
     content: 'Tôi vừa đính kèm file Quy trình SOP lấy mẫu xét nghiệm an toàn phiên bản mới v3.0 cho toàn khoa tham khảo.',
     timestamp: 'Hôm nay, 08:10',
     msgType: 'pdf',

@@ -1,31 +1,44 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
-    --color-bg-primary: #f8fafc;
-    --color-bg-card: #ffffff;
-    --color-text-primary: #0f172a;
-    --color-text-secondary: #475569;
-    --color-border: #e2e8f0;
+    /* Healthcare Light Theme: Clinical, sterile, high-legibility, anti-glare */
+    --color-bg-primary: #f8fafc;        /* Slate 50 - Sạch sẽ, chống mỏi mắt */
+    --color-bg-card: #ffffff;           /* Trắng Blouse tinh tế */
+    --color-bg-subtle: #f1f5f9;         /* Slate 100 - Khối phụ & bảng dữ liệu */
+    --color-text-primary: #0f172a;      /* Slate 900 - Độ tương phản WCAG AAA */
+    --color-text-secondary: #334155;    /* Slate 700 */
+    --color-text-muted: #64748b;        /* Slate 500 */
+    --color-border: #e2e8f0;            /* Slate 200 - Đường hairline sắc nét */
+    --color-accent-blue: #0284c7;       /* Medical Blue / Sky 600 */
+    --color-accent-teal: #0d9488;       /* Clinical Teal 600 */
   }
 
   .dark {
-    --color-bg-primary: #090d16;
-    --color-bg-card: #0f172a;
-    --color-text-primary: #f8fafc;
-    --color-text-secondary: #94a3b8;
-    --color-border: #1e293b;
+    /* Healthcare Dark Theme: Diagnostic Room / PACS / Night-Shift Standard */
+    --color-bg-primary: #0b0f19;        /* Deep Obsidian Navy - Giảm chói tối đa khi đọc phim */
+    --color-bg-card: #111827;           /* Gray 900 / Lab Slate panel */
+    --color-bg-subtle: #1e293b;         /* Slate 800 - Khối phân tách */
+    --color-text-primary: #f8fafc;      /* Slate 50 - Sáng dịu, không tán xạ */
+    --color-text-secondary: #cbd5e1;    /* Slate 300 */
+    --color-text-muted: #94a3b8;        /* Slate 400 */
+    --color-border: #1e293b;            /* Slate 800 */
+    --color-accent-blue: #38bdf8;       /* Luminous Medical Sky */
+    --color-accent-teal: #2dd4bf;       /* Luminous Teal */
   }
 
   html {
     color-scheme: light dark;
-    transition: background-color 0.25s ease, color 0.25s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   body {
     background-color: var(--color-bg-primary);
     color: var(--color-text-primary);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
