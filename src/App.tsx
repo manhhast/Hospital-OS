@@ -3,7 +3,7 @@
  * Built with React, Tailwind CSS, Lucide Icons, Recharts, SheetJS & jsPDF
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { ToastContainer } from './components/common/ToastContainer';
@@ -27,6 +27,7 @@ import { ReportsAnalyticsView } from './components/reports/ReportsAnalyticsView'
 import { IntegrationHubView } from './components/integration/IntegrationHubView';
 import { AIEcosystemView } from './components/ai/AIEcosystemView';
 import { AuthModal } from './components/auth/AuthModal';
+import { LoginScreen } from './components/auth/LoginScreen';
 import { storageService } from './services/storageService';
 import { ToastMessage, TaskItem, DocumentItem, NotificationLog, User } from './types/hospital';
 
@@ -34,6 +35,7 @@ const ADMIN_ONLY_MODULES = ['integration', 'notifications', 'users', 'settings',
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => storageService.isAuthenticated());
   const [activeModule, setActiveModule] = useState<string>('dashboard');
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
     const saved = localStorage.getItem('theme_mode') as 'light' | 'dark' | 'system';
@@ -125,6 +127,7 @@ export default function App() {
       setDocuments(storageService.getDocuments());
       setNotifications(storageService.getNotifications());
       setCurrentUser(storageService.getCurrentUser());
+      setIsAuthenticated(storageService.isAuthenticated());
     });
     return () => unsubscribe();
   }, []);
@@ -167,17 +170,20 @@ export default function App() {
     showToast('Điều hướng thành công', `Đã chuyển đến phân hệ ${module.toUpperCase()}${targetId ? ` (Mã: #${targetId})` : ''}`, 'info');
   };
 
-  // Toast Helper
+  // Toast Helper with guaranteed unique IDs
+  const toastCounterRef = useRef<number>(0);
   const showToast = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    toastCounterRef.current += 1;
+    const uniqueId = `toast-${Date.now()}-${toastCounterRef.current}-${Math.random().toString(36).slice(2, 7)}`;
     const newToast: ToastMessage = {
-      id: Date.now().toString(),
+      id: uniqueId,
       type,
       title,
       message
     };
     setToasts(prev => [...prev, newToast]);
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== newToast.id));
+      setToasts(prev => prev.filter(t => t.id !== uniqueId));
     }, 4000);
   };
 
@@ -198,6 +204,29 @@ export default function App() {
       isDanger
     });
   };
+
+  // Full-screen Login Portal when user logs out
+  if (!isAuthenticated) {
+    return (
+      <div className={isDarkMode ? 'dark' : ''}>
+        <LoginScreen
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+            setIsAuthenticated(true);
+            showToast('Đăng nhập thành công', `Chào mừng ${user.name} đã đăng nhập hệ thống!`, 'success');
+          }}
+          onShowToast={showToast}
+          isDarkMode={isDarkMode}
+          onToggleTheme={() => {
+            const nextMode = themeMode === 'light' ? 'dark' : themeMode === 'dark' ? 'system' : 'light';
+            handleThemeModeChange(nextMode);
+          }}
+        />
+        {/* Floating Toast Message System on Login Screen */}
+        <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#f8fafc] dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans overflow-hidden transition-colors">
@@ -238,6 +267,7 @@ export default function App() {
             setAuthMode(mode);
             setIsAuthOpen(true);
           }}
+          onShowToast={showToast}
         />
 
         <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">

@@ -1,5 +1,5 @@
 import { 
-  TaskItem, DocumentItem, User, NotificationLog, AuditLogItem, AppSettings, UserRole,
+  TaskItem, DocumentItem, User, NotificationLog, AuditLogItem, AppSettings, UserRole, CLSTitle,
   ShiftDuty, WorkTaskRow, WeeklyMeeting, ChatChannelMessage, ChatGroupChannel, DepartmentAnnouncement, MessageType, ShareCardData,
   EquipmentItem, ParaclinicalRoom, RoomReservation, StaffProfile, LeaveRequest, TrainingCourse,
   MeetingItem, MeetingMinutes, MeetingActionItem, IntegrationEndpoint, IntegrationPayloadSample, MaintenanceLog, RepairLog
@@ -887,6 +887,16 @@ class HospitalStorageService {
   }
 
   // --- Authentication & Password Management ---
+  public isAuthenticated(): boolean {
+    const val = localStorage.getItem('cls_workhub_is_authenticated');
+    return val !== 'false';
+  }
+
+  public setAuthenticated(status: boolean): void {
+    localStorage.setItem('cls_workhub_is_authenticated', status ? 'true' : 'false');
+    this.notify();
+  }
+
   public login(email: string, password: string): { success: boolean; message: string; user?: User } {
     const users = this.getUsers();
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
@@ -901,8 +911,33 @@ class HospitalStorageService {
     }
 
     this.setCurrentUser(user);
+    this.setAuthenticated(true);
     this.logAudit('USER_LOGIN', 'User', undefined, { email: user.email, name: user.name });
     return { success: true, message: 'Đăng nhập thành công', user };
+  }
+
+  public loginById(userId: string, password: string): { success: boolean; message: string; user?: User } {
+    const users = this.getUsers();
+    const user = users.find(u => u.id === userId);
+
+    if (!user) {
+      return { success: false, message: 'Không tìm thấy thông tin cán bộ trong hệ thống' };
+    }
+
+    const validPassword = user.password || '123456';
+    if (password !== validPassword) {
+      return { success: false, message: 'Mật khẩu không chính xác! (Mật khẩu mặc định: 123456)' };
+    }
+
+    this.setCurrentUser(user);
+    this.setAuthenticated(true);
+    this.logAudit('USER_LOGIN', 'User', undefined, { userId: user.id, name: user.name, role: user.role });
+    return { success: true, message: `Đăng nhập thành công: ${user.name}`, user };
+  }
+
+  public logout(): void {
+    this.logAudit('USER_LOGOUT', 'User', undefined, { userId: this.currentUser.id, name: this.currentUser.name });
+    this.setAuthenticated(false);
   }
 
   public changePassword(userId: string, oldPassword: string, newPassword: string): { success: boolean; message: string } {
@@ -979,8 +1014,39 @@ class HospitalStorageService {
   public getUsers(): User[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-      const users: User[] = raw ? JSON.parse(raw) : initialUsers;
-      return users.map(u => ({
+      const users: User[] = raw ? JSON.parse(raw) : [...initialUsers];
+
+      // Merge with staff profiles if present so all hospital personnel can log in
+      const staffRaw = localStorage.getItem(STORAGE_KEYS.STAFF_PROFILES);
+      if (staffRaw) {
+        const staffList: StaffProfile[] = JSON.parse(staffRaw);
+        for (const s of staffList) {
+          if (!users.some(u => u.id === s.userId || u.name === s.fullName)) {
+            users.push({
+              id: s.userId,
+              name: s.fullName,
+              email: s.email || `${s.userId.toLowerCase()}@hospital.vn`,
+              role: (s.role as UserRole) || 'Staff',
+              title: (s.title as CLSTitle) || 'Kỹ thuật viên',
+              department: s.departmentSection || 'Khoa Cận Lâm Sàng',
+              phone: s.phone,
+              avatar: s.avatar || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
+              status: 'Active',
+              password: '123456'
+            });
+          }
+        }
+      }
+
+      // Deduplicate by user ID
+      const uniqueMap = new Map<string, User>();
+      for (const u of users) {
+        if (!uniqueMap.has(u.id)) {
+          uniqueMap.set(u.id, u);
+        }
+      }
+
+      return Array.from(uniqueMap.values()).map(u => ({
         ...u,
         avatar: u.avatar?.includes('1594824813566')
           ? 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80'

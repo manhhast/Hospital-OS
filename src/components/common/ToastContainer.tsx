@@ -12,14 +12,14 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismis
 
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 max-w-md w-full pointer-events-none">
-      {toasts.map((toast) => {
+      {toasts.map((toast, idx) => {
         const isSuccess = toast.type === 'success';
         const isError = toast.type === 'error';
         const isWarning = toast.type === 'warning';
 
         return (
           <div
-            key={toast.id}
+            key={`${toast.id || 'toast'}-${idx}`}
             className={`pointer-events-auto flex items-start p-4 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-300 animate-in slide-in-from-bottom-5`}
           >
             <div className="shrink-0 mr-3 mt-0.5">
