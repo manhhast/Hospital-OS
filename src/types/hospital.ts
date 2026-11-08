@@ -1,5 +1,5 @@
 export type UserRole = 'Admin' | 'Manager' | 'Doctor' | 'Staff';
-export type CLSTitle = 'Trưởng khoa' | 'Phó khoa' | 'Điều dưỡng trưởng' | 'Kỹ thuật viên' | 'Bác sĩ' | 'Nhân viên hành chính';
+export type CLSTitle = 'Quản trị ứng dụng' | 'Quản trị hệ thống' | 'Trưởng khoa' | 'Phó khoa' | 'Điều dưỡng trưởng' | 'Kỹ thuật viên' | 'Bác sĩ' | 'Nhân viên hành chính' | (string & {});
 
 export interface User {
   id: string;

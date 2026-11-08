@@ -8,7 +8,7 @@ import {
   initialTasks, initialDocuments, initialUsers, initialNotifications, initialAuditLogs, initialSettings,
   initialShifts, initialWorkTaskRows, initialWeeklyMeetings, initialChatMessages, initialChannels, initialAnnouncements,
   initialEquipment, initialRooms, initialStaffProfiles, initialLeaveRequests, initialTrainingCourses,
-  initialMeetings, initialIntegrationEndpoints, initialIntegrationPayloads
+  initialMeetings, initialIntegrationEndpoints, initialIntegrationPayloads, ADMIN_DEFAULT_AVATAR
 } from './mockData';
 import * as sampleDemoData from './sampleDemoData';
 
@@ -125,6 +125,15 @@ class HospitalStorageService {
       const users = this.getUsers();
       const found = users.find(u => u.id === savedUserId);
       if (found) this.currentUser = found;
+    }
+
+    if (this.currentUser.role === 'Admin' || this.currentUser.id === 'USR-ADMIN') {
+      this.currentUser = {
+        ...this.currentUser,
+        title: 'Quản trị ứng dụng' as CLSTitle,
+        department: 'Bộ phận CNTT & Quản trị Hệ thống',
+        avatar: ADMIN_DEFAULT_AVATAR
+      };
     }
   }
 
@@ -656,10 +665,32 @@ class HospitalStorageService {
 
   // --- Current Active User Context ---
   public getCurrentUser(): User {
+    if (this.currentUser.role === 'Admin' || this.currentUser.id === 'USR-ADMIN') {
+      if (
+        this.currentUser.title === 'Trưởng khoa' ||
+        this.currentUser.department?.includes('Ban Chủ Nhiệm') ||
+        !this.currentUser.avatar?.startsWith('data:image/svg')
+      ) {
+        this.currentUser = {
+          ...this.currentUser,
+          title: 'Quản trị ứng dụng' as CLSTitle,
+          department: 'Bộ phận CNTT & Quản trị Hệ thống',
+          avatar: ADMIN_DEFAULT_AVATAR
+        };
+      }
+    }
     return this.currentUser;
   }
 
   public setCurrentUser(user: User) {
+    if (user.role === 'Admin' || user.id === 'USR-ADMIN') {
+      user = {
+        ...user,
+        title: 'Quản trị ứng dụng' as CLSTitle,
+        department: 'Bộ phận CNTT & Quản trị Hệ thống',
+        avatar: ADMIN_DEFAULT_AVATAR
+      };
+    }
     this.currentUser = user;
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER, user.id);
     this.notify();
@@ -1046,12 +1077,22 @@ class HospitalStorageService {
         }
       }
 
-      return Array.from(uniqueMap.values()).map(u => ({
-        ...u,
-        avatar: u.avatar?.includes('1594824813566')
-          ? 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80'
-          : u.avatar
-      }));
+      return Array.from(uniqueMap.values()).map(u => {
+        if (u.role === 'Admin' || u.id === 'USR-ADMIN') {
+          return {
+            ...u,
+            title: 'Quản trị ứng dụng' as CLSTitle,
+            department: 'Bộ phận CNTT & Quản trị Hệ thống',
+            avatar: ADMIN_DEFAULT_AVATAR
+          };
+        }
+        return {
+          ...u,
+          avatar: u.avatar?.includes('1594824813566')
+            ? 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80'
+            : u.avatar
+        };
+      });
     } catch (e) {
       return initialUsers;
     }

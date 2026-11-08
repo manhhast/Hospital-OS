@@ -132,7 +132,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                BỆNH VIỆN ĐA KHOA TRUNG TÂM
+                BỆNH VIỆN ĐA KHOA SÔNG THƯƠNG
               </span>
               <span className="px-1.5 py-0.2 text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded">
                 KHOA CẬN LÂM SÀNG
@@ -279,7 +279,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                                     )}
                                   </div>
                                   <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                    {u.title || 'Cán bộ'} • {u.department || 'Khoa Cận Lâm Sàng'}
+                                    {u.role === 'Admin'
+                                      ? 'Quản trị ứng dụng & Hệ thống'
+                                      : `${u.title || 'Cán bộ'} • ${u.department || 'Khoa Cận Lâm Sàng'}`}
                                   </div>
                                 </div>
                               </div>
@@ -326,7 +328,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         {selectedUser.name}
                       </div>
                       <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                        {selectedUser.title || 'Cán bộ'} • {selectedUser.department || 'Khoa Cận Lâm Sàng'}
+                        {selectedUser.role === 'Admin'
+                          ? 'Quản trị ứng dụng & Hệ thống'
+                          : `${selectedUser.title || 'Cán bộ'} • ${selectedUser.department || 'Khoa Cận Lâm Sàng'}`}
                       </div>
                     </div>
                   </div>

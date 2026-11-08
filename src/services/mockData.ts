@@ -15,19 +15,22 @@ import {
  * Tài khoản Quản trị viên hệ thống ban đầu (Super Admin)
  * Mật khẩu mặc định: admin (có thể đổi ngay sau khi đăng nhập)
  */
+export const ADMIN_DEFAULT_AVATAR = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" fill="none"><rect width="120" height="120" rx="32" fill="%231e1b4b"/><rect x="1.5" y="1.5" width="117" height="117" rx="30.5" stroke="%234338ca" stroke-width="2" stroke-opacity="0.6"/><path d="M60 22 C76 22 88 28 88 28 C88 56 78 78 60 92 C42 78 32 56 32 28 C32 28 44 22 60 22 Z" fill="%232563eb" fill-opacity="0.25" stroke="%2338bdf8" stroke-width="3" stroke-linejoin="round"/><circle cx="60" cy="52" r="14" fill="%230f172a" stroke="%2338bdf8" stroke-width="2.5"/><path d="M54 48 L58 52 L54 56" stroke="%2338bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="62" y1="56" x2="68" y2="56" stroke="%23e2e8f0" stroke-width="2" stroke-linecap="round"/><path d="M51 72 H69 M54 77 H66 M57 82 H63" stroke="%2393c5fd" stroke-width="2.5" stroke-linecap="round"/><circle cx="84" cy="36" r="6" fill="%2310b981"/><circle cx="84" cy="36" r="3" fill="%23ffffff"/></svg>`;
+
 export const initialUsers: User[] = [
   {
     id: 'USR-ADMIN',
     name: 'Quản trị viên Hệ thống',
     email: 'admin@hospital.vn',
     role: 'Admin',
-    title: 'Trưởng khoa',
-    department: 'Ban Chủ Nhiệm Khoa',
-    avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
+    title: 'Quản trị ứng dụng',
+    department: 'Bộ phận CNTT & Quản trị Hệ thống',
+    avatar: ADMIN_DEFAULT_AVATAR,
     telegramChatId: '',
     phone: '0900000000',
     status: 'Active',
-    password: 'admin'
+    password: 'admin',
+    room: 'Phòng Máy Chủ & Quản trị Hệ thống'
   }
 ];
 

@@ -295,7 +295,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 )}
                               </div>
                               <div className="text-[11px] text-slate-400 dark:text-slate-400 truncate">
-                                {u.title || 'Cán bộ'} • {u.department || 'Khoa Cận Lâm Sàng'}
+                                {u.role === 'Admin'
+                                  ? 'Quản trị ứng dụng & Hệ thống'
+                                  : `${u.title || 'Cán bộ'} • ${u.department || 'Khoa Cận Lâm Sàng'}`}
                               </div>
                             </div>
                           </div>
@@ -337,7 +339,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       {selectedUser.name}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                      {selectedUser.title || 'Cán bộ y tế'} • {selectedUser.department || 'Khoa Cận Lâm Sàng'}
+                      {selectedUser.role === 'Admin'
+                        ? 'Quản trị ứng dụng & Hệ thống'
+                        : `${selectedUser.title || 'Cán bộ y tế'} • ${selectedUser.department || 'Khoa Cận Lâm Sàng'}`}
                     </div>
                   </div>
                 </div>
@@ -442,7 +446,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     {selectedUser?.name}
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                    {selectedUser?.title || 'Cán bộ'} • {selectedUser?.department || 'Khoa Cận Lâm Sàng'}
+                    {selectedUser?.role === 'Admin'
+                      ? 'Quản trị ứng dụng & Hệ thống'
+                      : `${selectedUser?.title || 'Cán bộ'} • ${selectedUser?.department || 'Khoa Cận Lâm Sàng'}`}
                   </div>
                 </div>
               </div>

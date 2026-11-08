@@ -415,7 +415,9 @@ export const Header: React.FC<HeaderProps> = ({
                       {currentUser.name}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                      {currentUser.title || 'Cán bộ'} • {currentUser.department || 'Khoa Cận Lâm Sàng'}
+                      {currentUser.role === 'Admin'
+                        ? 'Quản trị ứng dụng & Hệ thống'
+                        : `${currentUser.title || 'Cán bộ'} • ${currentUser.department || 'Khoa Cận Lâm Sàng'}`}
                     </div>
                   </div>
                 </div>
