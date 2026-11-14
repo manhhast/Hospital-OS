@@ -969,8 +969,8 @@ export const RoomManagementView: React.FC = () => {
                         <p className="text-xs text-slate-400">Chưa có nhân viên nào phân công tại phòng này.</p>
                       ) : (
                         <div className="space-y-1.5 pt-1">
-                          {selectedRoomStaff.slice(0, 4).map(s => (
-                            <div key={s.userId} className="flex items-center justify-between text-xs">
+                          {selectedRoomStaff.slice(0, 4).map((s, idx) => (
+                            <div key={`${s.userId}-${idx}`} className="flex items-center justify-between text-xs">
                               <span className="font-semibold text-slate-800 dark:text-slate-200">{s.fullName}</span>
                               <span className="text-[11px] text-slate-500">{s.title || 'Nhân viên'}</span>
                             </div>
@@ -995,8 +995,8 @@ export const RoomManagementView: React.FC = () => {
                         <p className="text-xs text-slate-400">Chưa có máy móc nào gán cho phòng này.</p>
                       ) : (
                         <div className="space-y-1.5 pt-1">
-                          {selectedRoomEquipment.slice(0, 4).map(eq => (
-                            <div key={eq.id} className="flex items-center justify-between text-xs">
+                          {selectedRoomEquipment.slice(0, 4).map((eq, idx) => (
+                            <div key={`${eq.id}-${idx}`} className="flex items-center justify-between text-xs">
                               <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
                                 {eq.name}
                               </span>

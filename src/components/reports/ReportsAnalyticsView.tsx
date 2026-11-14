@@ -738,7 +738,7 @@ export const ReportsAnalyticsView: React.FC = () => {
       }
 
       items.push({
-        id: `item-${r}-${Math.random().toString(36).substr(2, 5)}`,
+        id: `item-${r}-${items.length}-${Math.random().toString(36).substr(2, 5)}`,
         category: itemCategory,
         name,
         dailyData
@@ -1153,7 +1153,8 @@ export const ReportsAnalyticsView: React.FC = () => {
       triageMap[item.name] = calculateClinicalTriage(item, selectedReportDay, monthItems, activeDays);
     });
 
-    // Compute Pinned Triage Results
+    // Compute Pinned Triage Results (deduplicated by itemId so identical items never render duplicate cards)
+    const seenPinnedIds = new Set<string>();
     const pinnedTriageResults: ClinicalTriageResult[] = pinnedServiceNames
       .map(name => {
         const item = monthItems.find(i => i.name.trim().toLowerCase() === name.trim().toLowerCase()) ||
@@ -1163,7 +1164,11 @@ export const ReportsAnalyticsView: React.FC = () => {
         }
         return null;
       })
-      .filter((r): r is ClinicalTriageResult => r !== null);
+      .filter((r): r is ClinicalTriageResult => {
+        if (!r || seenPinnedIds.has(r.itemId)) return false;
+        seenPinnedIds.add(r.itemId);
+        return true;
+      });
 
     // Filter items based on dailyTriageFilter and search
     const filteredItemStats = itemStats.filter(item => {
@@ -1410,7 +1415,7 @@ export const ReportsAnalyticsView: React.FC = () => {
 
                       return (
                         <tr
-                          key={item.id}
+                          key={`${item.id}-${itemIdx}`}
                           className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors"
                         >
                           {/* Pin Toggle Button */}
@@ -1820,7 +1825,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                       <td className="px-2.5 py-2.5 text-right text-slate-400 font-semibold">-</td>
                     </tr>
                     {group.items.map((item, itemIdx) => (
-                      <tr key={item.id} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-indigo-50/60 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
+                      <tr key={`${item.id}-${itemIdx}`} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-indigo-50/60 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
                         <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">{itemIdx + 1}</td>
                         <td className="px-2.5 py-2.5 font-medium text-slate-600 dark:text-slate-300 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.category}</td>
                         <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.name}</td>
@@ -2221,7 +2226,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                     </tr>
 
                     {group.items.map((item, itemIdx) => (
-                      <tr key={item.id} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
+                      <tr key={`${item.id}-${itemIdx}`} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
                         <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">{itemIdx + 1}</td>
                         <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.name}</td>
 
@@ -3877,8 +3882,8 @@ export const ReportsAnalyticsView: React.FC = () => {
                         </td>
                         <td colSpan={daysList.length * 2 + 4} className="bg-amber-100/60 dark:bg-amber-950/40 border-b border-amber-300 dark:border-amber-800"></td>
                       </tr>
-                      {pinnedMatrixItems.map(item => (
-                        <tr key={`pinned-top-${item.id}`} className="bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 transition-colors">
+                      {pinnedMatrixItems.map((item, itemIdx) => (
+                        <tr key={`pinned-top-${item.id}-${itemIdx}`} className="bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 transition-colors">
                           <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-slate-100 sticky left-0 z-10 bg-amber-50/95 dark:bg-slate-900 border-b border-r border-amber-300/70 dark:border-slate-700 w-[256px] min-w-[256px] max-w-[256px]" title={item.name}>
                             <div className="flex items-center gap-1.5 min-w-0">
                               <button
@@ -3938,11 +3943,11 @@ export const ReportsAnalyticsView: React.FC = () => {
                       </tr>
 
                       {/* Detail Service Rows under Category */}
-                      {group.items.map(item => {
+                      {group.items.map((item, itemIdx) => {
                         const isPinned = pinnedServiceNames.some(p => p.trim().toLowerCase() === item.name.trim().toLowerCase());
                         return (
                           <tr 
-                            key={item.id} 
+                            key={`${item.id}-${itemIdx}`} 
                             className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/80 transition-colors"
                           >
                             {/* Service Name (Sticky Left with Pin Button) */}
@@ -4233,8 +4238,8 @@ export const ReportsAnalyticsView: React.FC = () => {
         <FastPinManagerModal
           isOpen={isPinManagerOpen}
           onClose={() => setIsPinManagerOpen(false)}
-          allServices={allUniqueServicesList.map(s => ({
-            id: s.name,
+          allServices={allUniqueServicesList.map((s, idx) => ({
+            id: `${s.category}::${s.name}::${idx}`,
             category: s.category,
             name: s.name,
             dailyData: {}

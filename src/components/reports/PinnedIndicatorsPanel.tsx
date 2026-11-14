@@ -125,14 +125,14 @@ export const PinnedIndicatorsPanel: React.FC<PinnedIndicatorsPanelProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {filtered.map(item => {
+          {filtered.map((item, idx) => {
             const isSurgeCritical = item.severity === 'SURGE_CRITICAL';
             const isSurgeModerate = item.severity === 'SURGE_MODERATE';
             const isDrop = item.severity === 'DROP_CRITICAL' || item.severity === 'DROP_MODERATE';
 
             return (
               <div
-                key={item.itemId}
+                key={`${item.itemId}-${idx}`}
                 onClick={() => onOpenBenchmarkingModal(item)}
                 className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-xs hover:shadow-md flex flex-col justify-between gap-2.5 group relative overflow-hidden ${
                   isSurgeCritical

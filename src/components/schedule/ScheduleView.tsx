@@ -517,7 +517,7 @@ export const ScheduleView: React.FC = () => {
       }
 
       const quickShift: ShiftDuty = {
-        id: `SFT-${Date.now().toString().slice(-6)}`,
+        id: `SFT-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
         title: `Phân công - ${assignedUser.name}`,
         date: targetDate,
         startTime: '07:00',
@@ -609,7 +609,7 @@ export const ScheduleView: React.FC = () => {
       }
 
       const quickShift: ShiftDuty = {
-        id: `SFT-${Date.now().toString().slice(-6)}`,
+        id: `SFT-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
         title: `${taskRow.name} - ${assignedUser.name}`,
         date: targetDate,
         startTime: taskRow.defaultTime ? taskRow.defaultTime.split('-')[0]?.trim() || '07:00' : '07:00',

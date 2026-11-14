@@ -11,7 +11,7 @@ import {
   StaffProfile, LeaveRequest, TrainingCourse, EmploymentStatus, WorkStatusHistoryItem, CLSTitle, UserRole,
   MedicalCertificate, DepartmentUnit, ParaclinicalRoom, User
 } from '../../types/hospital';
-import { formatDateVN, toInputDateFormat, normalizeVietnamesePhone } from '../../utils/dateUtils';
+import { formatDateVN, toInputDateFormat, normalizeFlexibleDateVN, normalizeVietnamesePhone } from '../../utils/dateUtils';
 
 // Helper to parse dates from Excel (can be Date instance, Excel serial number, or string) strictly to dd/mm/yyyy
 const parseExcelDateToDDMMYYYY = (val: any): string => {
@@ -26,8 +26,11 @@ const parseExcelDateToDDMMYYYY = (val: any): string => {
     return `${d}/${m}/${y}`;
   }
 
-  // 2. If numeric Excel serial date number
+  // 2. If numeric Excel cell (4-digit year vs Excel serial date number)
   if (typeof val === 'number') {
+    if (Number.isInteger(val) && val >= 1900 && val <= 2100) {
+      return String(val);
+    }
     if (val > 0) {
       try {
         const parsed = XLSX.SSF.parse_date_code(val);
@@ -51,6 +54,18 @@ const parseExcelDateToDDMMYYYY = (val: any): string => {
 
   const s = String(val).trim();
   if (!s) return '';
+
+  // 2b. Preserve year-only (yyyy) or month/year (mm/yyyy)
+  if (/^\d{4}$/.test(s)) {
+    return s;
+  }
+  const myMatch = s.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (myMatch) {
+    const mNum = parseInt(myMatch[1], 10);
+    if (mNum >= 1 && mNum <= 12) {
+      return `${myMatch[1].padStart(2, '0')}/${myMatch[2]}`;
+    }
+  }
 
   // 3. If ISO date: YYYY-MM-DD or YYYY-MM-DDT...
   const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
@@ -262,7 +277,7 @@ export const StaffManagementView: React.FC = () => {
     gender: 'Nam' as 'Nam' | 'Nữ' | 'Khác',
     specialty: '',
     educationLevel: '',
-    joinDate: new Date().toISOString().split('T')[0],
+    joinDate: formatDateVN(new Date()),
     experienceYears: 3,
     currentStatus: 'Đang làm việc' as EmploymentStatus,
     certName: '',
@@ -279,6 +294,8 @@ export const StaffManagementView: React.FC = () => {
   const [excelImportStep, setExcelImportStep] = useState<'upload' | 'preview'>('upload');
   const [isDraggingExcel, setIsDraggingExcel] = useState(false);
   const excelFileInputRef = useRef<HTMLInputElement>(null);
+  const editJoinDatePickerRef = useRef<HTMLInputElement>(null);
+  const newJoinDatePickerRef = useRef<HTMLInputElement>(null);
   const [parsedExcelStaff, setParsedExcelStaff] = useState<Array<{
     userId: string;
     fullName: string;
@@ -302,19 +319,54 @@ export const StaffManagementView: React.FC = () => {
   const currentUser = storageService.getCurrentUser();
   const isAdmin = currentUser.role === 'Admin' || currentUser.title?.includes('Trưởng khoa');
 
-  // Helper function to calculate years of service automatically based on join date
+  // Helper function to calculate years of service automatically based on join date (dd/mm/yyyy, mm/yyyy, yyyy, or yyyy-mm-dd)
   const calculateYearsOfService = (joinDateStr?: string, defaultYears: number = 0): number => {
     if (!joinDateStr) return defaultYears;
-    let join: Date;
     const trimmed = String(joinDateStr).trim();
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
-      const [d, m, y] = trimmed.split('/').map(Number);
+    if (!trimmed) return defaultYears;
+    const now = new Date();
+
+    // 1. Year only: yyyy (1900 - 2100)
+    if (/^\d{4}$/.test(trimmed)) {
+      const y = parseInt(trimmed, 10);
+      if (y < 1900 || y > 2100) return defaultYears;
+      return Math.max(0, now.getFullYear() - y);
+    }
+
+    // 2. Month/Year: m/yyyy or mm/yyyy or mm-yyyy
+    const myMatch = trimmed.match(/^(\d{1,2})[-/](\d{4})$/);
+    if (myMatch) {
+      const m = parseInt(myMatch[1], 10);
+      const y = parseInt(myMatch[2], 10);
+      if (m < 1 || m > 12 || y < 1900 || y > 2100) return defaultYears;
+      let years = now.getFullYear() - y;
+      if (now.getMonth() + 1 < m) {
+        years--;
+      }
+      return Math.max(0, years);
+    }
+
+    // 3. Full date: dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd, or ISO
+    let join: Date;
+    const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (dmyMatch) {
+      const d = parseInt(dmyMatch[1], 10);
+      const m = parseInt(dmyMatch[2], 10);
+      const y = parseInt(dmyMatch[3], 10);
+      if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return defaultYears;
+      join = new Date(y, m - 1, d);
+    } else if (ymdMatch) {
+      const y = parseInt(ymdMatch[1], 10);
+      const m = parseInt(ymdMatch[2], 10);
+      const d = parseInt(ymdMatch[3], 10);
+      if (y < 1900 || m < 1 || m > 12 || d < 1 || d > 31) return defaultYears;
       join = new Date(y, m - 1, d);
     } else {
-      join = new Date(trimmed);
+      return defaultYears;
     }
+
     if (isNaN(join.getTime())) return defaultYears;
-    const now = new Date();
     let years = now.getFullYear() - join.getFullYear();
     const monthDiff = now.getMonth() - join.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < join.getDate())) {
@@ -507,7 +559,7 @@ export const StaffManagementView: React.FC = () => {
     } else {
       // Adding new certificate
       const newCert: MedicalCertificate = {
-        id: `CERT-${Date.now()}`,
+        id: `CERT-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
         name: certName.trim(),
         code: certCode.trim(),
         issuedBy: certIssuedBy.trim(),
@@ -639,7 +691,7 @@ export const StaffManagementView: React.FC = () => {
       gender: 'Nam',
       specialty: '',
       educationLevel: '',
-      joinDate: new Date().toISOString().split('T')[0],
+      joinDate: formatDateVN(new Date()),
       experienceYears: 3,
       currentStatus: 'Đang làm việc',
       certName: '',
@@ -932,9 +984,9 @@ export const StaffManagementView: React.FC = () => {
       return;
     }
 
-    const newProfiles: StaffProfile[] = validRows.map(r => {
+    const newProfiles: StaffProfile[] = validRows.map((r, rowIdx) => {
       const certificates: MedicalCertificate[] = r.certCode ? [{
-        id: `CERT-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        id: `CERT-${Date.now()}-${rowIdx}-${Math.floor(100 + Math.random() * 900)}`,
         name: `Chứng chỉ Hành Nghề Cận Lâm Sàng (${r.specialty || r.departmentSection})`,
         code: r.certCode,
         issuedBy: 'Sở Y Tế / Bộ Y Tế',
@@ -944,7 +996,7 @@ export const StaffManagementView: React.FC = () => {
       }] : [];
 
       const initialHistory: WorkStatusHistoryItem = {
-        id: `SH-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        id: `SH-${Date.now()}-${rowIdx}-${Math.floor(100 + Math.random() * 900)}`,
         startDate: r.joinDate || formatDateVN(new Date()),
         endDate: 'Hiện tại',
         status: r.currentStatus,
@@ -1016,19 +1068,20 @@ export const StaffManagementView: React.FC = () => {
     }
     const finalUserId = newStaffForm.userId.trim() || `NV-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const normalizedJoinDate = normalizeFlexibleDateVN(newStaffForm.joinDate);
     const certs: MedicalCertificate[] = newStaffForm.certCode ? [{
       id: `CERT-${Date.now()}`,
       name: newStaffForm.certName.trim() || `Chứng chỉ Hành Nghề (${newStaffForm.specialty || newStaffForm.departmentSection})`,
       code: newStaffForm.certCode.trim(),
       issuedBy: 'Sở Y Tế / Bộ Y Tế',
-      issuedDate: newStaffForm.joinDate || new Date().toISOString().split('T')[0],
+      issuedDate: normalizedJoinDate ? (toInputDateFormat(normalizedJoinDate) || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
       expiryDate: new Date(new Date().setFullYear(new Date().getFullYear() + 5)).toISOString().split('T')[0],
       status: 'Còn hiệu lực'
     }] : [];
 
     const initialHistory: WorkStatusHistoryItem = {
       id: `SH-${Date.now()}`,
-      startDate: formatDateVN(newStaffForm.joinDate) || formatDateVN(new Date()),
+      startDate: normalizedJoinDate || formatDateVN(new Date()),
       endDate: 'Hiện tại',
       status: newStaffForm.currentStatus,
       departmentSection: newStaffForm.departmentSection,
@@ -1052,8 +1105,8 @@ export const StaffManagementView: React.FC = () => {
       gender: newStaffForm.gender,
       specialty: newStaffForm.specialty.trim() || `Chuyên môn ${newStaffForm.departmentSection}`,
       educationLevel: newStaffForm.educationLevel || undefined,
-      experienceYears: newStaffForm.joinDate ? calculateYearsOfService(newStaffForm.joinDate, newStaffForm.experienceYears) : newStaffForm.experienceYears,
-      joinDate: formatDateVN(newStaffForm.joinDate),
+      experienceYears: normalizedJoinDate ? calculateYearsOfService(normalizedJoinDate, newStaffForm.experienceYears) : newStaffForm.experienceYears,
+      joinDate: normalizedJoinDate,
       degrees: [newStaffForm.title.includes('Bác sĩ') ? 'Bác sĩ Đa khoa' : 'Cử nhân Kỹ thuật Y học'],
       certificates: certs,
       totalShiftsThisMonth: 0,
@@ -1099,7 +1152,11 @@ export const StaffManagementView: React.FC = () => {
     e.preventDefault();
     if (!editingStaff) return;
 
-    storageService.saveStaffProfile(editingStaff);
+    const staffToSave: StaffProfile = {
+      ...editingStaff,
+      joinDate: normalizeFlexibleDateVN(editingStaff.joinDate)
+    };
+    storageService.saveStaffProfile(staffToSave);
     
     // Also sync back to user list if name/role/title/department changed
     const users = storageService.getUsers();
@@ -1179,6 +1236,7 @@ export const StaffManagementView: React.FC = () => {
     setEditingStaff({
       ...staffToEdit,
       title: staffToEdit.title?.trim() ? staffToEdit.title : 'Nhân viên',
+      joinDate: staffToEdit.joinDate ? formatDateVN(staffToEdit.joinDate, '') : '',
       experienceYears: staffToEdit.joinDate ? calculateYearsOfService(staffToEdit.joinDate, staffToEdit.experienceYears) : staffToEdit.experienceYears
     });
   };
@@ -1528,8 +1586,8 @@ export const StaffManagementView: React.FC = () => {
             {/* View Mode 1: GRID VIEW */}
             {viewMode === 'grid' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredProfiles.map(staff => (
-                  <div key={staff.userId} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-md transition-all p-5 space-y-4 flex flex-col justify-between">
+                {filteredProfiles.map((staff, idx) => (
+                  <div key={`${staff.userId}-${idx}`} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-md transition-all p-5 space-y-4 flex flex-col justify-between">
                     <div className="space-y-3">
                       {/* Top Row: Chức danh badge (trái) & Action buttons + Số năm công tác gọn (phải) */}
                       <div className="flex items-center justify-between gap-2">
@@ -1545,6 +1603,7 @@ export const StaffManagementView: React.FC = () => {
                                 onClick={() => setEditingStaff({
                                   ...staff,
                                   title: staff.title?.trim() ? staff.title : 'Nhân viên',
+                                  joinDate: staff.joinDate ? formatDateVN(staff.joinDate, '') : '',
                                   experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
                                 })}
                                 title="Chỉnh sửa thông tin cán bộ (Dành cho Admin)"
@@ -1747,8 +1806,8 @@ export const StaffManagementView: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                          {deptStaffList.map(staff => (
-                            <tr key={staff.userId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                          {deptStaffList.map((staff, idx) => (
+                            <tr key={`${staff.userId}-${idx}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
                               <td className="p-3 font-bold text-slate-900 dark:text-white whitespace-nowrap">
                                 <button
                                   type="button"
@@ -1829,6 +1888,7 @@ export const StaffManagementView: React.FC = () => {
                                         onClick={() => setEditingStaff({
                                           ...staff,
                                           title: staff.title?.trim() ? staff.title : 'Nhân viên',
+                                          joinDate: staff.joinDate ? formatDateVN(staff.joinDate, '') : '',
                                           experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
                                         })}
                                         className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 shrink-0"
@@ -2040,8 +2100,8 @@ export const StaffManagementView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
                     {displayedCertificates.length > 0 ? (
-                      displayedCertificates.map(cert => (
-                        <tr key={cert.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors">
+                      displayedCertificates.map((cert, idx) => (
+                        <tr key={`${cert.staffUserId}-${cert.id}-${idx}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors">
                           <td className="p-3">
                             <div className="font-bold text-slate-900 dark:text-white">{cert.staffName}</div>
                             <div className="text-[11px] text-slate-500 dark:text-slate-400">{cert.staffTitle} • {cert.staffDept}</div>
@@ -2522,23 +2582,74 @@ export const StaffManagementView: React.FC = () => {
                 {/* Hàng dưới: Ngày Vào Làm & Số Năm Công Tác */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                   <div>
-                    <label className="h-5 flex items-center font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Ngày Vào Làm:
-                    </label>
-                    <input
-                      type="date"
-                      value={toInputDateFormat(editingStaff.joinDate)}
-                      onChange={e => {
-                        const newJoinDate = formatDateVN(e.target.value);
-                        const calculatedYears = calculateYearsOfService(newJoinDate, editingStaff.experienceYears);
-                        setEditingStaff({
-                          ...editingStaff,
-                          joinDate: newJoinDate,
-                          experienceYears: calculatedYears
-                        });
-                      }}
-                      className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-100 shadow-2xs"
-                    />
+                    <div className="h-5 flex items-center justify-between mb-1">
+                      <label className="font-semibold text-slate-700 dark:text-slate-300">
+                        Ngày Vào Làm:
+                      </label>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">dd/mm/yyyy · mm/yyyy · yyyy</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="dd/mm/yyyy, mm/yyyy hoặc yyyy"
+                        value={editingStaff.joinDate || ''}
+                        onChange={e => {
+                          const raw = e.target.value;
+                          const calculatedYears = calculateYearsOfService(raw, editingStaff.experienceYears);
+                          setEditingStaff({
+                            ...editingStaff,
+                            joinDate: raw,
+                            experienceYears: calculatedYears
+                          });
+                        }}
+                        onBlur={() => {
+                          const normalized = normalizeFlexibleDateVN(editingStaff.joinDate);
+                          if (normalized !== (editingStaff.joinDate || '')) {
+                            setEditingStaff({
+                              ...editingStaff,
+                              joinDate: normalized,
+                              experienceYears: calculateYearsOfService(normalized, editingStaff.experienceYears)
+                            });
+                          }
+                        }}
+                        className="w-full h-10 pl-3 pr-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-100 shadow-2xs"
+                      />
+                      <button
+                        type="button"
+                        title="Chọn ngày từ lịch"
+                        onClick={() => {
+                          const picker = editJoinDatePickerRef.current;
+                          if (!picker) return;
+                          if (typeof picker.showPicker === 'function') {
+                            picker.showPicker();
+                          } else {
+                            picker.click();
+                          }
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 rounded-lg transition-colors"
+                      >
+                        <Calendar className="w-4 h-4" />
+                      </button>
+                      <input
+                        ref={editJoinDatePickerRef}
+                        type="date"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        value={toInputDateFormat(editingStaff.joinDate)}
+                        onChange={e => {
+                          if (!e.target.value) return;
+                          const newJoinDate = formatDateVN(e.target.value, '');
+                          const calculatedYears = calculateYearsOfService(newJoinDate, editingStaff.experienceYears);
+                          setEditingStaff({
+                            ...editingStaff,
+                            joinDate: newJoinDate,
+                            experienceYears: calculatedYears
+                          });
+                        }}
+                        className="sr-only"
+                      />
+                    </div>
                   </div>
                   <div>
                     <div className="h-5 flex items-center justify-between mb-1">
@@ -2706,8 +2817,8 @@ export const StaffManagementView: React.FC = () => {
                 {/* Danh sách mốc lịch sử hiện có */}
                 <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
                   {editingStaff.statusHistory && editingStaff.statusHistory.length > 0 ? (
-                    editingStaff.statusHistory.map((item) => (
-                      <div key={item.id} className="p-3 bg-white dark:bg-slate-850 rounded-xl border border-slate-200/90 dark:border-slate-750 flex items-center justify-between text-xs hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    editingStaff.statusHistory.map((item, idx) => (
+                      <div key={item.id ? `${item.id}-${idx}` : idx} className="p-3 bg-white dark:bg-slate-850 rounded-xl border border-slate-200/90 dark:border-slate-750 flex items-center justify-between text-xs hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-slate-900 dark:text-white font-mono">{item.startDate} ➔ {item.endDate}</span>
@@ -3748,8 +3859,8 @@ export const StaffManagementView: React.FC = () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-3">
-                      {selectedDetailStaff.certificates.map(cert => (
-                        <div key={cert.id} className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3">
+                      {selectedDetailStaff.certificates.map((cert, idx) => (
+                        <div key={cert.id ? `${cert.id}-${idx}` : idx} className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3">
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
@@ -3959,8 +4070,8 @@ export const StaffManagementView: React.FC = () => {
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
                 >
                   <option value="">-- Chọn cán bộ / nhân viên --</option>
-                  {profiles.map(p => (
-                    <option key={p.userId} value={p.userId}>
+                  {profiles.map((p, idx) => (
+                    <option key={`${p.userId}-${idx}`} value={p.userId}>
                       {p.fullName} ({p.title} - {p.departmentSection})
                     </option>
                   ))}
@@ -4442,22 +4553,72 @@ export const StaffManagementView: React.FC = () => {
 
                 {/* Ngày vào làm */}
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Ngày Vào Làm
-                  </label>
-                  <input
-                    type="date"
-                    value={newStaffForm.joinDate}
-                    onChange={e => {
-                      const d = e.target.value;
-                      setNewStaffForm({
-                        ...newStaffForm,
-                        joinDate: d,
-                        experienceYears: calculateYearsOfService(d, newStaffForm.experienceYears)
-                      });
-                    }}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      Ngày Vào Làm
+                    </label>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">dd/mm/yyyy · mm/yyyy · yyyy</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="dd/mm/yyyy, mm/yyyy hoặc yyyy"
+                      value={newStaffForm.joinDate}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        setNewStaffForm({
+                          ...newStaffForm,
+                          joinDate: raw,
+                          experienceYears: calculateYearsOfService(raw, newStaffForm.experienceYears)
+                        });
+                      }}
+                      onBlur={() => {
+                        const normalized = normalizeFlexibleDateVN(newStaffForm.joinDate);
+                        if (normalized !== newStaffForm.joinDate) {
+                          setNewStaffForm({
+                            ...newStaffForm,
+                            joinDate: normalized,
+                            experienceYears: calculateYearsOfService(normalized, newStaffForm.experienceYears)
+                          });
+                        }
+                      }}
+                      className="w-full p-2.5 pr-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      title="Chọn ngày từ lịch"
+                      onClick={() => {
+                        const picker = newJoinDatePickerRef.current;
+                        if (!picker) return;
+                        if (typeof picker.showPicker === 'function') {
+                          picker.showPicker();
+                        } else {
+                          picker.click();
+                        }
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 rounded-lg transition-colors"
+                    >
+                      <Calendar className="w-4 h-4" />
+                    </button>
+                    <input
+                      ref={newJoinDatePickerRef}
+                      type="date"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      value={toInputDateFormat(newStaffForm.joinDate)}
+                      onChange={e => {
+                        if (!e.target.value) return;
+                        const d = formatDateVN(e.target.value, '');
+                        setNewStaffForm({
+                          ...newStaffForm,
+                          joinDate: d,
+                          experienceYears: calculateYearsOfService(d, newStaffForm.experienceYears)
+                        });
+                      }}
+                      className="sr-only"
+                    />
+                  </div>
                 </div>
 
                 {/* Số CCHN nếu có */}

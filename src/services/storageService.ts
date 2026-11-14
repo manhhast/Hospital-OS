@@ -197,7 +197,13 @@ class HospitalStorageService {
   public getShifts(): ShiftDuty[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SHIFTS);
-      return raw ? JSON.parse(raw) : initialShifts;
+      const list: ShiftDuty[] = raw ? JSON.parse(raw) : initialShifts;
+      const seen = new Set<string>();
+      return list.filter(item => {
+        if (!item?.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
     } catch (e) {
       return initialShifts;
     }
@@ -248,7 +254,7 @@ class HospitalStorageService {
 
     const duplicated: ShiftDuty = {
       ...target,
-      id: `SFT-${Date.now().toString().slice(-6)}`,
+      id: `SFT-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
       title: `${target.title || target.shiftName || 'Ca làm việc'} (Bản sao)`,
       date: newDate || target.date,
       assignedUserId: newAssignedUserId || target.assignedUserId || target.userId,
@@ -277,7 +283,7 @@ class HospitalStorageService {
 
     const currentShift = shifts[idx];
     const swapReq = {
-      id: `SWP-${Date.now().toString().slice(-6)}`,
+      id: `SWP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
       shiftId,
       shiftTitle: currentShift.title || currentShift.shiftName || 'Ca làm việc',
       shiftDate: currentShift.date,
@@ -1301,8 +1307,14 @@ class HospitalStorageService {
       const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT);
       if (!raw) return initialEquipment;
       const parsed: EquipmentItem[] = JSON.parse(raw);
+      const seen = new Set<string>();
+      const uniqueParsed = parsed.filter(item => {
+        if (!item?.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
       // Merge with initial data to ensure complete fields if stored from older version
-      return parsed.map(item => {
+      return uniqueParsed.map(item => {
         const seed = initialEquipment.find(e => e.id === item.id);
         if (!seed) return item;
         return {
@@ -1505,7 +1517,14 @@ class HospitalStorageService {
       const raw = localStorage.getItem(STORAGE_KEYS.DEPARTMENTS);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          const seen = new Set<string>();
+          return parsed.filter((d: DepartmentUnit) => {
+            if (!d?.id || seen.has(d.id)) return false;
+            seen.add(d.id);
+            return true;
+          });
+        }
       }
       const seeded: DepartmentUnit[] = [...DEFAULT_DEPARTMENTS];
       const existingRooms = this.getRooms();
@@ -1679,7 +1698,13 @@ class HospitalStorageService {
   public getRooms(): ParaclinicalRoom[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.ROOMS);
-      return raw ? JSON.parse(raw) : initialRooms;
+      const list: ParaclinicalRoom[] = raw ? JSON.parse(raw) : initialRooms;
+      const seen = new Set<string>();
+      return list.filter(r => {
+        if (!r?.id || seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
     } catch (e) {
       return initialRooms;
     }
@@ -1849,12 +1874,19 @@ class HospitalStorageService {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.STAFF_PROFILES);
       const list: StaffProfile[] = raw ? JSON.parse(raw) : initialStaffProfiles;
-      return list.map(s => ({
-        ...s,
-        avatar: s.avatar?.includes('1594824813566')
-          ? 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=200&auto=format&fit=crop&q=80'
-          : s.avatar
-      }));
+      const seen = new Set<string>();
+      return list
+        .filter(s => {
+          if (!s?.userId || seen.has(s.userId)) return false;
+          seen.add(s.userId);
+          return true;
+        })
+        .map(s => ({
+          ...s,
+          avatar: s.avatar?.includes('1594824813566')
+            ? 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=200&auto=format&fit=crop&q=80'
+            : s.avatar
+        }));
     } catch (e) {
       return initialStaffProfiles;
     }

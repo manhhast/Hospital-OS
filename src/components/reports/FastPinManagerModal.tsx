@@ -187,11 +187,11 @@ export const FastPinManagerModal: React.FC<FastPinManagerModalProps> = ({
                 Không tìm thấy kỹ thuật nào khớp với từ khóa tìm kiếm.
               </div>
             ) : (
-              filteredServices.map(item => {
+              filteredServices.map((item, idx) => {
                 const isPinned = selectedNames.includes(item.name);
                 return (
                   <div
-                    key={item.id || item.name}
+                    key={`${item.id || item.name}-${idx}`}
                     onClick={() => togglePin(item.name)}
                     className={`p-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer ${
                       isPinned ? 'bg-indigo-50/60 dark:bg-indigo-950/30' : ''

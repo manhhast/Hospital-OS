@@ -16,10 +16,25 @@ export function formatDateVN(dateInput?: string | number | Date | null, fallback
   if (typeof dateInput === 'string') {
     const trimmed = dateInput.trim();
     if (!trimmed) return fallback;
+
+    // Check if only year: YYYY
+    if (/^\d{4}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    // Check if month/year: MM/YYYY or M/YYYY or MM-YYYY
+    const myMatch = trimmed.match(/^(\d{1,2})[-/](\d{4})$/);
+    if (myMatch) {
+      const mNum = parseInt(myMatch[1], 10);
+      if (mNum >= 1 && mNum <= 12) {
+        return `${myMatch[1].padStart(2, '0')}/${myMatch[2]}`;
+      }
+      return trimmed;
+    }
     
-    // Check if already in DD/MM/YYYY
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
-      const parts = trimmed.split('/');
+    // Check if already in DD/MM/YYYY or DD-MM-YYYY
+    if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(trimmed)) {
+      const parts = trimmed.split(/[-/]/);
       const d = parts[0].padStart(2, '0');
       const m = parts[1].padStart(2, '0');
       const y = parts[2];
@@ -53,6 +68,38 @@ export function formatDateVN(dateInput?: string | number | Date | null, fallback
   } catch (e) {
     return typeof dateInput === 'string' ? dateInput : fallback;
   }
+}
+
+/**
+ * Normalizes flexible Vietnamese date input supporting dd/mm/yyyy, mm/yyyy, or yyyy.
+ */
+export function normalizeFlexibleDateVN(raw?: string | null): string {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+
+  if (/^\d{4}$/.test(trimmed)) return trimmed;
+
+  const myMatch = trimmed.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (myMatch) {
+    const mNum = parseInt(myMatch[1], 10);
+    if (mNum >= 1 && mNum <= 12) {
+      return `${myMatch[1].padStart(2, '0')}/${myMatch[2]}`;
+    }
+    return trimmed;
+  }
+
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    return `${dmyMatch[1].padStart(2, '0')}/${dmyMatch[2].padStart(2, '0')}/${dmyMatch[3]}`;
+  }
+
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    return `${ymdMatch[3].padStart(2, '0')}/${ymdMatch[2].padStart(2, '0')}/${ymdMatch[1]}`;
+  }
+
+  return trimmed;
 }
 
 /**
@@ -160,6 +207,20 @@ export function toInputDateFormat(dateInput?: string | null): string {
   if (!dateInput) return '';
   const trimmed = dateInput.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  // YYYY
+  if (/^\d{4}$/.test(trimmed)) {
+    return `${trimmed}-01-01`;
+  }
+
+  // MM/YYYY or M/YYYY or MM-YYYY
+  const myMatch = trimmed.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (myMatch) {
+    const mNum = parseInt(myMatch[1], 10);
+    if (mNum >= 1 && mNum <= 12) {
+      return `${myMatch[2]}-${myMatch[1].padStart(2, '0')}-01`;
+    }
+  }
   
   // DD/MM/YYYY or DD-MM-YYYY
   const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);

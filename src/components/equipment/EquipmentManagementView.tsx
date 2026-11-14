@@ -1170,8 +1170,8 @@ export const EquipmentManagementView: React.FC = () => {
               {equipmentList.flatMap(e => (e.repairHistory || [])).length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl">Chưa có sự cố hư hỏng nào được ghi nhận.</p>
               ) : (
-                equipmentList.flatMap(e => (e.repairHistory || [])).map(repair => (
-                  <div key={repair.id} className="p-4 bg-white dark:bg-slate-900 rounded-xl border-2 border-slate-300 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                equipmentList.flatMap(e => (e.repairHistory || []).map(r => ({ ...r, eqId: e.id }))).map((repair, idx) => (
+                  <div key={`${repair.eqId}-${repair.id}-${idx}`} className="p-4 bg-white dark:bg-slate-900 rounded-xl border-2 border-slate-300 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">Sự cố</span>
