@@ -1,7 +1,7 @@
 import { 
   TaskItem, DocumentItem, User, NotificationLog, AuditLogItem, AppSettings, UserRole, CLSTitle,
   ShiftDuty, WorkTaskRow, WeeklyMeeting, ChatChannelMessage, ChatGroupChannel, DepartmentAnnouncement, MessageType, ShareCardData,
-  EquipmentItem, EquipmentDurationDefaults, ParaclinicalRoom, RoomReservation, StaffProfile, LeaveRequest, TrainingCourse,
+  EquipmentItem, EquipmentDurationDefaults, DepartmentUnit, ParaclinicalRoom, RoomReservation, StaffProfile, LeaveRequest, TrainingCourse,
   MeetingItem, MeetingMinutes, MeetingActionItem, IntegrationEndpoint, IntegrationPayloadSample, MaintenanceLog, RepairLog
 } from '../types/hospital';
 import { 
@@ -28,6 +28,7 @@ const STORAGE_KEYS = {
   CHANNELS: 'cls_workhub_channels',
   ANNOUNCEMENTS: 'cls_workhub_announcements',
   EQUIPMENT: 'cls_workhub_equipment',
+  DEPARTMENTS: 'cls_workhub_departments',
   ROOMS: 'cls_workhub_rooms',
   STAFF_PROFILES: 'cls_workhub_staff_profiles',
   LEAVE_REQUESTS: 'cls_workhub_leave_requests',
@@ -38,6 +39,33 @@ const STORAGE_KEYS = {
   WORK_TASK_ROWS: 'cls_workhub_work_task_rows',
   EQUIPMENT_DURATION_DEFAULTS: 'cls_workhub_equipment_duration_defaults'
 };
+
+const DEFAULT_DEPARTMENTS: DepartmentUnit[] = [
+  {
+    id: 'DEPT-CDHA',
+    code: 'BP-CDHA',
+    name: 'Chẩn đoán hình ảnh',
+    description: 'Bộ phận Chẩn đoán hình ảnh (CT Scanner, MRI, X-Quang kỹ thuật số)'
+  },
+  {
+    id: 'DEPT-XN',
+    code: 'BP-XN',
+    name: 'Xét nghiệm',
+    description: 'Bộ phận Xét nghiệm (Hóa sinh, Huyết học, Vi sinh, Miễn dịch)'
+  },
+  {
+    id: 'DEPT-TDCN',
+    code: 'BP-TDCN',
+    name: 'Thăm dò chức năng',
+    description: 'Bộ phận Thăm dò chức năng (Siêu âm, Nội soi, Điện tim)'
+  },
+  {
+    id: 'DEPT-HC',
+    code: 'BP-HC',
+    name: 'Hành chính Khoa',
+    description: 'Bộ phận Hành chính, Tiếp đón & Quản trị chất lượng Khoa CLS'
+  }
+];
 
 class HospitalStorageService {
   private currentUser: User = initialUsers[0]; // Default to Admin
@@ -1471,7 +1499,183 @@ class HospitalStorageService {
     return item;
   }
 
-  // --- Paraclinical Rooms ---
+  // --- Level 1 Departments (Bộ phận) ---
+  public getDepartments(): DepartmentUnit[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.DEPARTMENTS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+      const seeded: DepartmentUnit[] = [...DEFAULT_DEPARTMENTS];
+      const existingRooms = this.getRooms();
+      existingRooms.forEach((r, idx) => {
+        const sec = r.departmentSection?.trim();
+        if (sec && sec !== 'Chưa phân bộ phận' && !seeded.some(d => d.name === sec)) {
+          seeded.push({
+            id: `DEPT-AUTO-${idx}-${Date.now()}`,
+            code: `BP-${String(seeded.length + 1).padStart(2, '0')}`,
+            name: sec
+          });
+        }
+      });
+      localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(seeded));
+      return seeded;
+    } catch (e) {
+      return [...DEFAULT_DEPARTMENTS];
+    }
+  }
+
+  public saveDepartment(dept: DepartmentUnit): DepartmentUnit {
+    const depts = this.getDepartments();
+    const idx = depts.findIndex(d => d.id === dept.id);
+    let oldDept: DepartmentUnit | undefined;
+
+    if (idx >= 0) {
+      oldDept = depts[idx];
+      depts[idx] = dept;
+      if (oldDept && oldDept.name !== dept.name) {
+        this.cascadeDepartmentNameChange(oldDept.name, dept.name);
+      }
+    } else {
+      depts.push(dept);
+    }
+
+    localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(depts));
+    this.logAudit('SAVE_DEPARTMENT', 'Room', oldDept, dept);
+    this.notify();
+    return dept;
+  }
+
+  public cascadeDepartmentNameChange(oldName: string, newName: string) {
+    if (!oldName || !newName || oldName === newName) return;
+
+    const rooms = this.getRooms();
+    let roomsUpdated = false;
+    rooms.forEach(r => {
+      if (r.departmentSection === oldName) {
+        r.departmentSection = newName;
+        roomsUpdated = true;
+      }
+    });
+    if (roomsUpdated) {
+      localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
+    }
+
+    const staffList = this.getStaffProfiles();
+    let staffUpdated = false;
+    staffList.forEach(s => {
+      if (s.departmentSection === oldName) {
+        s.departmentSection = newName;
+        staffUpdated = true;
+      }
+    });
+    if (staffUpdated) {
+      localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+    }
+
+    const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
+    if (rawUsers) {
+      try {
+        const users: User[] = JSON.parse(rawUsers);
+        let usersUpdated = false;
+        users.forEach(u => {
+          if (u.department === oldName) {
+            u.department = newName;
+            usersUpdated = true;
+          }
+        });
+        if (usersUpdated) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+  }
+
+  public deleteDepartment(
+    deptId: string,
+    options?: { mode: 'transfer' | 'unassign' | 'delete_rooms'; targetDepartmentName?: string }
+  ): boolean {
+    const depts = this.getDepartments();
+    const targetDept = depts.find(d => d.id === deptId);
+    if (!targetDept) return false;
+
+    const filteredDepts = depts.filter(d => d.id !== deptId);
+    localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(filteredDepts));
+
+    const mode = options?.mode || 'unassign';
+    const targetDeptName = options?.targetDepartmentName?.trim();
+
+    const rooms = this.getRooms();
+    const affectedRoomNames = new Set(
+      rooms.filter(r => r.departmentSection === targetDept.name).map(r => r.name)
+    );
+
+    if (mode === 'delete_rooms') {
+      const remainingRooms = rooms.filter(r => r.departmentSection !== targetDept.name);
+      localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(remainingRooms));
+
+      const staffList = this.getStaffProfiles();
+      let staffUpdated = false;
+      staffList.forEach(s => {
+        if (s.departmentSection === targetDept.name) {
+          s.departmentSection = 'Chưa phân bộ phận';
+          staffUpdated = true;
+        }
+        if (s.room && affectedRoomNames.has(s.room)) {
+          s.room = 'Chưa phân phòng';
+          staffUpdated = true;
+        }
+      });
+      if (staffUpdated) {
+        localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+      }
+
+      const eqList = this.getEquipment();
+      let eqUpdated = false;
+      eqList.forEach(e => {
+        if (affectedRoomNames.has(e.room)) {
+          e.room = 'Kho thiết bị / Chưa phân phòng';
+          eqUpdated = true;
+        }
+      });
+      if (eqUpdated) {
+        localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
+      }
+    } else {
+      const newSection = mode === 'transfer' && targetDeptName ? targetDeptName : 'Chưa phân bộ phận';
+      let roomsUpdated = false;
+      rooms.forEach(r => {
+        if (r.departmentSection === targetDept.name) {
+          r.departmentSection = newSection;
+          roomsUpdated = true;
+        }
+      });
+      if (roomsUpdated) {
+        localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
+      }
+
+      const staffList = this.getStaffProfiles();
+      let staffUpdated = false;
+      staffList.forEach(s => {
+        if (s.departmentSection === targetDept.name) {
+          s.departmentSection = newSection;
+          staffUpdated = true;
+        }
+      });
+      if (staffUpdated) {
+        localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+      }
+    }
+
+    this.logAudit('DELETE_DEPARTMENT', 'Room', targetDept, options);
+    this.notify();
+    return true;
+  }
+
+  // --- Level 2 Paraclinical Rooms (Phòng trực thuộc Bộ phận) ---
   public getRooms(): ParaclinicalRoom[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.ROOMS);

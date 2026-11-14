@@ -342,6 +342,15 @@ export interface RoomReservation {
   patientInfo?: string;
 }
 
+export interface DepartmentUnit {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  managerName?: string;
+  createdAt?: string;
+}
+
 export interface ParaclinicalRoom {
   id: string;
   code: string;

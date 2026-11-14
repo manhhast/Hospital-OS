@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, X, AlertTriangle, Layers, UserCheck, ShieldCheck } from 'lucide-react';
-import { ParaclinicalRoom, StaffProfile } from '../../types/hospital';
+import { Building2, X, AlertTriangle } from 'lucide-react';
+import { DepartmentUnit, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
 
 interface RoomModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (roomData: Partial<ParaclinicalRoom>, isEdit: boolean) => void;
   initialRoom?: ParaclinicalRoom | null;
+  departments: DepartmentUnit[];
+  defaultDepartmentSection?: string;
   staffList: StaffProfile[];
 }
 
@@ -15,13 +17,15 @@ export const RoomModal: React.FC<RoomModalProps> = ({
   onClose,
   onSave,
   initialRoom,
+  departments,
+  defaultDepartmentSection,
   staffList
 }) => {
   const isEdit = !!initialRoom;
 
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
-  const [departmentSection, setDepartmentSection] = useState('Chẩn đoán hình ảnh');
+  const [departmentSection, setDepartmentSection] = useState('');
   const [floor, setFloor] = useState('Tầng 1 - Khu Cận Lâm Sàng');
   const [managerInCharge, setManagerInCharge] = useState('');
   const [deputyManager, setDeputyManager] = useState('');
@@ -32,10 +36,12 @@ export const RoomModal: React.FC<RoomModalProps> = ({
   const [description, setDescription] = useState('');
 
   useEffect(() => {
+    if (!isOpen) return;
+    const fallbackDept = defaultDepartmentSection || departments[0]?.name || 'Chưa phân bộ phận';
     if (initialRoom) {
       setCode(initialRoom.code || '');
       setName(initialRoom.name || '');
-      setDepartmentSection(initialRoom.departmentSection || 'Chẩn đoán hình ảnh');
+      setDepartmentSection(initialRoom.departmentSection || fallbackDept);
       setFloor(initialRoom.floor || 'Tầng 1 - Khu Cận Lâm Sàng');
       setManagerInCharge(initialRoom.managerInCharge || (staffList[0]?.fullName || ''));
       setDeputyManager(initialRoom.deputyManager || '');
@@ -47,7 +53,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
     } else {
       setCode(`P-${Math.floor(100 + Math.random() * 900)}-CLS`);
       setName('');
-      setDepartmentSection('Chẩn đoán hình ảnh');
+      setDepartmentSection(fallbackDept);
       setFloor('Tầng 1 - Khu Cận Lâm Sàng');
       setManagerInCharge(staffList[0]?.fullName || '');
       setDeputyManager('');
@@ -57,14 +63,14 @@ export const RoomModal: React.FC<RoomModalProps> = ({
       setStatus('Đang hoạt động');
       setDescription('');
     }
-  }, [initialRoom, staffList, isOpen]);
+  }, [initialRoom, staffList, departments, defaultDepartmentSection, isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !code.trim()) {
-      alert('Vui lòng nhập đầy đủ Mã phòng và Tên phòng/bộ phận');
+      alert('Vui lòng nhập đầy đủ Mã phòng và Tên phòng');
       return;
     }
 
@@ -72,7 +78,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
       id: initialRoom?.id || `RM-${Date.now()}`,
       code: code.trim(),
       name: name.trim(),
-      departmentSection,
+      departmentSection: departmentSection || departments[0]?.name || 'Chưa phân bộ phận',
       floor,
       managerInCharge: managerInCharge || staffList[0]?.fullName || 'Chưa chỉ định',
       deputyManager: deputyManager.trim() || undefined,
@@ -87,6 +93,8 @@ export const RoomModal: React.FC<RoomModalProps> = ({
     onClose();
   };
 
+  const deptNames = departments.map(d => d.name);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -97,15 +105,21 @@ export const RoomModal: React.FC<RoomModalProps> = ({
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                {isEdit ? 'Chỉnh Sửa / Đổi Tên Phòng - Bộ Phận' : 'Thêm Phòng / Bộ Phận Trực Thuộc Mới'}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                  {isEdit ? 'Chỉnh Sửa / Đổi Tên Phòng' : 'Thêm Phòng Trực Thuộc Mới'}
+                </h2>
+                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  Cấp 2
+                </span>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isEdit ? 'Hệ thống sẽ tự động đồng bộ tên phòng mới đến nhân sự và thiết bị liên quan' : 'Tạo mới đơn vị phòng máy hoặc bộ phận chuyên môn trực thuộc Khoa CLS'}
+                {isEdit ? 'Hệ thống sẽ tự động đồng bộ tên phòng mới đến nhân sự và thiết bị liên quan' : 'Tạo mới đơn vị Phòng (Cấp 2) trực thuộc một Bộ phận (Cấp 1)'}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
@@ -128,7 +142,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
             {/* Room Code */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Mã Phòng / Bộ Phận <span className="text-rose-500">*</span>
+                Mã Phòng <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -140,21 +154,27 @@ export const RoomModal: React.FC<RoomModalProps> = ({
               />
             </div>
 
-            {/* Department Section Category */}
+            {/* Parent Department Section (Level 1) */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Phân Loại Bộ Phận <span className="text-rose-500">*</span>
+                Thuộc Bộ Phận (Cấp 1) <span className="text-rose-500">*</span>
               </label>
               <select
                 value={departmentSection}
                 onChange={e => setDepartmentSection(e.target.value)}
                 className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh (CT/MRI/X-quang)</option>
-                <option value="Xét nghiệm">Xét nghiệm (Sinh hóa/Huyết học/Vi sinh)</option>
-                <option value="Thăm dò chức năng">Thăm dò chức năng (Siêu âm/Nội soi/Điện tim)</option>
-                <option value="Hành chính Khoa">Hành chính & Quản trị Khoa</option>
-                <option value="Khác">Khác / Tiệt trùng & Hậu cần</option>
+                {departmentSection && !deptNames.includes(departmentSection) && (
+                  <option value={departmentSection}>{departmentSection}</option>
+                )}
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.name}>
+                    {dept.name} ({dept.code})
+                  </option>
+                ))}
+                {departments.length === 0 && (
+                  <option value="Chưa phân bộ phận">Chưa phân bộ phận</option>
+                )}
               </select>
             </div>
           </div>
@@ -162,7 +182,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
           {/* Full Room Name */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Tên Đầy Đủ Phòng / Bộ Phận <span className="text-rose-500">*</span>
+              Tên Đầy Đủ Phòng (Cấp 2) <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"

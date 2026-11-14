@@ -1,48 +1,92 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Building2, Users, Wrench, AlertTriangle, CheckCircle2, 
-  Plus, Search, ShieldAlert, ArrowRightLeft, Edit3, Trash2, Layers, HardDrive,
-  BarChart3, UserCheck, Star, Activity, Phone, FileText, ChevronRight, XCircle,
-  HelpCircle, RefreshCw
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Building2, Users, Wrench, AlertTriangle, Plus, Search, Edit3, Trash2,
+  Layers, Activity, ChevronDown, ChevronRight, FolderTree, ChevronsUpDown
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
-import { ParaclinicalRoom, StaffProfile, EquipmentItem } from '../../types/hospital';
+import { DepartmentUnit, ParaclinicalRoom, StaffProfile, EquipmentItem } from '../../types/hospital';
 import { RoomModal } from './RoomModal';
+import { DepartmentModal } from './DepartmentModal';
 import { RoomStaffTab } from './RoomStaffTab';
 import { RoomEquipmentTab } from './RoomEquipmentTab';
 
 export const RoomManagementView: React.FC = () => {
+  const [departments, setDepartments] = useState<DepartmentUnit[]>([]);
   const [rooms, setRooms] = useState<ParaclinicalRoom[]>([]);
   const [staffList, setStaffList] = useState<StaffProfile[]>([]);
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
-  const [selectedRoom, setSelectedRoom] = useState<ParaclinicalRoom | null>(null);
 
-  // Filter & Search states
+  // Active workspace selection: either a Level 2 Room or a Level 1 Department overview
+  const [selectedRoom, setSelectedRoom] = useState<ParaclinicalRoom | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentUnit | null>(null);
+  const [expandedDeptIds, setExpandedDeptIds] = useState<Record<string, boolean>>({});
+
+  // Search & sub-tab states
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDepartmentFilter, setSelectedDepartmentFilter] = useState<string>('all');
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'staff' | 'equipment'>('overview');
 
-  // Modals state
+  // Room Modals state (Level 2)
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<ParaclinicalRoom | null>(null);
+  const [defaultRoomDeptSection, setDefaultRoomDeptSection] = useState<string | undefined>(undefined);
   const [deleteModalRoom, setDeleteModalRoom] = useState<ParaclinicalRoom | null>(null);
   const [transferTargetRoom, setTransferTargetRoom] = useState<string>('');
 
+  // Department Modals state (Level 1)
+  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  const [editingDept, setEditingDept] = useState<DepartmentUnit | null>(null);
+  const [deleteModalDept, setDeleteModalDept] = useState<DepartmentUnit | null>(null);
+  const [deptDeleteMode, setDeptDeleteMode] = useState<'transfer' | 'unassign' | 'delete_rooms'>('transfer');
+  const [deptTransferTarget, setDeptTransferTarget] = useState<string>('');
+
+  // Admin check
+  const currentUser = storageService.getCurrentUser();
+  const isAdmin =
+    currentUser.role === 'Admin' ||
+    currentUser.id === 'USR-ADMIN' ||
+    currentUser.title === 'Quản trị ứng dụng' ||
+    currentUser.title === 'Quản trị hệ thống' ||
+    currentUser.title?.includes('Trưởng khoa');
+
   useEffect(() => {
     const loadAllData = () => {
+      const d = storageService.getDepartments();
       const r = storageService.getRooms();
       const s = storageService.getStaffProfiles();
       const e = storageService.getEquipment();
+
+      setDepartments(d);
       setRooms(r);
       setStaffList(s);
       setEquipmentList(e);
 
-      // Keep selectedRoom reference up to date
+      // Auto-expand any newly seen departments on initial load
+      setExpandedDeptIds(prev => {
+        const next = { ...prev };
+        d.forEach(dept => {
+          if (next[dept.id] === undefined) {
+            next[dept.id] = true;
+          }
+        });
+        if (next['__UNASSIGNED__'] === undefined) {
+          next['__UNASSIGNED__'] = true;
+        }
+        return next;
+      });
+
+      // Keep active selections synced
+      setSelectedDepartment(prevDept => {
+        if (!prevDept) return null;
+        return d.find(item => item.id === prevDept.id) || null;
+      });
+
       if (r.length > 0) {
         setSelectedRoom(prev => {
-          if (!prev) return r[0];
-          const found = r.find(item => item.id === prev.id);
-          return found || r[0];
+          if (prev) {
+            const found = r.find(item => item.id === prev.id);
+            if (found) return found;
+          }
+          return r[0];
         });
       } else {
         setSelectedRoom(null);
@@ -53,38 +97,135 @@ export const RoomManagementView: React.FC = () => {
     return storageService.subscribe(loadAllData);
   }, []);
 
-  // Department tabs list
-  const departmentSections = ['all', 'Chẩn đoán hình ảnh', 'Xét nghiệm', 'Thăm dò chức năng', 'Hành chính Khoa'];
+  // Filtered hierarchy groups
+  const normalizedSearch = searchTerm.trim().toLowerCase();
 
-  // Filtered rooms
-  const filteredRooms = rooms.filter(room => {
-    const matchDept = selectedDepartmentFilter === 'all' || room.departmentSection === selectedDepartmentFilter;
-    const matchSearch = room.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        room.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        room.managerInCharge.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        room.primaryEquipment.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchDept && matchSearch;
-  });
+  const knownDeptNames = useMemo(() => new Set(departments.map(d => d.name)), [departments]);
 
-  // Calculate high-level stats
+  const orphanRooms = useMemo(
+    () => rooms.filter(r => !knownDeptNames.has(r.departmentSection)),
+    [rooms, knownDeptNames]
+  );
+
+  const filteredDepartmentGroups = useMemo(() => {
+    return departments
+      .map(dept => {
+        const deptRooms = rooms.filter(r => r.departmentSection === dept.name);
+        const deptMatches =
+          !normalizedSearch ||
+          dept.name.toLowerCase().includes(normalizedSearch) ||
+          dept.code.toLowerCase().includes(normalizedSearch) ||
+          (dept.managerName && dept.managerName.toLowerCase().includes(normalizedSearch));
+
+        const matchingRooms = deptMatches
+          ? deptRooms
+          : deptRooms.filter(
+              r =>
+                r.name.toLowerCase().includes(normalizedSearch) ||
+                r.code.toLowerCase().includes(normalizedSearch) ||
+                r.managerInCharge.toLowerCase().includes(normalizedSearch) ||
+                r.primaryEquipment.toLowerCase().includes(normalizedSearch)
+            );
+
+        const isVisible = !normalizedSearch || deptMatches || matchingRooms.length > 0;
+        return {
+          dept,
+          rooms: matchingRooms,
+          totalRoomsInDept: deptRooms.length,
+          isVisible
+        };
+      })
+      .filter(group => group.isVisible);
+  }, [departments, rooms, normalizedSearch]);
+
+  const filteredOrphanRooms = useMemo(() => {
+    if (!normalizedSearch) return orphanRooms;
+    return orphanRooms.filter(
+      r =>
+        r.name.toLowerCase().includes(normalizedSearch) ||
+        r.code.toLowerCase().includes(normalizedSearch) ||
+        (r.departmentSection && r.departmentSection.toLowerCase().includes(normalizedSearch)) ||
+        r.managerInCharge.toLowerCase().includes(normalizedSearch)
+    );
+  }, [orphanRooms, normalizedSearch]);
+
+  // High-level KPI stats
+  const totalDepartments = departments.length;
   const totalRooms = rooms.length;
   const activeRooms = rooms.filter(r => r.status === 'Đang hoạt động').length;
   const totalCasesToday = rooms.reduce((acc, r) => acc + (r.currentDayCases || 0), 0);
-  const avgUtilization = rooms.length > 0 
-    ? Math.round(rooms.reduce((acc, r) => acc + (r.utilizationRate || 0), 0) / rooms.length) 
-    : 0;
+  const avgUtilization =
+    rooms.length > 0
+      ? Math.round(rooms.reduce((acc, r) => acc + (r.utilizationRate || 0), 0) / rooms.length)
+      : 0;
 
-  // Staff and Equipment counts for the selected room
-  const selectedRoomStaff = selectedRoom 
-    ? staffList.filter(s => s.room === selectedRoom.name) 
+  // Staff & Equipment for active Room
+  const selectedRoomStaff = selectedRoom
+    ? staffList.filter(s => s.room === selectedRoom.name)
     : [];
-  const selectedRoomEquipment = selectedRoom 
-    ? equipmentList.filter(e => e.room === selectedRoom.name || e.room.toLowerCase().includes(selectedRoom.code.toLowerCase())) 
+  const selectedRoomEquipment = selectedRoom
+    ? equipmentList.filter(
+        e => e.room === selectedRoom.name || e.room.toLowerCase().includes(selectedRoom.code.toLowerCase())
+      )
     : [];
 
-  // Handlers
-  const handleSaveRoom = (roomData: Partial<ParaclinicalRoom>, isEdit: boolean) => {
+  // Toggle expand/collapse
+  const toggleDeptExpand = (deptId: string) => {
+    setExpandedDeptIds(prev => ({ ...prev, [deptId]: !prev[deptId] }));
+  };
+
+  const allExpanded = departments.length > 0 && departments.every(d => expandedDeptIds[d.id]);
+  const handleToggleExpandAll = () => {
+    const targetState = !allExpanded;
+    const next: Record<string, boolean> = { __UNASSIGNED__: targetState };
+    departments.forEach(d => {
+      next[d.id] = targetState;
+    });
+    setExpandedDeptIds(next);
+  };
+
+  // Department (Level 1) Handlers
+  const handleSaveDepartment = (dept: DepartmentUnit) => {
+    const saved = storageService.saveDepartment(dept);
+    setExpandedDeptIds(prev => ({ ...prev, [saved.id]: true }));
+    setSelectedDepartment(saved);
+    setSelectedRoom(null);
+  };
+
+  const openDeleteDeptModal = (dept: DepartmentUnit) => {
+    const otherDepts = departments.filter(d => d.id !== dept.id);
+    setDeptDeleteMode(otherDepts.length > 0 ? 'transfer' : 'unassign');
+    setDeptTransferTarget(otherDepts[0]?.name || '');
+    setDeleteModalDept(dept);
+  };
+
+  const handleConfirmDeleteDepartment = () => {
+    if (!deleteModalDept) return;
+    storageService.deleteDepartment(deleteModalDept.id, {
+      mode: deptDeleteMode,
+      targetDepartmentName: deptTransferTarget
+    });
+    if (selectedDepartment?.id === deleteModalDept.id) {
+      setSelectedDepartment(null);
+    }
+    setDeleteModalDept(null);
+    setDeptTransferTarget('');
+  };
+
+  // Room (Level 2) Handlers
+  const openAddRoomForDept = (deptName?: string) => {
+    setEditingRoom(null);
+    setDefaultRoomDeptSection(deptName || selectedDepartment?.name || departments[0]?.name);
+    setIsRoomModalOpen(true);
+  };
+
+  const handleSaveRoom = (roomData: Partial<ParaclinicalRoom>) => {
     const saved = storageService.saveRoom(roomData as ParaclinicalRoom);
+    const parentDept = departments.find(d => d.name === saved.departmentSection);
+    if (parentDept) {
+      setExpandedDeptIds(prev => ({ ...prev, [parentDept.id]: true }));
+    }
+    setSelectedDepartment(null);
     setSelectedRoom(saved);
   };
 
@@ -117,51 +258,164 @@ export const RoomManagementView: React.FC = () => {
     storageService.removeEquipmentFromRoom(equipmentId);
   };
 
+  const renderRoomTreeItem = (room: ParaclinicalRoom) => {
+    const isSelected = !selectedDepartment && selectedRoom?.id === room.id;
+    const roomStaffCount = staffList.filter(s => s.room === room.name).length;
+    const roomEqCount = equipmentList.filter(
+      e => e.room === room.name || e.room.toLowerCase().includes(room.code.toLowerCase())
+    ).length;
+
+    return (
+      <div
+        key={room.id}
+        onClick={() => {
+          setSelectedDepartment(null);
+          setSelectedRoom(room);
+        }}
+        className={`group p-3 rounded-xl border transition-all cursor-pointer ${
+          isSelected
+            ? 'bg-blue-50/90 dark:bg-blue-950/50 border-blue-500 shadow-sm ring-1 ring-blue-500/30'
+            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded uppercase tracking-wider">
+                Cấp 2
+              </span>
+              <span className="text-[10px] font-extrabold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-mono">
+                {room.code}
+              </span>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  room.status === 'Đang hoạt động'
+                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                    : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                }`}
+              >
+                {room.status}
+              </span>
+            </div>
+            <h4 className="font-bold text-slate-900 dark:text-white text-xs mt-1.5 leading-snug">
+              {room.name}
+            </h4>
+          </div>
+
+          {isAdmin && (
+            <div
+              className="flex items-center gap-0.5 shrink-0"
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingRoom(room);
+                  setDefaultRoomDeptSection(room.departmentSection);
+                  setIsRoomModalOpen(true);
+                }}
+                title="Đổi tên / Sửa phòng"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteModalRoom(room)}
+                title="Xóa phòng"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="flex items-center space-x-2.5">
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3 text-blue-500" /> {roomStaffCount} NS
+            </span>
+            <span className="flex items-center gap-1">
+              <Wrench className="w-3 h-3 text-indigo-500" /> {roomEqCount} Máy
+            </span>
+          </div>
+          <span className="font-semibold text-slate-700 dark:text-slate-300">
+            {room.currentDayCases}/{room.maxCapacityCasesPerDay} ca
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Top Banner */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wider">
-            <Building2 className="w-4 h-4" /> Danh Sách Phòng / Bộ Phận Trực Thuộc Khoa & Quản Lý Nguồn Lực
+            <FolderTree className="w-4 h-4" /> Cơ Cấu Phân Cấp: Bộ Phận (Cấp 1) → Phòng Trực Thuộc (Cấp 2)
           </div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">
-            Cơ Cấu Phòng Ban, Nhân Sự & Máy Móc Cận Lâm Sàng
+            Quản Lý Bộ Phận, Phòng Chuyên Môn & Nguồn Lực
           </h1>
           <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">
-            Quản lý danh sách phòng, bộ phận chuyên môn; điều phối nhân viên trực thuộc từ hồ sơ <strong>Nhân Sự & Đào Tạo</strong>; gán và quản lý thiết bị y tế từ <strong>Quản Lý Máy Móc</strong>; cập nhật và chỉnh sửa thông tin phòng ban linh hoạt.
+            Tổ chức khoa theo 2 cấp rõ ràng: <strong>Bộ phận (Cấp 1)</strong> quản lý danh sách các <strong>Phòng trực thuộc (Cấp 2)</strong>, điều phối nhân sự và thiết bị y tế theo từng phòng.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <button
-            onClick={() => {
-              setEditingRoom(null);
-              setIsRoomModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-600/20"
-          >
-            <Plus className="w-4 h-4" /> Thêm Phòng / Bộ Phận Mới
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setEditingDept(null);
+                setIsDeptModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-indigo-600/20"
+            >
+              <Plus className="w-4 h-4" /> Thêm Bộ Phận (Cấp 1)
+            </button>
+            <button
+              type="button"
+              onClick={() => openAddRoomForDept()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-600/20"
+            >
+              <Plus className="w-4 h-4" /> Thêm Phòng (Cấp 2)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* KPI Overview Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
-          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
-            <Building2 className="w-5 h-5" />
+          <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+            <Layers className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Tổng số Phòng / Bộ phận</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Bộ phận (Cấp 1)</p>
             <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {totalRooms} <span className="text-xs text-emerald-500 font-bold font-mono">({activeRooms} hoạt động)</span>
+              {totalDepartments} <span className="text-xs text-slate-400 font-normal">bộ phận</span>
             </h3>
           </div>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
-          <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Phòng trực thuộc (Cấp 2)</p>
+            <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
+              {totalRooms}{' '}
+              <span className="text-xs text-emerald-500 font-bold font-mono">({activeRooms} hoạt động)</span>
+            </h3>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
+          <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
             <Users className="w-5 h-5" />
           </div>
           <div>
@@ -173,25 +427,14 @@ export const RoomManagementView: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
-          <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
-            <Wrench className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Tổng máy móc thiết bị</p>
-            <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {equipmentList.length} <span className="text-xs text-slate-400 font-normal">hệ thống</span>
-            </h3>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
           <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
             <Activity className="w-5 h-5" />
           </div>
           <div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Tổng ca bệnh hôm nay</p>
             <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {totalCasesToday} <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">({avgUtilization}%)</span>
+              {totalCasesToday}{' '}
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">({avgUtilization}%)</span>
             </h3>
           </div>
         </div>
@@ -199,176 +442,449 @@ export const RoomManagementView: React.FC = () => {
 
       {/* Main Split Interface */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Department Filter & Room List (4.5 cols) */}
-        <div className="lg:col-span-4 space-y-4">
-          {/* Department Filter Tabs */}
+        {/* Left Column: 2-Level Hierarchy Tree (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          {/* Tree Header & Search */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <h3 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-blue-500" />
-                Bộ Phận Trực Thuộc
+                <FolderTree className="w-4 h-4 text-indigo-500" />
+                Cây Cơ Cấu Bộ Phận & Phòng
               </h3>
-              <span className="text-[11px] font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full">
-                {rooms.length} phòng
-              </span>
+              <button
+                type="button"
+                onClick={handleToggleExpandAll}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 transition-colors"
+              >
+                <ChevronsUpDown className="w-3 h-3" />
+                {allExpanded ? 'Thu gọn' : 'Mở rộng tất cả'}
+              </button>
             </div>
 
-            {/* Department Pill Filter */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {departmentSections.map(dept => {
-                const count = dept === 'all' 
-                  ? rooms.length 
-                  : rooms.filter(r => r.departmentSection === dept).length;
-                const isSelected = selectedDepartmentFilter === dept;
-
-                return (
-                  <button
-                    key={dept}
-                    onClick={() => setSelectedDepartmentFilter(dept)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
-                      isSelected
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    <span>{dept === 'all' ? 'Tất cả' : dept}</span>
-                    <span className={`text-[10px] px-1 rounded ${isSelected ? 'bg-white/20' : 'bg-slate-200 dark:bg-slate-700'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Search Input */}
-            <div className="relative pt-2">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 mt-1 -translate-y-1/2 text-slate-400" />
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Tìm mã phòng, tên phòng, phụ trách..."
+                placeholder="Tìm tên bộ phận, mã phòng, tên phòng..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>
 
-          {/* Rooms Scrollable List */}
-          <div className="space-y-3 max-h-[calc(100vh-380px)] overflow-y-auto custom-scrollbar pr-1">
-            {filteredRooms.length === 0 ? (
-              <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs text-slate-400">
-                Không tìm thấy phòng nào phù hợp với điều kiện tìm kiếm.
+          {/* Hierarchical List */}
+          <div className="space-y-3 max-h-[calc(100vh-340px)] overflow-y-auto custom-scrollbar pr-1">
+            {filteredDepartmentGroups.length === 0 && filteredOrphanRooms.length === 0 ? (
+              <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs text-slate-400 space-y-2">
+                <p>Không tìm thấy Bộ phận hoặc Phòng phù hợp.</p>
+                {isAdmin && departments.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingDept(null);
+                      setIsDeptModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-bold"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Tạo Bộ Phận Đầu Tiên
+                  </button>
+                )}
               </div>
             ) : (
-              filteredRooms.map(room => {
-                const isSelected = selectedRoom?.id === room.id;
-                const roomStaffCount = staffList.filter(s => s.room === room.name).length;
-                const roomEqCount = equipmentList.filter(e => e.room === room.name || e.room.toLowerCase().includes(room.code.toLowerCase())).length;
+              <>
+                {filteredDepartmentGroups.map(({ dept, rooms: deptRooms, totalRoomsInDept }) => {
+                  const isExpanded = normalizedSearch ? true : !!expandedDeptIds[dept.id];
+                  const isDeptSelected = selectedDepartment?.id === dept.id;
 
-                return (
-                  <div
-                    key={room.id}
-                    onClick={() => setSelectedRoom(room)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer relative ${
-                      isSelected
-                        ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-500 shadow-md ring-1 ring-blue-500/30'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-extrabold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded uppercase tracking-wider">
-                            {room.code}
-                          </span>
-                          <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold truncate max-w-[140px]">
-                            {room.departmentSection}
-                          </span>
+                  return (
+                    <div
+                      key={dept.id}
+                      className={`rounded-2xl border transition-all overflow-hidden ${
+                        isDeptSelected
+                          ? 'bg-indigo-50/40 dark:bg-indigo-950/30 border-indigo-400 dark:border-indigo-700 shadow-sm'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm'
+                      }`}
+                    >
+                      {/* LEVEL 1 HEADER: Bộ Phận */}
+                      <div
+                        onClick={() => {
+                          setSelectedDepartment(dept);
+                          setExpandedDeptIds(prev => ({ ...prev, [dept.id]: true }));
+                        }}
+                        className="p-3.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              toggleDeptExpand(dept.id);
+                            }}
+                            className="p-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 shrink-0"
+                            title={isExpanded ? 'Thu gọn danh sách phòng' : 'Mở rộng danh sách phòng'}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded uppercase tracking-wider border border-indigo-200/70 dark:border-indigo-800">
+                                Cấp 1
+                              </span>
+                              <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                                {dept.code}
+                              </span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                {totalRoomsInDept} phòng
+                              </span>
+                            </div>
+                            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm mt-1 truncate">
+                              {dept.name}
+                            </h3>
+                          </div>
                         </div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm mt-1 leading-snug">
-                          {room.name}
-                        </h4>
+
+                        {/* Admin Actions for Level 1 Bộ phận */}
+                        {isAdmin && (
+                          <div
+                            className="flex items-center gap-0.5 shrink-0"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => openAddRoomForDept(dept.name)}
+                              title={`Thêm phòng (Cấp 2) vào bộ phận ${dept.name}`}
+                              className="p-1.5 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingDept(dept);
+                                setIsDeptModalOpen(true);
+                              }}
+                              title="Đổi tên / Sửa bộ phận"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openDeleteDeptModal(dept)}
+                              title="Xóa bộ phận"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
 
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                        room.status === 'Đang hoạt động' 
-                          ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' 
-                          : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
-                      }`}>
-                        {room.status}
-                      </span>
+                      {/* LEVEL 2 CHILDREN: Phòng thuộc Bộ Phận */}
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 bg-slate-50/70 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800/80">
+                          <div className="ml-3 pl-3 border-l-2 border-indigo-200 dark:border-indigo-800/70 space-y-2 pt-2">
+                            {deptRooms.length === 0 ? (
+                              <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 text-center space-y-1.5">
+                                <p className="text-[11px] text-slate-400">
+                                  Chưa có phòng trực thuộc trong bộ phận này
+                                </p>
+                                {isAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openAddRoomForDept(dept.name)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-lg transition-colors"
+                                  >
+                                    <Plus className="w-3 h-3" /> Thêm phòng vào bộ phận
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              deptRooms.map(room => renderRoomTreeItem(room))
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  );
+                })}
 
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium">
-                      Phụ trách: <strong className="text-slate-700 dark:text-slate-300">{room.managerInCharge}</strong>
-                    </p>
-
-                    {/* Resources Count & Utilization */}
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                      <div className="flex items-center space-x-3">
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5 text-blue-500" /> {roomStaffCount} NS
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Wrench className="w-3.5 h-3.5 text-indigo-500" /> {roomEqCount} Máy
-                        </span>
+                {/* Orphaned Rooms Fallback Group (if any room doesn't belong to a named Level 1 dept) */}
+                {filteredOrphanRooms.length > 0 && (
+                  <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div
+                      onClick={() => toggleDeptExpand('__UNASSIGNED__')}
+                      className="p-3.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-amber-50/50 dark:hover:bg-amber-950/20"
+                    >
+                      <div className="flex items-center gap-2">
+                        {expandedDeptIds['__UNASSIGNED__'] ? (
+                          <ChevronDown className="w-4 h-4 text-amber-500" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-amber-500" />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 rounded uppercase">
+                              Chưa phân bộ phận
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {filteredOrphanRooms.length} phòng
+                            </span>
+                          </div>
+                          <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs mt-1">
+                            Các phòng chưa gắn Bộ phận (Cấp 1)
+                          </h3>
+                        </div>
                       </div>
-                      <span className="font-bold text-slate-800 dark:text-slate-200">
-                        {room.currentDayCases}/{room.maxCapacityCasesPerDay} ca ({room.utilizationRate}%)
-                      </span>
                     </div>
+
+                    {(normalizedSearch || expandedDeptIds['__UNASSIGNED__']) && (
+                      <div className="px-3 pb-3 pt-1 bg-slate-50/70 dark:bg-slate-950/40 border-t border-amber-100 dark:border-amber-900/40">
+                        <div className="ml-3 pl-3 border-l-2 border-amber-200 dark:border-amber-800 space-y-2 pt-2">
+                          {filteredOrphanRooms.map(room => renderRoomTreeItem(room))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                );
-              })
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {/* Right Column: Active Room Workspace (8 cols) */}
-        <div className="lg:col-span-8 space-y-4">
-          {selectedRoom ? (
+        {/* Right Column: Active Department (Level 1) or Active Room (Level 2) Workspace (7 cols) */}
+        <div className="lg:col-span-7 space-y-4">
+          {selectedDepartment ? (
+            /* LEVEL 1 DEPARTMENT WORKSPACE */
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
+              <div className="border-b border-slate-200 dark:border-slate-800 pb-5 flex flex-col md:flex-row md:items-start justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded text-xs font-extrabold uppercase">
+                      Cấp 1 • Bộ Phận
+                    </span>
+                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-xs font-mono font-bold">
+                      {selectedDepartment.code}
+                    </span>
+                  </div>
+                  <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white">
+                    {selectedDepartment.name}
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {selectedDepartment.managerName
+                      ? <>Phụ trách bộ phận: <strong className="text-slate-800 dark:text-slate-200">{selectedDepartment.managerName}</strong></>
+                      : 'Chưa chỉ định người phụ trách bộ phận'}
+                  </p>
+                </div>
+
+                {isAdmin && (
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openAddRoomForDept(selectedDepartment.name)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Thêm Phòng (Cấp 2)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingDept(selectedDepartment);
+                        setIsDeptModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-indigo-500" /> Đổi Tên / Sửa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openDeleteDeptModal(selectedDepartment)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Xóa Bộ Phận
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {selectedDepartment.description && (
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
+                  <span className="font-bold text-slate-900 dark:text-white block mb-1">Chức năng chuyên môn:</span>
+                  {selectedDepartment.description}
+                </div>
+              )}
+
+              {/* Child Rooms List inside Selected Department */}
+              {(() => {
+                const deptRooms = rooms.filter(r => r.departmentSection === selectedDepartment.name);
+                const deptStaffCount = staffList.filter(s => s.departmentSection === selectedDepartment.name).length;
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-blue-600" />
+                        Danh Sách Phòng Trực Thuộc (Cấp 2) — {deptRooms.length} phòng • {deptStaffCount} nhân sự
+                      </h3>
+                    </div>
+
+                    {deptRooms.length === 0 ? (
+                      <div className="p-10 text-center bg-slate-50/70 dark:bg-slate-800/30 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                        <Building2 className="w-8 h-8 text-slate-300 mx-auto" />
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Bộ phận <strong>"{selectedDepartment.name}"</strong> hiện chưa có phòng trực thuộc nào.
+                        </p>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => openAddRoomForDept(selectedDepartment.name)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                          >
+                            <Plus className="w-4 h-4" /> Tạo Phòng Đầu Tiên Cho Bộ Phận Này
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {deptRooms.map(room => {
+                          const rStaffCount = staffList.filter(s => s.room === room.name).length;
+                          const rEqCount = equipmentList.filter(
+                            e => e.room === room.name || e.room.toLowerCase().includes(room.code.toLowerCase())
+                          ).length;
+
+                          return (
+                            <div
+                              key={room.id}
+                              onClick={() => {
+                                setSelectedDepartment(null);
+                                setSelectedRoom(room);
+                              }}
+                              className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-400 dark:hover:border-blue-600 transition-all cursor-pointer space-y-2.5 shadow-2xs"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded font-mono">
+                                      {room.code}
+                                    </span>
+                                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                      {room.status}
+                                    </span>
+                                  </div>
+                                  <h4 className="font-bold text-slate-900 dark:text-white text-sm mt-1">
+                                    {room.name}
+                                  </h4>
+                                </div>
+                                {isAdmin && (
+                                  <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRoom(room);
+                                        setDefaultRoomDeptSection(room.departmentSection);
+                                        setIsRoomModalOpen(true);
+                                      }}
+                                      title="Đổi tên / Sửa phòng"
+                                      className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/60"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteModalRoom(room)}
+                                      title="Xóa phòng"
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/60"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Phụ trách: <strong className="text-slate-700 dark:text-slate-200">{room.managerInCharge}</strong>
+                              </p>
+
+                              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                                <span>{rStaffCount} Nhân sự • {rEqCount} Thiết bị</span>
+                                <span className="text-blue-600 dark:text-blue-400 font-bold">Mở chi tiết →</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : selectedRoom ? (
+            /* LEVEL 2 ROOM WORKSPACE */
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
               {/* Room Detailed Header */}
               <div className="border-b border-slate-200 dark:border-slate-800 pb-5 flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded text-xs font-bold uppercase">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded text-[10px] font-extrabold uppercase">
+                      Cấp 2 • Phòng
+                    </span>
+                    <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-xs font-bold font-mono uppercase">
                       {selectedRoom.code}
                     </span>
                     <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      Bộ phận: <strong className="text-slate-700 dark:text-slate-300">{selectedRoom.departmentSection}</strong>
+                      Thuộc Bộ phận (Cấp 1):{' '}
+                      <strong className="text-indigo-600 dark:text-indigo-400">
+                        {selectedRoom.departmentSection}
+                      </strong>
                     </span>
                   </div>
                   <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white">
                     {selectedRoom.name}
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    Vị trí: {selectedRoom.floor} • Trưởng phòng: <strong className="text-slate-800 dark:text-slate-200">{selectedRoom.managerInCharge}</strong>
-                    {selectedRoom.deputyManager && <span> • KTV Trưởng: <strong>{selectedRoom.deputyManager}</strong></span>}
+                    Vị trí: {selectedRoom.floor} • Trưởng phòng:{' '}
+                    <strong className="text-slate-800 dark:text-slate-200">{selectedRoom.managerInCharge}</strong>
+                    {selectedRoom.deputyManager && (
+                      <span>
+                        {' '}
+                        • Phó phụ trách: <strong>{selectedRoom.deputyManager}</strong>
+                      </span>
+                    )}
                   </p>
                 </div>
 
-                {/* Top Action Buttons for Selected Room */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => {
-                      setEditingRoom(selectedRoom);
-                      setIsRoomModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
-                    title="Chỉnh sửa hoặc đổi tên phòng/bộ phận"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-blue-500" /> Đổi Tên / Sửa
-                  </button>
+                {/* Top Action Buttons for Selected Room (Admin) */}
+                {isAdmin && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingRoom(selectedRoom);
+                        setDefaultRoomDeptSection(selectedRoom.departmentSection);
+                        setIsRoomModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
+                      title="Chỉnh sửa hoặc đổi tên phòng"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-blue-500" /> Đổi Tên / Sửa
+                    </button>
 
-                  <button
-                    onClick={() => setDeleteModalRoom(selectedRoom)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
-                    title="Xóa phòng này"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Xóa Phòng
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteModalRoom(selectedRoom)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
+                      title="Xóa phòng này"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Xóa Phòng
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Navigation Sub-Tabs */}
@@ -410,7 +926,6 @@ export const RoomManagementView: React.FC = () => {
               {/* SUB-TAB 1: Overview & Capacity */}
               {activeSubTab === 'overview' && (
                 <div className="space-y-6 animate-fade-in">
-                  {/* Utilization Metrics Block */}
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
@@ -431,14 +946,13 @@ export const RoomManagementView: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Progress bar */}
                     <div className="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
-                          selectedRoom.utilizationRate > 85 
-                            ? 'bg-amber-500' 
-                            : selectedRoom.utilizationRate > 100 
-                            ? 'bg-rose-500' 
+                          selectedRoom.utilizationRate > 85
+                            ? 'bg-amber-500'
+                            : selectedRoom.utilizationRate > 100
+                            ? 'bg-rose-500'
                             : 'bg-blue-600 dark:bg-blue-500'
                         }`}
                         style={{ width: `${Math.min(selectedRoom.utilizationRate, 100)}%` }}
@@ -446,7 +960,6 @@ export const RoomManagementView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Room Info Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
                       <h5 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5 text-blue-600">
@@ -459,7 +972,7 @@ export const RoomManagementView: React.FC = () => {
                           {selectedRoomStaff.slice(0, 4).map(s => (
                             <div key={s.userId} className="flex items-center justify-between text-xs">
                               <span className="font-semibold text-slate-800 dark:text-slate-200">{s.fullName}</span>
-                              <span className="text-[11px] text-slate-500">{s.title || 'Cán bộ'}</span>
+                              <span className="text-[11px] text-slate-500">{s.title || 'Nhân viên'}</span>
                             </div>
                           ))}
                           {selectedRoomStaff.length > 4 && (
@@ -484,7 +997,9 @@ export const RoomManagementView: React.FC = () => {
                         <div className="space-y-1.5 pt-1">
                           {selectedRoomEquipment.slice(0, 4).map(eq => (
                             <div key={eq.id} className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">{eq.name}</span>
+                              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
+                                {eq.name}
+                              </span>
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
                                 {eq.status}
                               </span>
@@ -528,14 +1043,27 @@ export const RoomManagementView: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400">
-              Vui lòng chọn một phòng từ danh sách bên trái để xem chi tiết hoặc quản lý nhân sự & thiết bị.
+            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 text-sm">
+              Vui lòng chọn một Bộ phận (Cấp 1) hoặc Phòng trực thuộc (Cấp 2) ở cây danh sách bên trái để xem chi tiết.
             </div>
           )}
         </div>
       </div>
 
-      {/* MODAL: Add / Edit Room */}
+      {/* MODAL 1: Add / Edit Level 1 Bộ Phận */}
+      <DepartmentModal
+        isOpen={isDeptModalOpen}
+        onClose={() => {
+          setIsDeptModalOpen(false);
+          setEditingDept(null);
+        }}
+        onSave={handleSaveDepartment}
+        initialDepartment={editingDept}
+        existingDepartments={departments}
+        staffList={staffList}
+      />
+
+      {/* MODAL 2: Add / Edit Level 2 Phòng */}
       <RoomModal
         isOpen={isRoomModalOpen}
         onClose={() => {
@@ -544,10 +1072,129 @@ export const RoomManagementView: React.FC = () => {
         }}
         onSave={handleSaveRoom}
         initialRoom={editingRoom}
+        departments={departments}
+        defaultDepartmentSection={defaultRoomDeptSection}
         staffList={staffList}
       />
 
-      {/* MODAL: Safe Room Deletion with Transfer Option */}
+      {/* MODAL 3: Safe Level 1 Department Deletion */}
+      {deleteModalDept && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-6 space-y-4">
+            <div className="flex items-center space-x-3 text-rose-600 dark:text-rose-400">
+              <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  Xác Nhận Xóa Bộ Phận (Cấp 1)
+                </h3>
+                <p className="text-xs text-slate-500">Thao tác sẽ gỡ bộ phận khỏi cơ cấu phân cấp</p>
+              </div>
+            </div>
+
+            {(() => {
+              const childRoomsCount = rooms.filter(r => r.departmentSection === deleteModalDept.name).length;
+              const childStaffCount = staffList.filter(s => s.departmentSection === deleteModalDept.name).length;
+              const otherDepts = departments.filter(d => d.id !== deleteModalDept.id);
+
+              return (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Bạn đang chuẩn bị xóa Bộ phận <strong>"{deleteModalDept.name}"</strong> ({deleteModalDept.code}).
+                    {childRoomsCount > 0 && (
+                      <span>
+                        {' '}
+                        Hiện có <strong>{childRoomsCount} phòng (Cấp 2)</strong> và{' '}
+                        <strong>{childStaffCount} nhân sự</strong> trực thuộc bộ phận này.
+                      </span>
+                    )}
+                  </p>
+
+                  {childRoomsCount > 0 && (
+                    <div className="space-y-2.5 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
+                      <label className="block font-bold text-slate-700 dark:text-slate-200">
+                        Xử lý các Phòng (Cấp 2) trực thuộc:
+                      </label>
+
+                      {otherDepts.length > 0 && (
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="deptDeleteMode"
+                            checked={deptDeleteMode === 'transfer'}
+                            onChange={() => setDeptDeleteMode('transfer')}
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1 space-y-1.5">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              Chuyển sang Bộ phận khác:
+                            </span>
+                            {deptDeleteMode === 'transfer' && (
+                              <select
+                                value={deptTransferTarget}
+                                onChange={e => setDeptTransferTarget(e.target.value)}
+                                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white outline-none"
+                              >
+                                {otherDepts.map(d => (
+                                  <option key={d.id} value={d.name}>
+                                    {d.name} ({d.code})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </label>
+                      )}
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="deptDeleteMode"
+                          checked={deptDeleteMode === 'unassign'}
+                          onChange={() => setDeptDeleteMode('unassign')}
+                        />
+                        <span className="text-slate-700 dark:text-slate-300">
+                          Giữ lại phòng ở nhóm "Chưa phân bộ phận"
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-rose-600 dark:text-rose-400">
+                        <input
+                          type="radio"
+                          name="deptDeleteMode"
+                          checked={deptDeleteMode === 'delete_rooms'}
+                          onChange={() => setDeptDeleteMode('delete_rooms')}
+                        />
+                        <span className="font-semibold">Xóa luôn toàn bộ phòng trực thuộc bộ phận này</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setDeleteModalDept(null)}
+                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteDepartment}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-all shadow-md shadow-rose-600/20"
+              >
+                Xóa Bộ Phận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Safe Level 2 Room Deletion with Transfer Option */}
       {deleteModalRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-6 space-y-4">
@@ -557,14 +1204,15 @@ export const RoomManagementView: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                  Xác Nhận Xóa Phòng / Bộ Phận
+                  Xác Nhận Xóa Phòng (Cấp 2)
                 </h3>
                 <p className="text-xs text-slate-500">Thao tác này sẽ xóa vĩnh viễn cấu hình phòng</p>
               </div>
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300">
-              Bạn đang chuẩn bị xóa phòng <strong>"{deleteModalRoom.name}"</strong> ({deleteModalRoom.code}).
+              Bạn đang chuẩn bị xóa phòng <strong>"{deleteModalRoom.name}"</strong> ({deleteModalRoom.code}) thuộc Bộ phận{' '}
+              <strong>{deleteModalRoom.departmentSection}</strong>.
             </p>
 
             <div>
@@ -577,11 +1225,13 @@ export const RoomManagementView: React.FC = () => {
                 className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
               >
                 <option value="">-- Chuyển về trạng thái Chưa phân phòng --</option>
-                {rooms.filter(r => r.id !== deleteModalRoom.id).map(r => (
-                  <option key={r.id} value={r.name}>
-                    {r.name} ({r.code})
-                  </option>
-                ))}
+                {rooms
+                  .filter(r => r.id !== deleteModalRoom.id)
+                  .map(r => (
+                    <option key={r.id} value={r.name}>
+                      {r.name} ({r.code} - {r.departmentSection})
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -589,7 +1239,7 @@ export const RoomManagementView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDeleteModalRoom(null)}
-                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 rounded-xl"
+                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
               >
                 Hủy bỏ
               </button>

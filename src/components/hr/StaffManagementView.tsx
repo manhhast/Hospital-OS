@@ -9,7 +9,7 @@ import {
 import { storageService } from '../../services/storageService';
 import { 
   StaffProfile, LeaveRequest, TrainingCourse, EmploymentStatus, WorkStatusHistoryItem, CLSTitle, UserRole,
-  MedicalCertificate, ParaclinicalRoom, User
+  MedicalCertificate, DepartmentUnit, ParaclinicalRoom, User
 } from '../../types/hospital';
 import { formatDateVN, toInputDateFormat, normalizeVietnamesePhone } from '../../utils/dateUtils';
 
@@ -243,7 +243,8 @@ export const StaffManagementView: React.FC = () => {
     staffName: string;
   } | null>(null);
 
-  // Paraclinical Rooms from Quản lý phòng ban
+  // Paraclinical Departments & Rooms from Quản lý phòng ban
+  const [departments, setDepartments] = useState<DepartmentUnit[]>([]);
   const [rooms, setRooms] = useState<ParaclinicalRoom[]>([]);
 
   // Add Staff Modal State
@@ -326,6 +327,7 @@ export const StaffManagementView: React.FC = () => {
       setProfiles(storageService.getStaffProfiles());
       setLeaveRequests(storageService.getLeaveRequests());
       setTrainingCourses(storageService.getTrainingCourses());
+      setDepartments(storageService.getDepartments());
       setRooms(storageService.getRooms());
     };
     loadData();
@@ -573,17 +575,15 @@ export const StaffManagementView: React.FC = () => {
     }
   };
 
-  // Extract unique departments & rooms from Room Management AND staff profiles
+  // Extract unique departments & rooms from Level 1 Departments, Room Management AND staff profiles
+  const configuredDepts = departments.map(d => d.name).filter(Boolean);
   const roomDepts = Array.from(new Set(rooms.map(r => r.departmentSection).filter(Boolean)));
   const profileDepts = Array.from(new Set(profiles.map(p => p.departmentSection).filter(Boolean)));
   const allDepartments = Array.from(new Set([
+    ...configuredDepts,
     ...roomDepts,
-    ...profileDepts,
-    'Chẩn đoán hình ảnh',
-    'Xét nghiệm',
-    'Thăm dò chức năng',
-    'Hành chính Khoa'
-  ]));
+    ...profileDepts
+  ])).filter(d => d !== 'Chưa phân bộ phận');
 
   const roomNames = Array.from(new Set(rooms.map(r => r.name).filter(Boolean)));
   const profileRooms = Array.from(new Set(profiles.map(p => p.room).filter(Boolean) as string[]));
