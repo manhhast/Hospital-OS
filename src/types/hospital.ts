@@ -441,6 +441,7 @@ export interface StaffProfile {
   gender?: 'Nam' | 'Nữ' | 'Khác'; // Giới tính
   avatar?: string;
   specialty: string;
+  educationLevel?: 'Trên Đại học' | 'Đại học' | 'Cao đẳng' | 'Trung cấp' | string;
   experienceYears: number;
   joinDate?: string; // YYYY-MM-DD - Ngày vào làm
   degrees: string[];

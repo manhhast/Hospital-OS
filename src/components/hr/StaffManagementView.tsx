@@ -261,6 +261,7 @@ export const StaffManagementView: React.FC = () => {
     dob: '1990-01-01',
     gender: 'Nam' as 'Nam' | 'Nữ' | 'Khác',
     specialty: '',
+    educationLevel: '',
     joinDate: new Date().toISOString().split('T')[0],
     experienceYears: 3,
     currentStatus: 'Đang làm việc' as EmploymentStatus,
@@ -575,21 +576,29 @@ export const StaffManagementView: React.FC = () => {
     }
   };
 
-  // Extract unique departments & rooms from Level 1 Departments, Room Management AND staff profiles
-  const configuredDepts = departments.map(d => d.name).filter(Boolean);
-  const roomDepts = Array.from(new Set(rooms.map(r => r.departmentSection).filter(Boolean)));
-  const profileDepts = Array.from(new Set(profiles.map(p => p.departmentSection).filter(Boolean)));
-  const allDepartments = Array.from(new Set([
-    ...configuredDepts,
-    ...roomDepts,
-    ...profileDepts
-  ])).filter(d => d !== 'Chưa phân bộ phận');
+  // Extract departments & rooms strictly from Quản lý Phòng / Bộ phận
+  const allDepartments = Array.from(
+    new Set<string>(departments.map(d => d.name).filter((n): n is string => Boolean(n)))
+  ).filter(d => d !== 'Chưa phân bộ phận');
 
-  const roomNames = Array.from(new Set(rooms.map(r => r.name).filter(Boolean)));
-  const profileRooms = Array.from(new Set(profiles.map(p => p.room).filter(Boolean) as string[]));
-  const allRoomNames = Array.from(new Set([...roomNames, ...profileRooms]));
+  const allRoomNames = Array.from(
+    new Set<string>(rooms.map(r => r.name).filter((n): n is string => Boolean(n)))
+  );
 
-  const allDepartmentsAndRooms = Array.from(new Set([...allDepartments, ...allRoomNames]));
+  const getRoomsForDepartment = (deptName?: string): string[] => {
+    const trimmed = deptName?.trim();
+    if (!trimmed) return allRoomNames;
+    return Array.from(
+      new Set<string>(
+        rooms
+          .filter(r => r.departmentSection === trimmed)
+          .map(r => r.name)
+          .filter((n): n is string => Boolean(n))
+      )
+    );
+  };
+
+  const allDepartmentsAndRooms = Array.from(new Set<string>([...allDepartments, ...allRoomNames]));
 
   // Filter staff profiles
   const filteredProfiles = profiles.filter(p => {
@@ -615,18 +624,21 @@ export const StaffManagementView: React.FC = () => {
 
   // Reset Add Staff Form
   const resetNewStaffForm = () => {
+    const defaultDept = allDepartments[0] || '';
+    const defaultDeptRooms = getRoomsForDepartment(defaultDept);
     setNewStaffForm({
       userId: `NV-${Math.floor(1000 + Math.random() * 9000)}`,
       fullName: '',
       title: 'Nhân viên' as CLSTitle,
       role: 'Staff' as UserRole,
-      departmentSection: allDepartments[0] || 'Chẩn đoán hình ảnh',
-      room: allRoomNames[0] || (rooms[0]?.name ?? 'Phòng Chụp X-Quang Kỹ Thuật Số'),
+      departmentSection: defaultDept,
+      room: defaultDeptRooms[0] || '',
       phone: '',
       email: '',
       dob: '1990-01-01',
       gender: 'Nam',
       specialty: '',
+      educationLevel: '',
       joinDate: new Date().toISOString().split('T')[0],
       experienceYears: 3,
       currentStatus: 'Đang làm việc',
@@ -654,7 +666,7 @@ export const StaffManagementView: React.FC = () => {
       'Họ và Tên (*)',
       'Chức danh (*)',
       'Vai trò hệ thống',
-      'Bộ phận / Khoa (*)',
+      'Bộ phận (*)',
       'Phòng làm việc',
       'Số điện thoại (10 số)',
       'Email',
@@ -1039,6 +1051,7 @@ export const StaffManagementView: React.FC = () => {
       dob: formatDateVN(newStaffForm.dob),
       gender: newStaffForm.gender,
       specialty: newStaffForm.specialty.trim() || `Chuyên môn ${newStaffForm.departmentSection}`,
+      educationLevel: newStaffForm.educationLevel || undefined,
       experienceYears: newStaffForm.joinDate ? calculateYearsOfService(newStaffForm.joinDate, newStaffForm.experienceYears) : newStaffForm.experienceYears,
       joinDate: formatDateVN(newStaffForm.joinDate),
       degrees: [newStaffForm.title.includes('Bác sĩ') ? 'Bác sĩ Đa khoa' : 'Cử nhân Kỹ thuật Y học'],
@@ -1375,14 +1388,14 @@ export const StaffManagementView: React.FC = () => {
                   >
                     <option value="all" className="dark:bg-slate-900 font-bold">Tất cả Phòng / Bộ phận</option>
                     {allDepartments.length > 0 && (
-                      <optgroup label="── Bộ phận / Phân khoa ──" className="dark:bg-slate-900 font-bold text-slate-500">
+                      <optgroup label="── Bộ phận (Quản lý Phòng / Bộ phận) ──" className="dark:bg-slate-900 font-bold text-slate-500">
                         {allDepartments.map(dept => (
                           <option key={`dept-${dept}`} value={dept} className="dark:bg-slate-900 font-normal">{dept}</option>
                         ))}
                       </optgroup>
                     )}
                     {allRoomNames.length > 0 && (
-                      <optgroup label="── Phòng làm việc (Quản lý phòng ban) ──" className="dark:bg-slate-900 font-bold text-slate-500">
+                      <optgroup label="── Phòng trực thuộc (Quản lý Phòng / Bộ phận) ──" className="dark:bg-slate-900 font-bold text-slate-500">
                         {allRoomNames.map(room => (
                           <option key={`rm-${room}`} value={room} className="dark:bg-slate-900 font-normal">{room}</option>
                         ))}
@@ -1637,8 +1650,15 @@ export const StaffManagementView: React.FC = () => {
                       {/* Specialty & Degrees */}
                       <div className="space-y-2 text-xs bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
                         <div>
-                          <span className="text-slate-400 dark:text-slate-500 block text-[10px] uppercase font-bold">Chuyên môn chính:</span>
-                          <p className="text-slate-800 dark:text-slate-200 font-medium mt-0.5">{staff.specialty}</p>
+                          <span className="text-slate-400 dark:text-slate-500 block text-[10px] uppercase font-bold">Trình độ chuyên môn:</span>
+                          <p className="text-slate-800 dark:text-slate-200 font-medium mt-0.5">
+                            {staff.educationLevel && (
+                              <span className="inline-block mr-1.5 px-1.5 py-0.2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded border border-indigo-100 dark:border-indigo-800 text-[10px] font-bold">
+                                {staff.educationLevel}
+                              </span>
+                            )}
+                            {staff.specialty}
+                          </p>
                         </div>
                         <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                           <span className="text-slate-400 dark:text-slate-500 block text-[10px] uppercase font-bold">Bằng cấp & Học vị:</span>
@@ -1720,7 +1740,7 @@ export const StaffManagementView: React.FC = () => {
                             <th className="p-3 whitespace-nowrap">Chức danh / Vai trò</th>
                             <th className="p-3 whitespace-nowrap">Phòng làm việc</th>
                             <th className="p-3 whitespace-nowrap">Trạng thái</th>
-                            <th className="p-3 whitespace-nowrap">Chuyên môn</th>
+                            <th className="p-3 whitespace-nowrap">Trình độ chuyên môn</th>
                             <th className="p-3 whitespace-nowrap">Ngày vào làm</th>
                             <th className="p-3 whitespace-nowrap">Số năm công tác</th>
                             <th className="p-3 text-right whitespace-nowrap min-w-[150px]">Thao tác</th>
@@ -1779,8 +1799,8 @@ export const StaffManagementView: React.FC = () => {
                               <td className="p-3 whitespace-nowrap">
                                 {getEmploymentStatusBadge(staff.currentStatus)}
                               </td>
-                              <td className="p-3 text-slate-700 dark:text-slate-300 max-w-xs truncate" title={staff.specialty}>
-                                {staff.specialty}
+                              <td className="p-3 text-slate-700 dark:text-slate-300 max-w-xs truncate" title={`${staff.educationLevel ? staff.educationLevel + ' - ' : ''}${staff.specialty}`}>
+                                {staff.educationLevel ? `${staff.educationLevel} • ` : ''}{staff.specialty}
                               </td>
                               <td className="p-3 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                 {staff.joinDate ? formatDateVN(staff.joinDate) : '---'}
@@ -2402,19 +2422,24 @@ export const StaffManagementView: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Cột trái: Bộ Phận / Khoa (Menu dạng thả xuống) */}
+                  {/* Cột trái: Bộ Phận (Từ Quản lý Phòng / Bộ phận) */}
                   <div>
                     <label className="h-5 flex items-center font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                      Bộ Phận / Khoa <span className="text-rose-500 ml-0.5">*</span>:
+                      Bộ Phận <span className="text-rose-500 ml-0.5">*</span>:
                     </label>
                     <select
                       required
                       value={editingStaff.departmentSection}
-                      onChange={e => setEditingStaff({ ...editingStaff, departmentSection: e.target.value })}
+                      onChange={e => {
+                        const nextDept = e.target.value;
+                        const nextDeptRooms = getRoomsForDepartment(nextDept);
+                        const keepRoom = editingStaff.room && nextDeptRooms.includes(editingStaff.room) ? editingStaff.room : '';
+                        setEditingStaff({ ...editingStaff, departmentSection: nextDept, room: keepRoom });
+                      }}
                       className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
                     >
-                      <option value="">-- Chọn bộ phận / khoa ({allDepartments.length}) --</option>
+                      <option value="">-- Chọn bộ phận ({allDepartments.length}) --</option>
                       {editingStaff.departmentSection && !allDepartments.includes(editingStaff.departmentSection) && (
                         <option value={editingStaff.departmentSection}>{editingStaff.departmentSection}</option>
                       )}
@@ -2424,34 +2449,43 @@ export const StaffManagementView: React.FC = () => {
                     </select>
                   </div>
 
-                  {/* Cột phải: Phòng Làm Việc Trực Thuộc (Menu dạng thả xuống) */}
+                  {/* Cột phải: Phòng Làm Việc Trực Thuộc theo Bộ phận đã chọn */}
                   <div>
                     <label className="h-5 flex items-center font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                       <Grid className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                       Phòng Làm Việc Trực Thuộc:
                     </label>
-                    <select
-                      value={editingStaff.room || ''}
-                      onChange={e => setEditingStaff({ ...editingStaff, room: e.target.value })}
-                      className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
-                    >
-                      <option value="">-- Chưa phân phòng làm việc --</option>
-                      {editingStaff.room && !allRoomNames.includes(editingStaff.room) && (
-                        <option value={editingStaff.room}>{editingStaff.room}</option>
-                      )}
-                      {allRoomNames.map(r => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const deptRooms = getRoomsForDepartment(editingStaff.departmentSection);
+                      return (
+                        <select
+                          value={editingStaff.room || ''}
+                          onChange={e => setEditingStaff({ ...editingStaff, room: e.target.value })}
+                          className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
+                        >
+                          <option value="">
+                            {editingStaff.departmentSection && deptRooms.length === 0
+                              ? `-- Bộ phận "${editingStaff.departmentSection}" chưa có phòng trực thuộc --`
+                              : `-- Chưa phân phòng làm việc (${deptRooms.length}) --`}
+                          </option>
+                          {editingStaff.room && !deptRooms.includes(editingStaff.room) && (
+                            <option value={editingStaff.room}>{editingStaff.room}</option>
+                          )}
+                          {deptRooms.map(r => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
                 </div>
 
-                {/* Hàng dưới: Chuyên môn chính (50%) & Ngày vào làm + Số năm công tác (50%) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                  {/* Cột trái: Chuyên môn chính */}
-                  <div>
+                {/* Hàng giữa: Trình độ chuyên môn (ô nhập + menu thả xuống chọn bậc) */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 pt-1">
+                  {/* Ô nhập Trình độ chuyên môn */}
+                  <div className="md:col-span-7">
                     <label className="h-5 flex items-center font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Chuyên Môn Chính <span className="text-rose-500 ml-0.5">*</span>:
+                      Trình Độ Chuyên Môn <span className="text-rose-500 ml-0.5">*</span>:
                     </label>
                     <input
                       type="text"
@@ -2463,44 +2497,65 @@ export const StaffManagementView: React.FC = () => {
                     />
                   </div>
 
-                  {/* Cột phải: 2 ô cân đối Ngày Vào Làm & Số Năm Công Tác */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="h-5 flex items-center font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Ngày Vào Làm:
-                      </label>
-                      <input
-                        type="date"
-                        value={toInputDateFormat(editingStaff.joinDate)}
-                        onChange={e => {
-                          const newJoinDate = formatDateVN(e.target.value);
-                          const calculatedYears = calculateYearsOfService(newJoinDate, editingStaff.experienceYears);
-                          setEditingStaff({
-                            ...editingStaff,
-                            joinDate: newJoinDate,
-                            experienceYears: calculatedYears
-                          });
-                        }}
-                        className="w-full h-10 px-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-100 shadow-2xs"
-                      />
+                  {/* Menu thả xuống chọn bậc trình độ */}
+                  <div className="md:col-span-5">
+                    <label className="h-5 flex items-center font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Bậc Trình Độ:
+                    </label>
+                    <select
+                      value={editingStaff.educationLevel || ''}
+                      onChange={e => setEditingStaff({ ...editingStaff, educationLevel: e.target.value })}
+                      className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
+                    >
+                      <option value="">-- Chọn trình độ --</option>
+                      {editingStaff.educationLevel && !['Trên Đại học', 'Đại học', 'Cao đẳng', 'Trung cấp'].includes(editingStaff.educationLevel) && (
+                        <option value={editingStaff.educationLevel}>{editingStaff.educationLevel}</option>
+                      )}
+                      <option value="Trên Đại học">Trên Đại học</option>
+                      <option value="Đại học">Đại học</option>
+                      <option value="Cao đẳng">Cao đẳng</option>
+                      <option value="Trung cấp">Trung cấp</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Hàng dưới: Ngày Vào Làm & Số Năm Công Tác */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                  <div>
+                    <label className="h-5 flex items-center font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Ngày Vào Làm:
+                    </label>
+                    <input
+                      type="date"
+                      value={toInputDateFormat(editingStaff.joinDate)}
+                      onChange={e => {
+                        const newJoinDate = formatDateVN(e.target.value);
+                        const calculatedYears = calculateYearsOfService(newJoinDate, editingStaff.experienceYears);
+                        setEditingStaff({
+                          ...editingStaff,
+                          joinDate: newJoinDate,
+                          experienceYears: calculatedYears
+                        });
+                      }}
+                      className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-100 shadow-2xs"
+                    />
+                  </div>
+                  <div>
+                    <div className="h-5 flex items-center justify-between mb-1">
+                      <label className="font-semibold text-slate-700 dark:text-slate-300">Số Năm Công Tác:</label>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">(Tự tính)</span>
                     </div>
-                    <div>
-                      <div className="h-5 flex items-center justify-between mb-1">
-                        <label className="font-semibold text-slate-700 dark:text-slate-300">Số Năm Công Tác:</label>
-                        <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">(Tự tính)</span>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min={0}
-                          value={editingStaff.experienceYears}
-                          onChange={e => setEditingStaff({ ...editingStaff, experienceYears: parseInt(e.target.value) || 0 })}
-                          className="w-full h-10 pl-3 pr-11 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white shadow-2xs"
-                        />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 dark:text-slate-500 pointer-events-none">
-                          năm
-                        </span>
-                      </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingStaff.experienceYears}
+                        onChange={e => setEditingStaff({ ...editingStaff, experienceYears: parseInt(e.target.value) || 0 })}
+                        className="w-full h-10 pl-3 pr-11 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white shadow-2xs"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 dark:text-slate-500 pointer-events-none">
+                        năm
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -3289,7 +3344,7 @@ export const StaffManagementView: React.FC = () => {
 
                       <div className="space-y-2.5 text-xs">
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Khoa / Bộ phận:</span>
+                          <span className="text-slate-500">Bộ phận:</span>
                           <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{selectedDetailStaff.departmentSection}</strong>
                         </div>
                         <div className="flex items-center justify-between">
@@ -3327,8 +3382,13 @@ export const StaffManagementView: React.FC = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                       <div>
-                        <span className="text-slate-400 uppercase text-[10px] font-bold block">Chuyên môn chính:</span>
+                        <span className="text-slate-400 uppercase text-[10px] font-bold block">Trình độ chuyên môn:</span>
                         <p className="text-slate-900 dark:text-white font-medium mt-1 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                          {selectedDetailStaff.educationLevel && (
+                            <span className="inline-block mr-1.5 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded border border-indigo-100 dark:border-indigo-800 text-[11px] font-bold">
+                              {selectedDetailStaff.educationLevel}
+                            </span>
+                          )}
                           {selectedDetailStaff.specialty || 'Chưa cập nhật chuyên môn'}
                         </p>
                       </div>
@@ -3538,31 +3598,58 @@ export const StaffManagementView: React.FC = () => {
 
                     <div>
                       <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Khoa / Bộ phận:
+                        Bộ phận:
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={assignedDept}
-                        onChange={e => setAssignedDept(e.target.value)}
-                        placeholder="VD: XQ, Siêu âm, Xét nghiệm..."
+                        onChange={e => {
+                          const nextDept = e.target.value;
+                          setAssignedDept(nextDept);
+                          const nextDeptRooms = getRoomsForDepartment(nextDept);
+                          if (assignedRoom && !nextDeptRooms.includes(assignedRoom)) {
+                            setAssignedRoom('');
+                          }
+                        }}
                         className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
-                      />
+                      >
+                        <option value="">-- Chọn bộ phận ({allDepartments.length}) --</option>
+                        {assignedDept && !allDepartments.includes(assignedDept) && (
+                          <option value={assignedDept}>{assignedDept}</option>
+                        )}
+                        {allDepartments.map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
                       <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                         Phòng làm việc trực thuộc:
                       </label>
-                      <select
-                        value={assignedRoom}
-                        onChange={e => setAssignedRoom(e.target.value)}
-                        className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
-                      >
-                        <option value="">-- Phòng chung khoa --</option>
-                        {rooms.map(r => (
-                          <option key={r.id} value={r.name}>{r.name} ({r.code})</option>
-                        ))}
-                      </select>
+                      {(() => {
+                        const filteredRooms = assignedDept
+                          ? rooms.filter(r => r.departmentSection === assignedDept)
+                          : rooms;
+                        return (
+                          <select
+                            value={assignedRoom}
+                            onChange={e => setAssignedRoom(e.target.value)}
+                            className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
+                          >
+                            <option value="">
+                              {assignedDept && filteredRooms.length === 0
+                                ? `-- Bộ phận chưa có phòng trực thuộc --`
+                                : `-- Phòng chung bộ phận (${filteredRooms.length}) --`}
+                            </option>
+                            {assignedRoom && !filteredRooms.some(r => r.name === assignedRoom) && (
+                              <option value={assignedRoom}>{assignedRoom}</option>
+                            )}
+                            {filteredRooms.map(r => (
+                              <option key={r.id} value={r.name}>{r.name} ({r.code})</option>
+                            ))}
+                          </select>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -4196,37 +4283,55 @@ export const StaffManagementView: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Bộ phận / Phân khoa */}
+                {/* Bộ phận */}
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Bộ Phận / Khoa (Từ Quản lý phòng ban) <span className="text-red-500">*</span>
+                    Bộ Phận (Từ Quản lý Phòng / Bộ phận) <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={newStaffForm.departmentSection}
-                    onChange={e => setNewStaffForm({ ...newStaffForm, departmentSection: e.target.value })}
+                    onChange={e => {
+                      const nextDept = e.target.value;
+                      const nextDeptRooms = getRoomsForDepartment(nextDept);
+                      setNewStaffForm({
+                        ...newStaffForm,
+                        departmentSection: nextDept,
+                        room: nextDeptRooms.includes(newStaffForm.room) ? newStaffForm.room : (nextDeptRooms[0] || '')
+                      });
+                    }}
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
                   >
+                    <option value="">-- Chọn bộ phận ({allDepartments.length}) --</option>
                     {allDepartments.map(dept => (
                       <option key={dept} value={dept}>{dept}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Phòng làm việc */}
+                {/* Phòng làm việc trực thuộc bộ phận đã chọn */}
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Phòng Làm Việc Cụ Thể <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={newStaffForm.room}
-                    onChange={e => setNewStaffForm({ ...newStaffForm, room: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
-                  >
-                    <option value="">-- Chưa phân phòng --</option>
-                    {allRoomNames.map(room => (
-                      <option key={room} value={room}>{room}</option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const deptRooms = getRoomsForDepartment(newStaffForm.departmentSection);
+                    return (
+                      <select
+                        value={newStaffForm.room}
+                        onChange={e => setNewStaffForm({ ...newStaffForm, room: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                      >
+                        <option value="">
+                          {newStaffForm.departmentSection && deptRooms.length === 0
+                            ? `-- Bộ phận chưa có phòng trực thuộc --`
+                            : `-- Chưa phân phòng (${deptRooms.length}) --`}
+                        </option>
+                        {deptRooms.map(room => (
+                          <option key={room} value={room}>{room}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </div>
 
                 {/* Trạng thái công tác */}
@@ -4304,10 +4409,10 @@ export const StaffManagementView: React.FC = () => {
                   />
                 </div>
 
-                {/* Chuyên môn chính */}
-                <div className="md:col-span-2">
+                {/* Trình độ chuyên môn (ô nhập + menu thả xuống chọn bậc) */}
+                <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Chuyên Môn Chính
+                    Trình Độ Chuyên Môn
                   </label>
                   <input
                     type="text"
@@ -4316,6 +4421,23 @@ export const StaffManagementView: React.FC = () => {
                     onChange={e => setNewStaffForm({ ...newStaffForm, specialty: e.target.value })}
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white"
                   />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Bậc Trình Độ
+                  </label>
+                  <select
+                    value={newStaffForm.educationLevel}
+                    onChange={e => setNewStaffForm({ ...newStaffForm, educationLevel: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                  >
+                    <option value="">-- Chọn trình độ --</option>
+                    <option value="Trên Đại học">Trên Đại học</option>
+                    <option value="Đại học">Đại học</option>
+                    <option value="Cao đẳng">Cao đẳng</option>
+                    <option value="Trung cấp">Trung cấp</option>
+                  </select>
                 </div>
 
                 {/* Ngày vào làm */}
@@ -4497,7 +4619,7 @@ export const StaffManagementView: React.FC = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                       <span>• Họ và tên (Bắt buộc)</span>
                       <span>• Chức danh (Bác sĩ, KTV...)</span>
-                      <span>• Bộ phận / Khoa</span>
+                      <span>• Bộ phận</span>
                       <span>• Phòng làm việc</span>
                       <span>• Số điện thoại (chuẩn 10 số)</span>
                       <span>• Email liên hệ</span>
@@ -4541,7 +4663,7 @@ export const StaffManagementView: React.FC = () => {
                           <th className="p-2.5">Mã NV</th>
                           <th className="p-2.5">Họ & Tên</th>
                           <th className="p-2.5">Chức Danh</th>
-                          <th className="p-2.5">Bộ Phận / Khoa</th>
+                          <th className="p-2.5">Bộ Phận</th>
                           <th className="p-2.5">Phòng Làm Việc</th>
                           <th className="p-2.5">SĐT (10 số) / Email</th>
                           <th className="p-2.5 whitespace-nowrap">Ngày Sinh & Vào Làm (dd/mm/yyyy)</th>
