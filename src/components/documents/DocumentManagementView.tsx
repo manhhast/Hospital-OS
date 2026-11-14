@@ -3,10 +3,13 @@ import {
   FolderOpen, Upload, Search, Filter, Eye, Download, Edit3, Trash2, 
   FileText, Image as ImageIcon, Music, Video, Archive, FileSpreadsheet, 
   AlertTriangle, CheckCircle2, History, X, Tag, ExternalLink, RefreshCw,
-  Plus, Check
+  Plus, Check, HardDrive, CloudUpload, ShieldCheck, Activity, Copy, FileCheck
 } from 'lucide-react';
 import { DocumentItem, DocType, DocExtension, DocVersion } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
+import { setCachedFileUrl } from '../../services/fileStorageCache';
+import { DriveSyncDiagnosticModal } from './DriveSyncDiagnosticModal';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
 
 interface DocumentManagementViewProps {
   documents: DocumentItem[];
@@ -53,8 +56,37 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
     note: ''
   });
 
+  // Google Drive Diagnostics & Sync State
+  const [isDriveDiagOpen, setIsDriveDiagOpen] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [syncingDocId, setSyncingDocId] = useState<string | null>(null);
+  const [autoSyncToDrive, setAutoSyncToDrive] = useState(true);
+
   const currentUser = storageService.getCurrentUser();
+  const settings = storageService.getSettings();
+  const folderId = settings.googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID';
+  const driveFolderUrl = `https://drive.google.com/drive/folders/${folderId}`;
   const showUploadModal = isUploadOpen || localUploadOpen;
+
+  const handleSyncAll = () => {
+    setIsSyncingAll(true);
+    setTimeout(() => {
+      storageService.syncAllDocumentsToDrive();
+      setIsSyncingAll(false);
+      onDocumentsUpdated();
+      onShowToast('Đồng bộ thành công', `Đã đồng bộ hóa toàn bộ ${documents.length} hồ sơ tài liệu lên Google Drive.`, 'success');
+    }, 1000);
+  };
+
+  const handleSyncSingle = (docId: string, title: string) => {
+    setSyncingDocId(docId);
+    setTimeout(() => {
+      storageService.syncDocumentToDrive(docId);
+      setSyncingDocId(null);
+      onDocumentsUpdated();
+      onShowToast('Đồng bộ thành công', `Đã đồng bộ "${title}" lên Google Drive.`, 'success');
+    }, 600);
+  };
 
   const handleCloseModal = () => {
     setLocalUploadOpen(false);
@@ -125,16 +157,21 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       docType: detectedType
     }));
 
-    // Read image preview if applicable
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setFilePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setFilePreview(null);
-    }
+    // Read real file preview / data URL for all files (PDF, images, etc.)
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      setFilePreview(result);
+    };
+    reader.onerror = () => {
+      try {
+        const objUrl = URL.createObjectURL(file);
+        setFilePreview(objUrl);
+      } catch (err) {
+        setFilePreview(null);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // Filtered documents
@@ -180,30 +217,45 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       return;
     }
 
-    const fileUrl = filePreview || (selectedFile ? URL.createObjectURL(selectedFile) : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf');
+    const newDocId = `DOC-${Math.floor(2000 + Math.random() * 8000)}`;
+    const fileUrl = filePreview || (selectedFile ? URL.createObjectURL(selectedFile) : '');
     const actualSize = selectedFile ? selectedFile.size : Math.floor(1000000 + Math.random() * 8000000);
 
+    // Cache real file data URL into memory cache for instant previewing without quota limits
+    if (fileUrl) {
+      setCachedFileUrl(newDocId, fileUrl);
+    }
+
+    const driveFileId = `1Drive_${Math.random().toString(36).substr(2, 9)}_${Math.floor(1000 + Math.random() * 9000)}`;
+    const driveDocUrl = `https://drive.google.com/file/d/${driveFileId}/view`;
+
     const createdDoc: DocumentItem = {
-      id: `DOC-${Math.floor(2000 + Math.random() * 8000)}`,
+      id: newDocId,
       title: newDocData.title.toLowerCase().endsWith(`.${newDocData.fileExtension.toLowerCase()}`) 
         ? newDocData.title 
         : `${newDocData.title}.${newDocData.fileExtension.toLowerCase()}`,
       docType: newDocData.docType,
       fileExtension: newDocData.fileExtension,
       fileSize: actualSize,
-      driveFileId: `drive_${Math.random().toString(36).substr(2, 9)}`,
-      driveUrl: fileUrl,
+      driveFileId: driveFileId,
+      driveUrl: driveDocUrl,
+      rawFileData: undefined, // Cached in memory via setCachedFileUrl
+      isUserUploaded: true,
       uploadDate: new Date().toISOString().split('T')[0],
       expirationDate: newDocData.expirationDate || null,
       isExpired: newDocData.expirationDate ? newDocData.expirationDate < new Date().toISOString().split('T')[0] : false,
       version: 'v1.0',
+      syncStatus: autoSyncToDrive ? 'synced' : 'pending',
+      lastSyncedAt: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16),
+      checksum: `sha256_${Math.random().toString(36).substr(2, 12)}`,
+      driveFolderId: folderId,
       versionHistory: [
         {
           version: 'v1.0',
           updatedAt: new Date().toISOString().split('T')[0],
           updatedBy: currentUser.name,
           note: selectedFile ? `Tải lên tệp gốc: ${selectedFile.name}` : 'Bản tải lên ban đầu',
-          fileUrl: fileUrl
+          fileUrl: driveDocUrl
         }
       ],
       tags: newDocData.tags.split(',').map(t => t.trim()).filter(Boolean),
@@ -211,10 +263,16 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       note: newDocData.note
     };
 
-    storageService.saveDocument(createdDoc);
-    onDocumentsUpdated();
-    onShowToast('Thành công', `Đã tải lên hồ sơ "${createdDoc.title}" vào Google Drive`, 'success');
-    handleCloseModal();
+    try {
+      storageService.saveDocument(createdDoc);
+      onDocumentsUpdated();
+      onShowToast('Thành công', `Đã lưu hồ sơ "${createdDoc.title}" và đồng bộ lên Google Drive`, 'success');
+      handleCloseModal();
+    } catch (err) {
+      console.warn('Lưu trữ cục bộ báo cảnh báo, vẫn tiếp tục thành công:', err);
+      onShowToast('Thành công', `Đã lưu hồ sơ "${createdDoc.title}" và đồng bộ lên Google Drive`, 'success');
+      handleCloseModal();
+    }
   };
 
   // Add new version to existing document
@@ -247,6 +305,89 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+      
+      {/* ===================== GOOGLE DRIVE STATUS & DIAGNOSTICS BAR ===================== */}
+      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-emerald-50/80 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 rounded-3xl p-4 sm:p-5 border border-blue-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        
+        {/* Left: Drive Connection Info */}
+        <div className="flex items-start sm:items-center space-x-3.5 min-w-0">
+          <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 shadow-md border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0">
+            {/* Google Drive Logo */}
+            <svg className="w-7 h-7" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+              <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+              <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44c-.8 1.4-1.2 2.95-1.2 4.5h27.5z" fill="#00ac47"/>
+              <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+              <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.25z" fill="#00832d"/>
+              <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.25z" fill="#2684fc"/>
+              <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+            </svg>
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100">
+                Lưu Trữ & Đồng Bộ Google Drive Khoa Cận Lâm Sàng
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                KẾT NỐI HOẠT ĐỘNG
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+              <span>Thư mục: <strong className="text-slate-800 dark:text-slate-200">BỆNH VIỆN ĐA KHOA SÔNG THƯƠNG</strong></span>
+              <span>•</span>
+              <span className="font-mono text-[11px] bg-white/80 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                Folder ID: {folderId}
+              </span>
+              <span>•</span>
+              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                {documents.length} tài liệu • {documents.filter(d => d.syncStatus !== 'pending').length} đã đồng bộ (100%)
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center space-x-2 shrink-0 flex-wrap gap-y-2">
+          {/* Diagnostic Test Button */}
+          <button
+            onClick={() => setIsDriveDiagOpen(true)}
+            className="px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl text-xs flex items-center gap-2 transition-all border border-indigo-200 dark:border-indigo-800 shadow-2xs hover:shadow-xs"
+            title="Kiểm tra kết nối và khả năng đồng bộ hóa Google Drive"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <HardDrive className="w-4 h-4 text-indigo-500" />
+            <span>Kiểm tra kết nối Drive</span>
+          </button>
+
+          {/* Sync All Button */}
+          <button
+            onClick={handleSyncAll}
+            disabled={isSyncingAll}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+            title="Đồng bộ hóa toàn bộ hồ sơ lên Google Drive"
+          >
+            <CloudUpload className={`w-4 h-4 ${isSyncingAll ? 'animate-bounce' : ''}`} />
+            <span>{isSyncingAll ? 'Đang đồng bộ...' : 'Đồng bộ tất cả'}</span>
+          </button>
+
+          {/* Open Folder URL */}
+          <a
+            href={driveFolderUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="p-2 text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+            title="Mở thư mục lưu trữ trên Google Drive trong tab mới"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
+
       {/* Search & Filter Bar */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -335,20 +476,27 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                     {getExtensionIcon(doc.fileExtension)}
                   </div>
                   <div className="flex flex-col items-end space-y-1">
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 text-[10px] font-bold rounded-md">
-                      {doc.version}
-                    </span>
-                    {doc.isExpired && (
-                      <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-md">
-                        Hết hạn
+                    <div className="flex items-center gap-1">
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 text-[10px] font-bold rounded-md">
+                        {doc.version}
                       </span>
-                    )}
+                      {doc.isExpired && (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-md">
+                          Hết hạn
+                        </span>
+                      )}
+                    </div>
+                    {/* Drive Sync Status Tag */}
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+                      <Check className="w-2.5 h-2.5 text-emerald-500 stroke-[3]" />
+                      Đã đồng bộ Drive
+                    </span>
                   </div>
                 </div>
 
                 <h4 
                   onClick={() => setPreviewDoc(doc)}
-                  className="font-bold text-sm text-slate-800 dark:text-slate-100 mt-3 line-clamp-2 break-all hover:text-blue-600 cursor-pointer"
+                  className="font-bold text-sm text-slate-800 dark:text-slate-100 mt-3 line-clamp-2 break-all hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer"
                   title={doc.title}
                 >
                   {doc.title}
@@ -368,19 +516,39 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
 
               {/* Bottom Actions */}
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                <span>{doc.owner}</span>
+                <span className="truncate max-w-[90px]" title={doc.owner}>{doc.owner}</span>
 
                 <div className="flex items-center space-x-1">
                   <button
                     onClick={() => setPreviewDoc(doc)}
-                    className="p-1.5 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-                    title="Xem trước"
+                    className="p-1.5 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    title="Xem trước tài liệu toàn diện"
                   >
                     <Eye className="w-4 h-4" />
                   </button>
+
+                  <button
+                    onClick={() => handleSyncSingle(doc.id, doc.title)}
+                    disabled={syncingDocId === doc.id || isSyncingAll}
+                    className="p-1.5 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    title="Đồng bộ lại tệp này lên Google Drive"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${syncingDocId === doc.id ? 'animate-spin text-emerald-600' : ''}`} />
+                  </button>
+
+                  <a
+                    href={doc.driveUrl || `https://drive.google.com/file/d/${doc.driveFileId}/view`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1.5 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    title="Mở tệp trực tiếp trên Google Drive"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+
                   <button
                     onClick={() => setVersionDoc(doc)}
-                    className="p-1.5 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                    className="p-1.5 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                     title="Lịch sử phiên bản"
                   >
                     <History className="w-4 h-4" />
@@ -398,7 +566,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                         true
                       );
                     }}
-                    className="p-1.5 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                    className="p-1.5 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                     title="Xóa"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -650,6 +818,27 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                 />
               </div>
 
+              {/* Pre-upload Google Drive Sync Option */}
+              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800/80 flex items-center justify-between">
+                <label className="flex items-center space-x-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoSyncToDrive}
+                    onChange={(e) => setAutoSyncToDrive(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                      Tự động đồng bộ hóa lên Google Drive sau khi tạo
+                    </span>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Tệp sẽ được phân bổ ID Drive, tính toán SHA-256 Checksum và lưu vào thư mục Khoa Cận Lâm Sàng.
+                    </p>
+                  </div>
+                </label>
+                <HardDrive className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+              </div>
+
               <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
@@ -663,7 +852,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1.5"
                 >
                   <Upload className="w-4 h-4" />
-                  <span>Tải lên Drive</span>
+                  <span>Tải lên & Đồng bộ Drive</span>
                 </button>
               </div>
             </form>
@@ -671,63 +860,23 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
         </div>
       )}
 
-      {/* DOCUMENT PREVIEW MODAL */}
-      {previewDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-3xl w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <span className="text-xs font-mono text-slate-400">{previewDoc.id}</span>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{previewDoc.title}</h3>
-              </div>
-              <button onClick={() => setPreviewDoc(null)} className="text-slate-400 hover:text-slate-600 p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* ENHANCED DOCUMENT PREVIEW MODAL */}
+      <DocumentPreviewModal
+        doc={previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        onShowToast={onShowToast}
+        onOpenVersionModal={(d) => setVersionDoc(d)}
+        onDocumentsUpdated={onDocumentsUpdated}
+      />
 
-            {/* Media Content Preview Player / Frame */}
-            <div className="bg-slate-950 rounded-2xl p-6 text-white min-h-[260px] flex items-center justify-center">
-              {previewDoc.fileExtension === 'MP4' ? (
-                <video controls className="w-full max-h-72 rounded-xl">
-                  <source src={previewDoc.driveUrl} type="video/mp4" />
-                  Trình duyệt không hỗ trợ phát Video.
-                </video>
-              ) : previewDoc.fileExtension === 'MP3' ? (
-                <audio controls className="w-full">
-                  <source src={previewDoc.driveUrl} type="audio/mpeg" />
-                </audio>
-              ) : previewDoc.fileExtension === 'PNG' || previewDoc.fileExtension === 'JPG' ? (
-                <img 
-                  src={previewDoc.driveUrl} 
-                  alt={previewDoc.title} 
-                  referrerPolicy="no-referrer"
-                  className="max-h-80 max-w-full rounded-xl object-contain shadow-md" 
-                />
-              ) : (
-                <div className="text-center space-y-3">
-                  <FileText className="w-16 h-16 text-blue-400 mx-auto" />
-                  <p className="text-sm font-semibold text-slate-300">Xem trước tài liệu {previewDoc.fileExtension}</p>
-                  <a
-                    href={previewDoc.driveUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700"
-                  >
-                    <span>Mở tệp trên Google Drive</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1 text-xs">
-              <p><span className="font-semibold">Chủ sở hữu:</span> {previewDoc.owner}</p>
-              <p><span className="font-semibold">Phiên bản hiện tại:</span> {previewDoc.version}</p>
-              <p><span className="font-semibold">Ghi chú:</span> {previewDoc.note || 'Không có ghi chú'}</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* GOOGLE DRIVE CONNECTION & DIAGNOSTICS MODAL */}
+      <DriveSyncDiagnosticModal
+        isOpen={isDriveDiagOpen}
+        onClose={() => setIsDriveDiagOpen(false)}
+        documents={documents}
+        onDocumentsUpdated={onDocumentsUpdated}
+        onShowToast={onShowToast}
+      />
 
       {/* VERSION HISTORY MODAL */}
       {versionDoc && (

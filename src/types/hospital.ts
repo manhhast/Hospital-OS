@@ -83,6 +83,12 @@ export interface DocumentItem {
   owner: string;
   note: string;
   code?: string; // Mã hiệu hồ sơ e.g. SOP-CLS-01
+  syncStatus?: 'synced' | 'pending' | 'syncing' | 'failed';
+  lastSyncedAt?: string;
+  checksum?: string;
+  driveFolderId?: string;
+  rawFileData?: string;
+  isUserUploaded?: boolean;
 }
 
 export type WorkType = 'Ca trực' | 'Làm việc' | 'Họp' | 'Đào tạo' | 'Nghỉ';
@@ -265,6 +271,13 @@ export interface DepreciationMetricItem {
   yearsInService: number;
 }
 
+export interface EquipmentDurationDefaults {
+  permitMonths: number;
+  calibrationMonths: number;
+  radiationSurveyMonths: number;
+  maintenanceMonths: number;
+}
+
 export interface EquipmentItem {
   id: string;
   code: string;
@@ -288,15 +301,23 @@ export interface EquipmentItem {
   lastMaintenanceDate: string;
   nextMaintenanceDate: string;
   operatingPermitNumber?: string;
+  operatingPermitIssueDate?: string;
+  operatingPermitDurationMonths?: number;
   operatingPermitExpiry?: string;
   radiationLicenseNumber?: string;
   radiationLicenseExpiry?: string;
   radiationLicenseIssuedBy?: string;
+  radiationSurveyDate?: string;
+  radiationSurveyIntervalMonths?: number;
+  radiationSurveyExpiry?: string;
   calibrationNumber?: string;
+  calibrationDate?: string;
+  calibrationIntervalMonths?: number;
   calibrationExpiry?: string;
   calibrationIssuedBy?: string;
   powerSupply?: string;
   specifications?: string;
+  notes?: string;
   maintenanceHistory?: MaintenanceLog[];
   repairHistory?: RepairLog[];
   isLockedOut?: boolean;

@@ -27,6 +27,22 @@ export const DepreciationUtilizationTab: React.FC<DepreciationUtilizationTabProp
 
   const activeData = data.find(d => d.eq.id === selectedEqId) || data[0];
 
+  if (!activeData) {
+    return (
+      <div className="p-6">
+        <div className="bg-white dark:bg-slate-900 p-10 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-2 shadow-sm">
+          <DollarSign className="w-10 h-10 text-emerald-500 mx-auto opacity-80" />
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            Chưa có dữ liệu thiết bị để phân tích khấu hao
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            Vui lòng thêm thiết bị y tế vào danh mục để hệ thống tự động tính toán chi phí khấu hao trên từng ca và phân bổ thời gian vận hành phòng máy.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Adjust simulation
   const baseMonthlyCases = activeData.depr.averageMonthlyCases;
   const simulatedMonthlyCases = Math.max(10, Math.round(baseMonthlyCases * (1 + simulatedCasesAdjustment / 100)));
@@ -53,7 +69,7 @@ export const DepreciationUtilizationTab: React.FC<DepreciationUtilizationTabProp
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">Chọn máy:</span>
           <select
-            value={selectedEqId}
+            value={activeData.eq.id}
             onChange={e => {
               setSelectedEqId(e.target.value);
               setSimulatedCasesAdjustment(0);

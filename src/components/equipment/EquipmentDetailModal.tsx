@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
-import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN } from '../../utils/dateUtils';
+import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
 
 interface EquipmentDetailModalProps {
   equipment: EquipmentItem;
@@ -52,15 +52,41 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [editPowerSupply, setEditPowerSupply] = useState(equipment.powerSupply || '');
   const [editSpecifications, setEditSpecifications] = useState(equipment.specifications || '');
 
-  // Tab 4: Docs & Legal form state
+  // Tab 4: Phần 2 — Giấy phép, Kiểm định, Kiểm xạ, Bảo dưỡng & Ghi chú
+  const defaultDurations = storageService.getEquipmentDurationDefaults();
+  // 2.1 Giấy phép
   const [editOperatingPermitNumber, setEditOperatingPermitNumber] = useState(equipment.operatingPermitNumber || '');
+  const [editOperatingPermitIssueDate, setEditOperatingPermitIssueDate] = useState(equipment.operatingPermitIssueDate || '');
+  const [editOperatingPermitDurationMonths, setEditOperatingPermitDurationMonths] = useState<number>(
+    equipment.operatingPermitDurationMonths || defaultDurations.permitMonths
+  );
   const [editOperatingPermitExpiry, setEditOperatingPermitExpiry] = useState(equipment.operatingPermitExpiry || '');
+
+  // 2.2 Kiểm định
+  const [editCalibrationNumber, setEditCalibrationNumber] = useState(equipment.calibrationNumber || '');
+  const [editCalibrationIssuedBy, setEditCalibrationIssuedBy] = useState(equipment.calibrationIssuedBy || '');
+  const [editCalibrationDate, setEditCalibrationDate] = useState(equipment.calibrationDate || '');
+  const [editCalibrationIntervalMonths, setEditCalibrationIntervalMonths] = useState<number>(
+    equipment.calibrationIntervalMonths || defaultDurations.calibrationMonths
+  );
+  const [editCalibrationExpiry, setEditCalibrationExpiry] = useState(equipment.calibrationExpiry || '');
+
+  // 2.3 Kiểm xạ
   const [editRadiationLicenseNumber, setEditRadiationLicenseNumber] = useState(equipment.radiationLicenseNumber || '');
   const [editRadiationLicenseIssuedBy, setEditRadiationLicenseIssuedBy] = useState(equipment.radiationLicenseIssuedBy || '');
   const [editRadiationLicenseExpiry, setEditRadiationLicenseExpiry] = useState(equipment.radiationLicenseExpiry || '');
-  const [editCalibrationNumber, setEditCalibrationNumber] = useState(equipment.calibrationNumber || '');
-  const [editCalibrationIssuedBy, setEditCalibrationIssuedBy] = useState(equipment.calibrationIssuedBy || '');
-  const [editCalibrationExpiry, setEditCalibrationExpiry] = useState(equipment.calibrationExpiry || '');
+  const [editRadiationSurveyDate, setEditRadiationSurveyDate] = useState(equipment.radiationSurveyDate || '');
+  const [editRadiationSurveyIntervalMonths, setEditRadiationSurveyIntervalMonths] = useState<number>(
+    equipment.radiationSurveyIntervalMonths || defaultDurations.radiationSurveyMonths
+  );
+  const [editRadiationSurveyExpiry, setEditRadiationSurveyExpiry] = useState(equipment.radiationSurveyExpiry || '');
+
+  // 2.4 Bảo dưỡng
+  const [editLastMaintenanceDate, setEditLastMaintenanceDate] = useState(equipment.lastMaintenanceDate || '');
+  const [editNextMaintenanceDate, setEditNextMaintenanceDate] = useState(equipment.nextMaintenanceDate || '');
+
+  // 2.5 Ghi chú
+  const [editNotes, setEditNotes] = useState(equipment.notes || '');
 
   // Quick Status change
   const [isChangingStatus, setIsChangingStatus] = useState(false);
@@ -110,14 +136,25 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     setEditPowerSupply(equipment.powerSupply || '');
     setEditSpecifications(equipment.specifications || '');
 
+    const latestDefaults = storageService.getEquipmentDurationDefaults();
     setEditOperatingPermitNumber(equipment.operatingPermitNumber || '');
+    setEditOperatingPermitIssueDate(equipment.operatingPermitIssueDate || '');
+    setEditOperatingPermitDurationMonths(equipment.operatingPermitDurationMonths || latestDefaults.permitMonths);
     setEditOperatingPermitExpiry(equipment.operatingPermitExpiry || '');
     setEditRadiationLicenseNumber(equipment.radiationLicenseNumber || '');
     setEditRadiationLicenseIssuedBy(equipment.radiationLicenseIssuedBy || '');
     setEditRadiationLicenseExpiry(equipment.radiationLicenseExpiry || '');
+    setEditRadiationSurveyDate(equipment.radiationSurveyDate || '');
+    setEditRadiationSurveyIntervalMonths(equipment.radiationSurveyIntervalMonths || latestDefaults.radiationSurveyMonths);
+    setEditRadiationSurveyExpiry(equipment.radiationSurveyExpiry || '');
     setEditCalibrationNumber(equipment.calibrationNumber || '');
     setEditCalibrationIssuedBy(equipment.calibrationIssuedBy || '');
+    setEditCalibrationDate(equipment.calibrationDate || '');
+    setEditCalibrationIntervalMonths(equipment.calibrationIntervalMonths || latestDefaults.calibrationMonths);
     setEditCalibrationExpiry(equipment.calibrationExpiry || '');
+    setEditLastMaintenanceDate(equipment.lastMaintenanceDate || '');
+    setEditNextMaintenanceDate(equipment.nextMaintenanceDate || '');
+    setEditNotes(equipment.notes || '');
 
     setCurrentStatus(equipment.status || 'Hoạt động tốt');
   }, [equipment]);
@@ -199,36 +236,59 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     setIsEditingProfile(false);
   };
 
-  // --- SAVE TAB 4: DOCS & LEGAL ---
+  // --- SAVE TAB 4: PHẦN 2 (GIẤY PHÉP, KIỂM ĐỊNH, KIỂM XẠ, BẢO DƯỠNG & GHI CHÚ) ---
   const handleSaveDocs = (e: React.FormEvent) => {
     e.preventDefault();
     const updatedItem: EquipmentItem = {
       ...equipment,
       operatingPermitNumber: editOperatingPermitNumber.trim() || undefined,
+      operatingPermitIssueDate: editOperatingPermitIssueDate || undefined,
+      operatingPermitDurationMonths: Number(editOperatingPermitDurationMonths) || undefined,
       operatingPermitExpiry: editOperatingPermitExpiry || undefined,
       radiationLicenseNumber: editRadiationLicenseNumber.trim() || undefined,
       radiationLicenseIssuedBy: editRadiationLicenseIssuedBy.trim() || undefined,
-      radiationLicenseExpiry: editRadiationLicenseExpiry || undefined,
+      radiationLicenseExpiry: editRadiationLicenseExpiry || editRadiationSurveyExpiry || undefined,
+      radiationSurveyDate: editRadiationSurveyDate || undefined,
+      radiationSurveyIntervalMonths: Number(editRadiationSurveyIntervalMonths) || undefined,
+      radiationSurveyExpiry: editRadiationSurveyExpiry || undefined,
       calibrationNumber: editCalibrationNumber.trim() || undefined,
       calibrationIssuedBy: editCalibrationIssuedBy.trim() || undefined,
-      calibrationExpiry: editCalibrationExpiry || undefined
+      calibrationDate: editCalibrationDate || undefined,
+      calibrationIntervalMonths: Number(editCalibrationIntervalMonths) || undefined,
+      calibrationExpiry: editCalibrationExpiry || undefined,
+      maintenanceIntervalMonths: Number(editMaintenanceIntervalMonths) || 3,
+      lastMaintenanceDate: editLastMaintenanceDate || equipment.lastMaintenanceDate,
+      nextMaintenanceDate: editNextMaintenanceDate || equipment.nextMaintenanceDate,
+      notes: editNotes.trim() || undefined
     };
 
     storageService.saveEquipment(updatedItem);
     setIsEditingDocs(false);
-    showNotification('Đã lưu cập nhật Giấy Phép & Kiểm Định!');
+    showNotification('Đã lưu cập nhật Giấy Phép, Kiểm Định, Kiểm Xạ, Bảo Dưỡng & Ghi Chú!');
     onUpdate();
   };
 
   const handleCancelDocs = () => {
+    const latestDefaults = storageService.getEquipmentDurationDefaults();
     setEditOperatingPermitNumber(equipment.operatingPermitNumber || '');
+    setEditOperatingPermitIssueDate(equipment.operatingPermitIssueDate || '');
+    setEditOperatingPermitDurationMonths(equipment.operatingPermitDurationMonths || latestDefaults.permitMonths);
     setEditOperatingPermitExpiry(equipment.operatingPermitExpiry || '');
     setEditRadiationLicenseNumber(equipment.radiationLicenseNumber || '');
     setEditRadiationLicenseIssuedBy(equipment.radiationLicenseIssuedBy || '');
     setEditRadiationLicenseExpiry(equipment.radiationLicenseExpiry || '');
+    setEditRadiationSurveyDate(equipment.radiationSurveyDate || '');
+    setEditRadiationSurveyIntervalMonths(equipment.radiationSurveyIntervalMonths || latestDefaults.radiationSurveyMonths);
+    setEditRadiationSurveyExpiry(equipment.radiationSurveyExpiry || '');
     setEditCalibrationNumber(equipment.calibrationNumber || '');
     setEditCalibrationIssuedBy(equipment.calibrationIssuedBy || '');
+    setEditCalibrationDate(equipment.calibrationDate || '');
+    setEditCalibrationIntervalMonths(equipment.calibrationIntervalMonths || latestDefaults.calibrationMonths);
     setEditCalibrationExpiry(equipment.calibrationExpiry || '');
+    setEditMaintenanceIntervalMonths(equipment.maintenanceIntervalMonths || 3);
+    setEditLastMaintenanceDate(equipment.lastMaintenanceDate || '');
+    setEditNextMaintenanceDate(equipment.nextMaintenanceDate || '');
+    setEditNotes(equipment.notes || '');
     setIsEditingDocs(false);
   };
 
@@ -392,7 +452,8 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   };
 
   const isNextMaintenanceOverdue = isDatePastVN(equipment.nextMaintenanceDate);
-  const isRadiationOverdue = equipment.radiationLicenseExpiry ? isDatePastVN(equipment.radiationLicenseExpiry) : false;
+  const radExpirySummary = equipment.radiationSurveyExpiry || equipment.radiationLicenseExpiry;
+  const isRadiationOverdue = radExpirySummary ? isDatePastVN(radExpirySummary) : false;
   const isCalibrationOverdue = equipment.calibrationExpiry ? isDatePastVN(equipment.calibrationExpiry) : false;
 
   return (
@@ -529,7 +590,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               <Award className="w-3 h-3 text-amber-500" /> Hạn Cấp Phép & Kiểm Xạ
             </span>
             <p className={`text-xs font-bold mt-1 ${isRadiationOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>
-              {equipment.radiationLicenseExpiry ? `KX: ${formatDateVN(equipment.radiationLicenseExpiry)}` : (equipment.operatingPermitExpiry ? `GP: ${formatDateVN(equipment.operatingPermitExpiry)}` : 'Đang cập nhật')} {isRadiationOverdue && '⚠️ Quá hạn'}
+              {radExpirySummary ? `KX: ${formatDateVN(radExpirySummary)}` : (equipment.operatingPermitExpiry ? `GP: ${formatDateVN(equipment.operatingPermitExpiry)}` : 'Đang cập nhật')} {isRadiationOverdue && '⚠️ Quá hạn'}
             </p>
           </div>
         </div>
@@ -547,9 +608,27 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               }`}
             >
               <FileText className={`w-4 h-4 ${activeTab === 'profile' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-              <span>Lý Lịch & Hồ Sơ Máy</span>
+              <span>Phần 1: Lý Lịch &amp; Thông Tin Cố Định</span>
               {isEditingProfile && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'profile' ? 'bg-amber-300 text-amber-950' : 'bg-amber-100 text-amber-800'}`}>
+                  Đang sửa
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('docs')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'docs'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]'
+                  : 'bg-white/80 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs'
+              }`}
+            >
+              <Award className={`w-4 h-4 ${activeTab === 'docs' ? 'text-white' : 'text-sky-600 dark:text-sky-400'}`} />
+              <span>Phần 2: Giấy Phép, Kiểm Định, Kiểm Xạ &amp; Bảo Dưỡng</span>
+              {isEditingDocs && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'docs' ? 'bg-amber-300 text-amber-950' : 'bg-amber-100 text-amber-800'}`}>
                   Đang sửa
                 </span>
               )}
@@ -565,7 +644,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               }`}
             >
               <History className={`w-4 h-4 ${activeTab === 'maintenance' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
-              <span>Nhật Ký Bảo Trì & Hiệu Chuẩn</span>
+              <span>Nhật Ký Bảo Trì &amp; Hiệu Chuẩn</span>
               <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
                 activeTab === 'maintenance' 
                   ? 'bg-white/30 text-white' 
@@ -585,7 +664,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               }`}
             >
               <AlertTriangle className={`w-4 h-4 ${activeTab === 'repairs' ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
-              <span>Nhật Ký Sự Cố & Sửa Chữa</span>
+              <span>Nhật Ký Sự Cố &amp; Sửa Chữa</span>
               <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
                 activeTab === 'repairs' 
                   ? 'bg-white/30 text-white' 
@@ -593,24 +672,6 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               }`}>
                 {equipment.repairHistory?.length || 0}
               </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('docs')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'docs'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]'
-                  : 'bg-white/80 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs'
-              }`}
-            >
-              <Award className={`w-4 h-4 ${activeTab === 'docs' ? 'text-white' : 'text-sky-600 dark:text-sky-400'}`} />
-              <span>Giấy phép và Kiểm Định</span>
-              {isEditingDocs && (
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'docs' ? 'bg-amber-300 text-amber-950' : 'bg-amber-100 text-amber-800'}`}>
-                  Đang sửa
-                </span>
-              )}
             </button>
           </div>
         </div>
@@ -831,20 +892,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                           className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
                         />
                       </div>
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Chu kỳ bảo dưỡng định kỳ:</label>
-                        <select
-                          value={editMaintenanceIntervalMonths}
-                          onChange={e => setEditMaintenanceIntervalMonths(Number(e.target.value))}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                        >
-                          <option value={1}>1 tháng / lần</option>
-                          <option value={3}>3 tháng / lần</option>
-                          <option value={6}>6 tháng / lần</option>
-                          <option value={12}>12 tháng / lần</option>
-                        </select>
-                      </div>
-                      <div>
+                      <div className="sm:col-span-2">
                         <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Yêu cầu nguồn điện & Công suất:</label>
                         <input
                           type="text"
@@ -1407,134 +1455,104 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 4: GIẤY PHÉP VÀ KIỂM ĐỊNH (CHO PHÉP CHỈNH SỬA TOÀN BỘ PHÁP LÝ & KIỂM ĐỊNH)
+              TAB 4: PHẦN 2 — GIẤY PHÉP, KIỂM ĐỊNH, KIỂM XẠ, BẢO DƯỠNG & GHI CHÚ
               ========================================================================= */}
           {activeTab === 'docs' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-sky-50/80 dark:bg-sky-950/40 p-4 rounded-xl border border-sky-200 dark:border-sky-900/60 shadow-xs">
-                <div className="flex items-center gap-2.5 text-xs text-sky-950 dark:text-sky-200">
-                  <Award className="w-5 h-5 text-sky-600 dark:text-sky-400 shrink-0" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/80 dark:bg-emerald-950/40 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 shadow-xs">
+                <div className="flex items-center gap-2.5 text-xs text-emerald-950 dark:text-emerald-200">
+                  <Award className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>
-                    Hồ sơ pháp lý, Giấy phép An toàn Bức xạ, Kiểm định chuẩn ISO và Quyết định lưu hành BYT.
+                    <strong>Phần 2:</strong> Thông tin Giấy phép lưu hành BYT, Kiểm định ISO, Kiểm xạ ATBX, Chu kỳ bảo dưỡng thiết bị &amp; Ghi chú theo dõi.
                   </span>
                 </div>
                 {!isEditingDocs ? (
                   <button
                     type="button"
                     onClick={() => setIsEditingDocs(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition-all shadow-md hover:shadow-lg shadow-sky-600/20 active:scale-95 shrink-0"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md hover:shadow-lg shadow-emerald-600/20 active:scale-95 shrink-0 cursor-pointer"
                   >
                     <Edit3 className="w-4 h-4" />
-                    <span>Chỉnh Sửa Giấy Phép & Kiểm Định</span>
+                    <span>Chỉnh Sửa Phần 2 (Giấy Phép, Kiểm Định, Bảo Dưỡng)</span>
                   </button>
                 ) : (
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={handleCancelDocs}
-                      className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 shadow-xs"
+                      className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 shadow-xs cursor-pointer"
                     >
                       Hủy bỏ
                     </button>
                     <button
                       type="button"
                       onClick={handleSaveDocs}
-                      className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-md shadow-sky-600/25 active:scale-95"
+                      className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md shadow-emerald-600/25 active:scale-95 cursor-pointer"
                     >
                       <Save className="w-4 h-4" />
-                      <span>Lưu Giấy Phép & Kiểm Định</span>
+                      <span>Lưu Thông Tin Phần 2</span>
                     </button>
                   </div>
                 )}
               </div>
 
               {isEditingDocs ? (
-                /* FORM CHỈNH SỬA GIẤY PHÉP & KIỂM ĐỊNH */
-                <form onSubmit={handleSaveDocs} className="space-y-6">
-                  <div className="bg-slate-50 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-4">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                      Chỉnh Sửa Thông Tin Giấy Phép & Kiểm Định
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                /* FORM CHỈNH SỬA PHẦN 2 — 4 MỤC NHỎ RÕ RÀNG + TỰ ĐỘNG TÍNH NGÀY HẾT HẠN */
+                <form onSubmit={handleSaveDocs} className="space-y-4 text-xs">
+                  {/* 1. GIẤY PHÉP */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        1. Giấy Phép
+                      </h3>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">Nhập Ngày cấp để tự tính Ngày hết hạn (hoặc nhập thủ công)</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Số giấy phép An toàn Bức xạ (ATBX):</label>
-                        <input
-                          type="text"
-                          value={editRadiationLicenseNumber}
-                          onChange={e => setEditRadiationLicenseNumber(e.target.value)}
-                          placeholder="Ví dụ: GP-ATBX-092/2024"
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cơ quan cấp giấy phép ATBX:</label>
-                        <input
-                          type="text"
-                          value={editRadiationLicenseIssuedBy}
-                          onChange={e => setEditRadiationLicenseIssuedBy(e.target.value)}
-                          placeholder="Cục An Toàn Bức Xạ & Hạt Nhân - Bộ KH&CN"
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hạn giấy phép An toàn Bức xạ:</label>
-                        <input
-                          type="date"
-                          value={editRadiationLicenseExpiry}
-                          onChange={e => setEditRadiationLicenseExpiry(e.target.value)}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-amber-700 dark:text-amber-400"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Số chứng chỉ kiểm định ISO:</label>
-                        <input
-                          type="text"
-                          value={editCalibrationNumber}
-                          onChange={e => setEditCalibrationNumber(e.target.value)}
-                          placeholder="Ví dụ: ISO-17025-VMI/2025-01"
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Đơn vị kiểm định / Hiệu chuẩn:</label>
-                        <input
-                          type="text"
-                          value={editCalibrationIssuedBy}
-                          onChange={e => setEditCalibrationIssuedBy(e.target.value)}
-                          placeholder="Ví dụ: Viện Đo Lường Việt Nam (VMI)"
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hạn hiệu chuẩn / Kiểm định ISO:</label>
-                        <input
-                          type="date"
-                          value={editCalibrationExpiry}
-                          onChange={e => setEditCalibrationExpiry(e.target.value)}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Số Quyết định lưu hành BYT:</label>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Số giấy phép:</label>
                         <input
                           type="text"
                           value={editOperatingPermitNumber}
                           onChange={e => setEditOperatingPermitNumber(e.target.value)}
-                          placeholder="Ví dụ: GPHĐ-BYT/2023-TTBYT"
+                          placeholder="VD: GPHĐ-BYT/2026"
                           className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
                         />
                       </div>
-
                       <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hạn giấy phép lưu hành BYT:</label>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày cấp:</label>
+                        <input
+                          type="date"
+                          value={editOperatingPermitIssueDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditOperatingPermitIssueDate(val);
+                            if (val && editOperatingPermitDurationMonths > 0) {
+                              setEditOperatingPermitExpiry(addMonthsToISODate(val, editOperatingPermitDurationMonths));
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={240}
+                          value={editOperatingPermitDurationMonths}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setEditOperatingPermitDurationMonths(months);
+                            if (editOperatingPermitIssueDate) {
+                              setEditOperatingPermitExpiry(addMonthsToISODate(editOperatingPermitIssueDate, months));
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày hết hạn:</label>
                         <input
                           type="date"
                           value={editOperatingPermitExpiry}
@@ -1543,99 +1561,362 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                         />
                       </div>
                     </div>
+                  </div>
 
-                    <div className="flex items-center justify-end gap-3 pt-3">
-                      <button
-                        type="button"
-                        onClick={handleCancelDocs}
-                        className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold"
-                      >
-                        Hủy bỏ
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>Lưu Giấy Phép & Kiểm Định</span>
-                      </button>
+                  {/* 2. KIỂM ĐỊNH */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                        2. Kiểm Định
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={editCalibrationNumber}
+                          onChange={e => setEditCalibrationNumber(e.target.value)}
+                          placeholder="Số chứng chỉ KĐ"
+                          className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-sky-500 font-semibold w-44"
+                        />
+                        <input
+                          type="text"
+                          value={editCalibrationIssuedBy}
+                          onChange={e => setEditCalibrationIssuedBy(e.target.value)}
+                          placeholder="Đơn vị kiểm định (VMI/Quatest)"
+                          className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-sky-500 font-semibold w-52"
+                        />
+                      </div>
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày kiểm định:</label>
+                        <input
+                          type="date"
+                          value={editCalibrationDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditCalibrationDate(val);
+                            if (val && editCalibrationIntervalMonths > 0) {
+                              setEditCalibrationExpiry(addMonthsToISODate(val, editCalibrationIntervalMonths));
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={editCalibrationIntervalMonths}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setEditCalibrationIntervalMonths(months);
+                            if (editCalibrationDate) {
+                              setEditCalibrationExpiry(addMonthsToISODate(editCalibrationDate, months));
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày hết hạn:</label>
+                        <input
+                          type="date"
+                          value={editCalibrationExpiry}
+                          onChange={e => setEditCalibrationExpiry(e.target.value)}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 font-semibold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. KIỂM XẠ */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        3. Kiểm Xạ
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={editRadiationLicenseNumber}
+                          onChange={e => setEditRadiationLicenseNumber(e.target.value)}
+                          placeholder="Số GP ATBX (nếu có)"
+                          className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-amber-500 font-semibold w-44"
+                        />
+                        <input
+                          type="text"
+                          value={editRadiationLicenseIssuedBy}
+                          onChange={e => setEditRadiationLicenseIssuedBy(e.target.value)}
+                          placeholder="Đơn vị cấp ATBX"
+                          className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-amber-500 font-semibold w-48"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày kiểm xạ:</label>
+                        <input
+                          type="date"
+                          value={editRadiationSurveyDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditRadiationSurveyDate(val);
+                            if (val && editRadiationSurveyIntervalMonths > 0) {
+                              const nextExpiry = addMonthsToISODate(val, editRadiationSurveyIntervalMonths);
+                              setEditRadiationSurveyExpiry(nextExpiry);
+                              setEditRadiationLicenseExpiry(nextExpiry);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={editRadiationSurveyIntervalMonths}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setEditRadiationSurveyIntervalMonths(months);
+                            if (editRadiationSurveyDate) {
+                              const nextExpiry = addMonthsToISODate(editRadiationSurveyDate, months);
+                              setEditRadiationSurveyExpiry(nextExpiry);
+                              setEditRadiationLicenseExpiry(nextExpiry);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày hết hạn:</label>
+                        <input
+                          type="date"
+                          value={editRadiationSurveyExpiry || editRadiationLicenseExpiry}
+                          onChange={e => {
+                            setEditRadiationSurveyExpiry(e.target.value);
+                            setEditRadiationLicenseExpiry(e.target.value);
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-amber-700 dark:text-amber-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. BẢO DƯỠNG */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <Wrench className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        4. Bảo Dưỡng
+                      </h3>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">Tự động tính hạn kế tiếp từ Ngày bảo dưỡng + Thời hạn</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày bảo dưỡng:</label>
+                        <input
+                          type="date"
+                          value={editLastMaintenanceDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditLastMaintenanceDate(val);
+                            if (val && editMaintenanceIntervalMonths > 0) {
+                              setEditNextMaintenanceDate(addMonthsToISODate(val, editMaintenanceIntervalMonths));
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={60}
+                          value={editMaintenanceIntervalMonths}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setEditMaintenanceIntervalMonths(months);
+                            if (editLastMaintenanceDate) {
+                              setEditNextMaintenanceDate(addMonthsToISODate(editLastMaintenanceDate, months));
+                            }
+                          }}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày hết hạn:</label>
+                        <input
+                          type="date"
+                          value={editNextMaintenanceDate}
+                          onChange={e => setEditNextMaintenanceDate(e.target.value)}
+                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5. GHI CHÚ */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      5. Ghi Chú Thiết Bị
+                    </h3>
+                    <textarea
+                      rows={3}
+                      value={editNotes}
+                      onChange={e => setEditNotes(e.target.value)}
+                      placeholder="Nhập ghi chú theo dõi gia hạn giấy phép, lịch kiểm xạ phòng máy, lưu ý bảo trì / linh kiện cần thay thế..."
+                      className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelDocs}
+                      className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold cursor-pointer"
+                    >
+                      Hủy bỏ
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>Lưu Thông Tin Phần 2</span>
+                    </button>
                   </div>
                 </form>
               ) : (
-                /* VIEW CHẾ ĐỘ XEM GIẤY PHÉP & KIỂM ĐỊNH */
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Radiation Safety License */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
-                        ☢️ Giấy Phép An Toàn Bức Xạ
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        isRadiationOverdue 
-                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' 
-                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                      }`}>
-                        {equipment.radiationLicenseExpiry ? (isRadiationOverdue ? 'Hết hạn' : 'Đang hiệu lực') : 'Không áp dụng'}
-                      </span>
+                /* VIEW CHẾ ĐỘ XEM PHẦN 2 — 4 MỤC NHỎ RÕ RÀNG */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 1. Giấy phép */}
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
+                          🏛️ 1. Giấy Phép
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          equipment.operatingPermitExpiry && isDatePastVN(equipment.operatingPermitExpiry)
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}>
+                          {equipment.operatingPermitExpiry && isDatePastVN(equipment.operatingPermitExpiry) ? 'Hết hạn' : 'Hợp lệ'}
+                        </span>
+                      </div>
+                      <div className="space-y-1 text-slate-600 dark:text-slate-300 pt-1">
+                        <p>Số giấy phép: <strong className="text-slate-800 dark:text-slate-100">{equipment.operatingPermitNumber || 'GPHĐ-BYT/2023-TTBYT'}</strong></p>
+                        <p>Ngày cấp: <strong className="text-slate-800 dark:text-slate-100">{formatDateVN(equipment.operatingPermitIssueDate, 'Chưa ghi nhận')}</strong></p>
+                        <p>Thời hạn: <strong className="text-indigo-700 dark:text-indigo-300">{equipment.operatingPermitDurationMonths ? `${equipment.operatingPermitDurationMonths} tháng` : 'Theo giấy phép'}</strong></p>
+                        <p>Ngày hết hạn: <strong className={`font-bold ${equipment.operatingPermitExpiry && isDatePastVN(equipment.operatingPermitExpiry) ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatDateVN(equipment.operatingPermitExpiry, 'Chưa ấn định')}</strong></p>
+                      </div>
                     </div>
-                    <div className="space-y-1 text-slate-600 dark:text-slate-300 pt-1">
-                      <p>Số giấy phép ATBX: <strong className="text-slate-800 dark:text-slate-100">{equipment.radiationLicenseNumber || 'Chưa cấp / Không thuộc diện bức xạ'}</strong></p>
-                      <p>Cơ quan cấp: <strong className="text-slate-800 dark:text-slate-100">{equipment.radiationLicenseIssuedBy || 'Cục An Toàn Bức Xạ & Hạt Nhân - Bộ KH&CN'}</strong></p>
-                      <p>Hạn GP (Thời hạn xin gia hạn ATBX): <strong className={`font-bold ${isRadiationOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatDateVN(equipment.radiationLicenseExpiry, 'Không yêu cầu')} {isRadiationOverdue && '⚠️ Quá hạn'}</strong></p>
+
+                    {/* 2. Kiểm định */}
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
+                          🔬 2. Kiểm Định
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isCalibrationOverdue
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}>
+                          {isCalibrationOverdue ? 'Quá hạn KĐ' : 'Còn hiệu lực'}
+                        </span>
+                      </div>
+                      <div className="space-y-1 text-slate-600 dark:text-slate-300 pt-1">
+                        <p>Số CC / Đơn vị KĐ: <strong className="text-slate-800 dark:text-slate-100">{equipment.calibrationNumber || 'KD-ISO'} ({equipment.calibrationIssuedBy || 'Quatest / VMI'})</strong></p>
+                        <p>Ngày kiểm định: <strong className="text-slate-800 dark:text-slate-100">{formatDateVN(equipment.calibrationDate, 'Chưa ghi nhận')}</strong></p>
+                        <p>Thời hạn: <strong className="text-sky-700 dark:text-sky-300">{equipment.calibrationIntervalMonths ? `${equipment.calibrationIntervalMonths} tháng` : '12 tháng'}</strong></p>
+                        <p>Ngày hết hạn: <strong className={`font-bold ${isCalibrationOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatDateVN(equipment.calibrationExpiry, 'Định kỳ hàng năm')} {isCalibrationOverdue && '⚠️ Quá hạn'}</strong></p>
+                      </div>
+                    </div>
+
+                    {/* 3. Kiểm xạ */}
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
+                          ☢️ 3. Kiểm Xạ
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isRadiationOverdue
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}>
+                          {radExpirySummary ? (isRadiationOverdue ? 'Hết hạn' : 'Đang hiệu lực') : 'Không áp dụng'}
+                        </span>
+                      </div>
+                      <div className="space-y-1 text-slate-600 dark:text-slate-300 pt-1">
+                        <p>Số giấy phép ATBX: <strong className="text-slate-800 dark:text-slate-100">{equipment.radiationLicenseNumber || 'Chưa cấp / Không áp dụng'}</strong></p>
+                        <p>Ngày kiểm xạ: <strong className="text-slate-800 dark:text-slate-100">{formatDateVN(equipment.radiationSurveyDate, 'Chưa ghi nhận')}</strong></p>
+                        <p>Thời hạn: <strong className="text-amber-700 dark:text-amber-300">{equipment.radiationSurveyIntervalMonths ? `${equipment.radiationSurveyIntervalMonths} tháng` : '12 tháng'}</strong></p>
+                        <p>Ngày hết hạn: <strong className={`font-bold ${isRadiationOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatDateVN(radExpirySummary, 'Không yêu cầu')} {isRadiationOverdue && '⚠️ Quá hạn'}</strong></p>
+                      </div>
+                    </div>
+
+                    {/* 4. Bảo dưỡng */}
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
+                          🛠️ 4. Bảo Dưỡng
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isNextMaintenanceOverdue
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                            : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                        }`}>
+                          {equipment.maintenanceIntervalMonths} tháng / lần
+                        </span>
+                      </div>
+                      <div className="space-y-1 text-slate-600 dark:text-slate-300 pt-1">
+                        <p>Ngày bảo dưỡng: <strong className="text-slate-800 dark:text-slate-100">{formatDateVN(equipment.lastMaintenanceDate, 'Chưa ghi nhận')}</strong></p>
+                        <p>Thời hạn: <strong className="text-emerald-700 dark:text-emerald-300">{equipment.maintenanceIntervalMonths} tháng</strong></p>
+                        <p>Ngày hết hạn: <strong className={`font-bold ${isNextMaintenanceOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatDateVN(equipment.nextMaintenanceDate)} {isNextMaintenanceOverdue && '⚠️ Quá hạn'}</strong></p>
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('maintenance')}
+                            className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                          >
+                            Xem chi tiết nhật ký bảo trì ({equipment.maintenanceHistory?.length || 0} lần) →
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* ISO 15189 Calibration */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
-                        🔬 Tem & Giấy Chứng Nhận Hiệu Chuẩn
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        isCalibrationOverdue 
-                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' 
-                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                      }`}>
-                        {isCalibrationOverdue ? 'Quá hạn KĐ' : 'Còn hiệu lực'}
-                      </span>
-                    </div>
-                    <div className="space-y-1 text-slate-600 dark:text-slate-300 pt-1">
-                      <p>Số chứng chỉ kiểm định: <strong className="text-slate-800 dark:text-slate-100">{equipment.calibrationNumber || 'KD-ISO-2026'}</strong></p>
-                      <p>Đơn vị kiểm định: <strong className="text-slate-800 dark:text-slate-100">{equipment.calibrationIssuedBy || 'Trung tâm Đo lường Chất lượng Quatest 1 / Viện TTBYT'}</strong></p>
-                      <p>Hạn KĐ (Thời hạn cần làm kiểm định): <strong className={`font-bold ${isCalibrationOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>{formatDateVN(equipment.calibrationExpiry, 'Định kỳ hàng năm')} {isCalibrationOverdue && '⚠️ Quá hạn'}</strong></p>
-                    </div>
-                  </div>
-
-                  {/* Operating Permit */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
-                        🏛️ Giấy Phép Hoạt Động & Lưu Hành BYT
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                        Hợp lệ
-                      </span>
-                    </div>
-                    <div className="space-y-1 text-slate-600 dark:text-slate-300 pt-1">
-                      <p>Số quyết định lưu hành: <strong className="text-slate-800 dark:text-slate-100">{equipment.operatingPermitNumber || 'GPHĐ-BYT/2023-TTBYT'}</strong></p>
-                      <p>Cơ quan phê duyệt: <strong className="text-slate-800 dark:text-slate-100">Bộ Y Tế Việt Nam</strong></p>
-                      <p>Hạn GP (Lưu hành BYT): <strong className="text-slate-800 dark:text-slate-100">{formatDateVN(equipment.operatingPermitExpiry, '31/12/2028')}</strong></p>
-                    </div>
+                  {/* Ghi chú thiết bị */}
+                  <div className="p-4 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl border border-amber-200/80 dark:border-amber-800/60 space-y-1.5 text-xs">
+                    <span className="font-bold text-amber-950 dark:text-amber-200 text-sm flex items-center gap-1.5">
+                      📝 Ghi Chú Thiết Bị
+                    </span>
+                    <p className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-line">
+                      {equipment.notes || 'Chưa có ghi chú bổ sung cho thiết bị này. Bấm "Chỉnh Sửa Phần 2" để thêm ghi chú.'}
+                    </p>
                   </div>
 
                   {/* Standard SOP Documents */}
                   <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
                     <span className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
-                      📑 Tài Liệu Kỹ Thuật & Quy Trình SOP
+                      📑 Tài Liệu Kỹ Thuật &amp; Quy Trình SOP
                     </span>
-                    <div className="space-y-1.5 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                       <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                         <span>SOP Vận hành chuẩn thiết bị ({equipment.code})</span>
                         <button type="button" className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Tải file PDF</button>
                       </div>
                       <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <span>Biên bản bàn giao & hồ sơ CO/CQ gốc</span>
+                        <span>Biên bản bàn giao &amp; hồ sơ CO/CQ gốc</span>
                         <button type="button" className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Xem lưu trữ</button>
                       </div>
                     </div>

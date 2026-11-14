@@ -250,7 +250,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Trang tính Google Sheets này dùng riêng để <strong className="text-slate-700 dark:text-slate-200">đọc dữ liệu giao ban số ca thực tế</strong> cho menu <strong className="text-slate-700 dark:text-slate-200">"Báo cáo & Thống kê"</strong>. Các tab (Tháng 1, Tháng 2, Tháng 3,...) chứa thống kê lượt ca Bảo hiểm (BH) & Nhân dân (ND) theo ngày, tuần (1-52) và cả năm.
+            Trang tính Google Sheets này dùng riêng để <strong className="text-slate-700 dark:text-slate-200">đọc dữ liệu giao ban số ca thực tế</strong> cho menu <strong className="text-slate-700 dark:text-slate-200">"Báo cáo & Thống kê"</strong>. Hệ thống hỗ trợ đồng bộ tất cả 12 tháng (tên tab dạng <strong>Tháng 1</strong>..<strong>Tháng 12</strong>, <strong>Tháng 11/2026</strong>, <strong>T11</strong>, <strong>11/2026</strong>) theo ngày, tuần (1-52) và cả năm.
           </p>
 
           <div className="space-y-3 text-xs">

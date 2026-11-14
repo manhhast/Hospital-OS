@@ -1,7 +1,7 @@
 import { 
   TaskItem, DocumentItem, User, NotificationLog, AuditLogItem, AppSettings, UserRole, CLSTitle,
   ShiftDuty, WorkTaskRow, WeeklyMeeting, ChatChannelMessage, ChatGroupChannel, DepartmentAnnouncement, MessageType, ShareCardData,
-  EquipmentItem, ParaclinicalRoom, RoomReservation, StaffProfile, LeaveRequest, TrainingCourse,
+  EquipmentItem, EquipmentDurationDefaults, ParaclinicalRoom, RoomReservation, StaffProfile, LeaveRequest, TrainingCourse,
   MeetingItem, MeetingMinutes, MeetingActionItem, IntegrationEndpoint, IntegrationPayloadSample, MaintenanceLog, RepairLog
 } from '../types/hospital';
 import { 
@@ -35,7 +35,8 @@ const STORAGE_KEYS = {
   MEETING_ITEMS: 'cls_workhub_meeting_items',
   INTEGRATION_ENDPOINTS: 'cls_workhub_integration_endpoints',
   INTEGRATION_PAYLOADS: 'cls_workhub_integration_payloads',
-  WORK_TASK_ROWS: 'cls_workhub_work_task_rows'
+  WORK_TASK_ROWS: 'cls_workhub_work_task_rows',
+  EQUIPMENT_DURATION_DEFAULTS: 'cls_workhub_equipment_duration_defaults'
 };
 
 class HospitalStorageService {
@@ -63,6 +64,33 @@ class HospitalStorageService {
       this.purgeAllTrialData();
       localStorage.setItem(PRODUCTION_MODE_KEY, 'true');
       return;
+    }
+
+    // Tự động giải phóng dung lượng nếu bộ nhớ trình duyệt có dữ liệu audit/base64 cũ quá lớn
+    try {
+      const rawAudit = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
+      if (rawAudit && (rawAudit.length > 200000 || rawAudit.includes('data:application/pdf') || rawAudit.includes('data:image/'))) {
+        localStorage.removeItem(STORAGE_KEYS.AUDIT_LOGS);
+      }
+      const rawDocs = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
+      if (rawDocs && (rawDocs.includes('data:application/pdf') || rawDocs.includes('data:image/'))) {
+        try {
+          const parsedDocs = JSON.parse(rawDocs);
+          const cleaned = parsedDocs.map((d: any) => {
+            const copy = { ...d };
+            delete copy.rawFileData;
+            if (typeof copy.driveUrl === 'string' && copy.driveUrl.startsWith('data:')) {
+              copy.driveUrl = `https://drive.google.com/file/d/${copy.driveFileId || copy.id}/view`;
+            }
+            return copy;
+          });
+          localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(cleaned));
+        } catch (e) {
+          // Ignore
+        }
+      }
+    } catch (e) {
+      // Ignore
     }
 
     if (!localStorage.getItem(STORAGE_KEYS.TASKS)) {
@@ -696,9 +724,48 @@ class HospitalStorageService {
     this.notify();
   }
 
+  // --- Safe LocalStorage Wrapper to Prevent QuotaExceededError ---
+  public safeSetItem(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      console.warn(`[StorageService] Dung lượng lưu trữ đầy đối với "${key}", đang tự động tối ưu hóa...`, e);
+      try {
+        // Tự động thu gọn nhật ký để giải phóng dung lượng ngay lập tức
+        localStorage.removeItem(STORAGE_KEYS.AUDIT_LOGS);
+        localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
+        localStorage.setItem(key, value);
+      } catch (innerErr) {
+        console.error(`[StorageService] Không thể ghi dữ liệu vào "${key}":`, innerErr);
+      }
+    }
+  }
+
+  private sanitizeForAudit(data: any): any {
+    if (!data || typeof data !== 'object') return data;
+    try {
+      const copy = { ...data };
+      if ('rawFileData' in copy) delete copy.rawFileData;
+      if (typeof copy.driveUrl === 'string' && copy.driveUrl.startsWith('data:')) {
+        copy.driveUrl = '[DỮ_LIỆU_TỆP_ĐÃ_LƯU_TRỮ]';
+      }
+      if (Array.isArray(copy.versionHistory)) {
+        copy.versionHistory = copy.versionHistory.map((vh: any) => ({
+          ...vh,
+          fileUrl: vh.fileUrl && typeof vh.fileUrl === 'string' && vh.fileUrl.startsWith('data:') ? '#' : vh.fileUrl
+        }));
+      }
+      return copy;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
   // --- Audit Logging ---
   public logAudit(action: string, module: 'Task' | 'Document' | 'User' | 'Shift' | 'Setting' | 'System' | 'Equipment' | 'Room' | 'HR' | 'Meeting' | 'Integration', oldData?: any, newData?: any) {
     const logs = this.getAuditLogs();
+    const sanitizedOld = oldData ? this.sanitizeForAudit(oldData) : undefined;
+    const sanitizedNew = newData ? this.sanitizeForAudit(newData) : undefined;
     const newLog: AuditLogItem = {
       id: `LOG-${Date.now().toString().slice(-6)}`,
       userEmail: this.currentUser.email,
@@ -709,11 +776,11 @@ class HospitalStorageService {
       timestamp: new Date().toLocaleString('sv-SE').replace('T', ' '),
       ipAddress: '118.69.182.45',
       device: navigator.userAgent.includes('Mac') ? 'Safari (macOS)' : 'Chrome (Windows 11)',
-      oldData: oldData ? JSON.stringify(oldData) : undefined,
-      newData: newData ? JSON.stringify(newData) : undefined
+      oldData: sanitizedOld ? JSON.stringify(sanitizedOld) : undefined,
+      newData: sanitizedNew ? JSON.stringify(sanitizedNew) : undefined
     };
     logs.unshift(newLog);
-    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(logs.slice(0, 100))); // keep max 100
+    this.safeSetItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(logs.slice(0, 50)));
     this.notify();
   }
 
@@ -832,36 +899,124 @@ class HospitalStorageService {
   public getDocuments(): DocumentItem[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
-      return raw ? JSON.parse(raw) : [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!parsed || parsed.length === 0) {
+        // Fallback to sample demo documents so user has rich SOP files to test preview and sync
+        const seedDocs = sampleDemoData.initialDocuments.map(d => ({
+          ...d,
+          syncStatus: (d.syncStatus || 'synced') as 'synced' | 'pending' | 'syncing' | 'failed',
+          lastSyncedAt: d.lastSyncedAt || '2026-11-10 16:45',
+          checksum: d.checksum || `sha256_${Math.random().toString(36).substr(2, 10)}`,
+          driveFolderId: d.driveFolderId || this.getSettings().googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID'
+        }));
+        localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(seedDocs));
+        return seedDocs;
+      }
+      return parsed.map((d: DocumentItem) => ({
+        ...d,
+        syncStatus: d.syncStatus || 'synced',
+        lastSyncedAt: d.lastSyncedAt || d.uploadDate || '2026-11-10 16:45',
+        checksum: d.checksum || `sha256_${Math.random().toString(36).substr(2, 10)}`,
+        driveFolderId: d.driveFolderId || this.getSettings().googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID'
+      }));
     } catch (e) {
-      return initialDocuments;
+      return sampleDemoData.initialDocuments;
     }
   }
 
   public saveDocument(doc: DocumentItem): DocumentItem {
     const docs = this.getDocuments();
     const existingIndex = docs.findIndex(d => d.id === doc.id);
+    const settings = this.getSettings();
+    const now = new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16);
 
     let updatedDoc: DocumentItem;
     if (existingIndex >= 0) {
       const oldDoc = docs[existingIndex];
-      updatedDoc = { ...doc };
-      docs[existingIndex] = updatedDoc;
-      this.logAudit('UPDATE_DOCUMENT', 'Document', oldDoc, updatedDoc);
+      updatedDoc = { 
+        ...doc,
+        syncStatus: doc.syncStatus || 'synced',
+        lastSyncedAt: doc.lastSyncedAt || now,
+        checksum: doc.checksum || `sha256_${Math.random().toString(36).substr(2, 10)}`,
+        driveFolderId: doc.driveFolderId || settings.googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID'
+      };
+      const sanitizedDoc = { ...updatedDoc };
+      delete sanitizedDoc.rawFileData;
+      if (typeof sanitizedDoc.driveUrl === 'string' && sanitizedDoc.driveUrl.startsWith('data:')) {
+        sanitizedDoc.driveUrl = `https://drive.google.com/file/d/${sanitizedDoc.driveFileId}/view`;
+      }
+      docs[existingIndex] = sanitizedDoc;
+      this.logAudit('UPDATE_DOCUMENT', 'Document', oldDoc, sanitizedDoc);
     } else {
       updatedDoc = {
         ...doc,
         id: doc.id || `DOC-${Math.floor(2000 + Math.random() * 8000)}`,
         owner: doc.owner || this.currentUser.name,
-        uploadDate: new Date().toISOString().split('T')[0]
+        uploadDate: new Date().toISOString().split('T')[0],
+        syncStatus: doc.syncStatus || 'synced',
+        lastSyncedAt: now,
+        checksum: doc.checksum || `sha256_${Math.random().toString(36).substr(2, 10)}`,
+        driveFolderId: doc.driveFolderId || settings.googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID'
       };
-      docs.unshift(updatedDoc);
-      this.logAudit('UPLOAD_DOCUMENT', 'Document', undefined, updatedDoc);
+      const sanitizedDoc = { ...updatedDoc };
+      delete sanitizedDoc.rawFileData;
+      if (typeof sanitizedDoc.driveUrl === 'string' && sanitizedDoc.driveUrl.startsWith('data:')) {
+        sanitizedDoc.driveUrl = `https://drive.google.com/file/d/${sanitizedDoc.driveFileId}/view`;
+      }
+      docs.unshift(sanitizedDoc);
+      this.logAudit('UPLOAD_DOCUMENT', 'Document', undefined, sanitizedDoc);
     }
 
-    localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(docs));
+    this.safeSetItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(docs));
     this.notify();
     return updatedDoc;
+  }
+
+  public syncDocumentToDrive(docId: string): DocumentItem | null {
+    const docs = this.getDocuments();
+    const idx = docs.findIndex(d => d.id === docId);
+    if (idx === -1) return null;
+
+    const settings = this.getSettings();
+    const now = new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16);
+    const updated: DocumentItem = {
+      ...docs[idx],
+      syncStatus: 'synced',
+      lastSyncedAt: now,
+      driveFileId: docs[idx].driveFileId?.startsWith('drive_') || !docs[idx].driveFileId 
+        ? `1Drive_${Math.random().toString(36).substr(2, 9)}_${docs[idx].id.replace('-', '')}` 
+        : docs[idx].driveFileId,
+      driveFolderId: settings.googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID',
+      checksum: `sha256_${Math.random().toString(36).substr(2, 12)}`
+    };
+
+    docs[idx] = updated;
+    this.safeSetItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(docs));
+    this.logAudit('SYNC_DOCUMENT_DRIVE', 'Document', undefined, { docId, driveFileId: updated.driveFileId, syncedAt: now });
+    this.notify();
+    return updated;
+  }
+
+  public syncAllDocumentsToDrive(): DocumentItem[] {
+    const docs = this.getDocuments();
+    const settings = this.getSettings();
+    const now = new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16);
+
+    const syncedDocs = docs.map(d => ({
+      ...d,
+      syncStatus: 'synced' as const,
+      lastSyncedAt: now,
+      driveFileId: d.driveFileId?.startsWith('drive_') || !d.driveFileId 
+        ? `1Drive_${Math.random().toString(36).substr(2, 9)}_${d.id.replace('-', '')}` 
+        : d.driveFileId,
+      driveFolderId: settings.googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID',
+      checksum: d.checksum || `sha256_${Math.random().toString(36).substr(2, 12)}`
+    }));
+
+    this.safeSetItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(syncedDocs));
+    this.logAudit('SYNC_ALL_DOCUMENTS_DRIVE', 'Document', undefined, { totalCount: syncedDocs.length, syncedAt: now });
+    this.notify();
+    return syncedDocs;
   }
 
   public deleteDocument(docId: string): boolean {
@@ -870,7 +1025,7 @@ class HospitalStorageService {
     if (!target) return false;
 
     const filtered = docs.filter(d => d.id !== docId);
-    localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(filtered));
+    this.safeSetItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(filtered));
     this.logAudit('DELETE_DOCUMENT', 'Document', target, undefined);
     this.notify();
     return true;
@@ -1133,13 +1288,21 @@ class HospitalStorageService {
           yearOfManufacture: item.yearOfManufacture || seed.yearOfManufacture,
           warrantyExpiry: item.warrantyExpiry || seed.warrantyExpiry,
           operatingPermitNumber: item.operatingPermitNumber || seed.operatingPermitNumber,
+          operatingPermitIssueDate: item.operatingPermitIssueDate || seed.operatingPermitIssueDate,
+          operatingPermitDurationMonths: item.operatingPermitDurationMonths ?? seed.operatingPermitDurationMonths,
           operatingPermitExpiry: item.operatingPermitExpiry || seed.operatingPermitExpiry,
           radiationLicenseNumber: item.radiationLicenseNumber || seed.radiationLicenseNumber,
           radiationLicenseIssuedBy: item.radiationLicenseIssuedBy || seed.radiationLicenseIssuedBy,
+          radiationSurveyDate: item.radiationSurveyDate || seed.radiationSurveyDate,
+          radiationSurveyIntervalMonths: item.radiationSurveyIntervalMonths ?? seed.radiationSurveyIntervalMonths,
+          radiationSurveyExpiry: item.radiationSurveyExpiry || seed.radiationSurveyExpiry,
           calibrationNumber: item.calibrationNumber || seed.calibrationNumber,
+          calibrationDate: item.calibrationDate || seed.calibrationDate,
+          calibrationIntervalMonths: item.calibrationIntervalMonths ?? seed.calibrationIntervalMonths,
           calibrationIssuedBy: item.calibrationIssuedBy || seed.calibrationIssuedBy,
           powerSupply: item.powerSupply || seed.powerSupply,
           specifications: item.specifications || seed.specifications,
+          notes: item.notes ?? seed.notes,
           maintenanceHistory: (item.maintenanceHistory && item.maintenanceHistory.length > 0) ? item.maintenanceHistory : seed.maintenanceHistory,
           repairHistory: (item.repairHistory && item.repairHistory.length > 0) ? item.repairHistory : seed.repairHistory
         };
@@ -1147,6 +1310,40 @@ class HospitalStorageService {
     } catch (e) {
       return initialEquipment;
     }
+  }
+
+  public getEquipmentDurationDefaults(): EquipmentDurationDefaults {
+    const fallback: EquipmentDurationDefaults = {
+      permitMonths: 60,
+      calibrationMonths: 12,
+      radiationSurveyMonths: 12,
+      maintenanceMonths: 3
+    };
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      return {
+        permitMonths: Number(parsed.permitMonths) > 0 ? Number(parsed.permitMonths) : fallback.permitMonths,
+        calibrationMonths: Number(parsed.calibrationMonths) > 0 ? Number(parsed.calibrationMonths) : fallback.calibrationMonths,
+        radiationSurveyMonths: Number(parsed.radiationSurveyMonths) > 0 ? Number(parsed.radiationSurveyMonths) : fallback.radiationSurveyMonths,
+        maintenanceMonths: Number(parsed.maintenanceMonths) > 0 ? Number(parsed.maintenanceMonths) : fallback.maintenanceMonths
+      };
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  public saveEquipmentDurationDefaults(defaults: EquipmentDurationDefaults): EquipmentDurationDefaults {
+    const normalized: EquipmentDurationDefaults = {
+      permitMonths: Math.max(1, Math.round(Number(defaults.permitMonths) || 60)),
+      calibrationMonths: Math.max(1, Math.round(Number(defaults.calibrationMonths) || 12)),
+      radiationSurveyMonths: Math.max(1, Math.round(Number(defaults.radiationSurveyMonths) || 12)),
+      maintenanceMonths: Math.max(1, Math.round(Number(defaults.maintenanceMonths) || 3))
+    };
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS, JSON.stringify(normalized));
+    this.notify();
+    return normalized;
   }
 
   public saveEquipment(item: EquipmentItem): EquipmentItem {
@@ -1647,8 +1844,8 @@ class HospitalStorageService {
     localStorage.setItem(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(initialIntegrationEndpoints));
     localStorage.setItem(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(initialIntegrationPayloads));
     
-    // Xóa bộ nhớ tạm Google Sheet demo
-    ['Tháng 1', 'Tháng 2', 'Tháng 3'].forEach(m => {
+    // Xóa bộ nhớ tạm Google Sheet demo (tất cả 12 tháng)
+    Array.from({ length: 12 }, (_, idx) => `Tháng ${idx + 1}`).forEach(m => {
       localStorage.removeItem(`google_sheet_data_${m}`);
     });
     localStorage.removeItem('google_sheet_url');

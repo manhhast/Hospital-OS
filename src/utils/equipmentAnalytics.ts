@@ -96,9 +96,22 @@ export const getActiveCasesForEquipment = (
     feePerCase: 300000
   };
 
-  // Try to find cases in monthly store if available
+  // Try to find cases in monthly store if available (prioritize latest month with data from T12 down to T1)
   if (monthlyStore && Object.keys(monthlyStore).length > 0) {
-    const latestMonth = monthlyStore['Tháng 2'] || monthlyStore['Tháng 1'] || Object.values(monthlyStore)[0];
+    const orderedMonths = [
+      'Tháng 12', 'Tháng 11', 'Tháng 10', 'Tháng 9', 'Tháng 8', 'Tháng 7',
+      'Tháng 6', 'Tháng 5', 'Tháng 4', 'Tháng 3', 'Tháng 2', 'Tháng 1'
+    ];
+    let latestMonth: any[] | undefined;
+    for (const m of orderedMonths) {
+      if (Array.isArray(monthlyStore[m]) && monthlyStore[m].length > 0) {
+        latestMonth = monthlyStore[m];
+        break;
+      }
+    }
+    if (!latestMonth) {
+      latestMonth = Object.values(monthlyStore).find(arr => Array.isArray(arr) && arr.length > 0);
+    }
     if (Array.isArray(latestMonth) && latestMonth.length > 0) {
       for (const item of latestMonth) {
         const title = (item.serviceName || item.name || '').toLowerCase();

@@ -105,16 +105,99 @@ const findLatestDayInItems = (items: CaseReportItem[], maxDay: number = 31): num
   return 1;
 };
 
+const ALL_MONTHS = [
+  'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+  'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+];
+
+const getMonthNumber = (monthStr: string): number => {
+  const match = String(monthStr || '').match(/(\d{1,2})/);
+  const num = match ? parseInt(match[1], 10) : 0;
+  return num >= 1 && num <= 12 ? num : 1;
+};
+
+const getDaysInMonth = (monthStr: string, year: number = 2026): number => {
+  const mNum = getMonthNumber(monthStr);
+  if (mNum === 2) {
+    const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    return isLeap ? 29 : 28;
+  }
+  if (mNum === 4 || mNum === 6 || mNum === 9 || mNum === 11) {
+    return 30;
+  }
+  return 31;
+};
+
+const getCandidateTabNames = (monthKey: string, year: number = 2026): string[] => {
+  const mNum = getMonthNumber(monthKey);
+  const pad2 = String(mNum).padStart(2, '0');
+  const rawCandidates = [
+    monthKey,
+    `Tháng ${mNum}/${year}`,
+    `Tháng ${mNum}-${year}`,
+    `Tháng ${mNum} ${year}`,
+    `Tháng ${mNum} năm ${year}`,
+    `T${mNum}`,
+    `T${mNum}/${year}`,
+    `T${mNum}-${year}`,
+    `${mNum}/${year}`,
+    `${mNum}-${year}`,
+    `Thang ${mNum}`,
+    `Thang ${mNum}/${year}`,
+    ...(mNum < 10
+      ? [
+          `Tháng ${pad2}`,
+          `Tháng ${pad2}/${year}`,
+          `Tháng ${pad2}-${year}`,
+          `T${pad2}`,
+          `T${pad2}/${year}`,
+          `${pad2}/${year}`,
+          `${pad2}-${year}`
+        ]
+      : [])
+  ];
+  return Array.from(new Set(rawCandidates));
+};
+
+const detectMonthInSheetCsv = (csvText: string): number | null => {
+  const headerSample = csvText.split(/\r?\n/).slice(0, 12).join(' ');
+  const thangMatch = headerSample.match(/\b(?:tháng|thang)\s*0?(\d{1,2})\b/i);
+  if (thangMatch) {
+    const num = parseInt(thangMatch[1], 10);
+    if (num >= 1 && num <= 12) return num;
+  }
+  const monthYearMatch = headerSample.match(/\b0?(\d{1,2})\s*[\/\-]\s*202\d\b/);
+  if (monthYearMatch) {
+    const num = parseInt(monthYearMatch[1], 10);
+    if (num >= 1 && num <= 12) return num;
+  }
+  const shortTMatch = headerSample.match(/\bT0?(\d{1,2})\b/);
+  if (shortTMatch) {
+    const num = parseInt(shortTMatch[1], 10);
+    if (num >= 1 && num <= 12) return num;
+  }
+  return null;
+};
+
+const resolveSpreadsheetId = (urlOrId?: string): string | null => {
+  const raw = String(urlOrId || '').trim();
+  if (!raw) return null;
+  const urlMatch = raw.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  if (urlMatch && urlMatch[1]) return urlMatch[1];
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(raw)) return raw;
+  return null;
+};
+
 // Helper to find the latest month and day that has valid data across all stored months
 const findLatestDataDate = (store: { [monthKey: string]: CaseReportItem[] }, fallbackItems?: CaseReportItem[]): { month: string; day: number; week: number } => {
-  const monthKeys = ['Tháng 12', 'Tháng 11', 'Tháng 10', 'Tháng 9', 'Tháng 8', 'Tháng 7', 'Tháng 6', 'Tháng 5', 'Tháng 4', 'Tháng 3', 'Tháng 2', 'Tháng 1'];
-  
+  const monthKeys = [...ALL_MONTHS].reverse();
+
   for (const m of monthKeys) {
     const items = store[m];
     if (items && items.length > 0) {
-      const mNum = parseInt(m.replace(/[^0-9]/g, ''), 10) || 1;
-      const maxDays = m.includes('2') ? 28 : (m.includes('4') || m.includes('6') || m.includes('9') || m.includes('11') ? 30 : 31);
-      
+      const mNum = getMonthNumber(m);
+      const maxDays = getDaysInMonth(m, 2026);
+
       for (let d = maxDays; d >= 1; d--) {
         let hasData = false;
         let totalDayCases = 0;
@@ -163,14 +246,17 @@ const monthToFirstWeekMap: { [m: string]: number } = {
   'Tháng 12': 49
 };
 
-// Helper to load initial monthly store from localStorage
+// Helper to load initial monthly store across all 12 months from localStorage
 const loadInitialMonthlyStore = (): { [monthKey: string]: CaseReportItem[] } => {
   const store: { [monthKey: string]: CaseReportItem[] } = {};
-  ['Tháng 1', 'Tháng 2', 'Tháng 3'].forEach(m => {
+  ALL_MONTHS.forEach(m => {
     const saved = localStorage.getItem(`google_sheet_data_${m}`);
     if (saved) {
       try {
-        store[m] = JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          store[m] = parsed;
+        }
       } catch (e) { /* ignore */ }
     }
   });
@@ -182,9 +268,9 @@ export const ReportsAnalyticsView: React.FC = () => {
   const initialLatest = findLatestDataDate(initialStore);
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'google_sheet'>('google_sheet');
-  const [timePeriod, setTimePeriod] = useState<string>('Tháng 2/2026');
+  const [timePeriod, setTimePeriod] = useState<string>(`${initialLatest.month}/2026`);
   const [sheetTab, setSheetTab] = useState<string>('Báo cáo ngày');
-  
+
   // Smart Report specific state - automatically default to latest day with data
   const [selectedReportMonth, setSelectedReportMonth] = useState<string>(initialLatest.month);
   const [selectedReportDay, setSelectedReportDay] = useState<number>(initialLatest.day);
@@ -196,35 +282,43 @@ export const ReportsAnalyticsView: React.FC = () => {
     if (!rawName || typeof rawName !== 'string') return false;
     const clean = rawName.trim();
     if (clean.length < 2) return false;
+    if (/^\d+$/.test(clean)) return false;
     const u = clean.toUpperCase();
     if (
-      u.startsWith('THÁNG') || 
-      u.startsWith('TÊN KỸ') || 
-      u.startsWith('KỸ THUẬT') || 
-      u.startsWith('DỊCH VỤ') || 
-      u.startsWith('STT') || 
-      u.startsWith('TỔNG') || 
-      u.startsWith('CỘNG') || 
-      u.startsWith('BÁO CÁO') || 
-      u.startsWith('GHI CHÚ')
+      u.startsWith('THÁNG') ||
+      u.startsWith('THANG') ||
+      u.startsWith('TÊN KỸ') ||
+      u.startsWith('KỸ THUẬT') ||
+      u.startsWith('DỊCH VỤ') ||
+      u.startsWith('STT') ||
+      u.startsWith('TỔNG') ||
+      u.startsWith('CỘNG') ||
+      u.startsWith('BÁO CÁO') ||
+      u.startsWith('GHI CHÚ') ||
+      u.startsWith('NGÀY')
     ) return false;
-    if (u === 'BH' || u === 'ND' || u === 'TỔNG CỘNG' || u === 'BÁO CÁO TỔNG HỢP' || u === 'MÃ DỊCH VỤ') return false;
+    if (u === 'BH' || u === 'ND' || u === 'TỔNG CỘNG' || u === 'BÁO CÁO TỔNG HỢP' || u === 'MÃ DỊCH VỤ' || u === 'LOẠI') return false;
     return true;
   };
 
   // Multi-month data cache store
   const [monthlyDataStore, setMonthlyDataStore] = useState<{ [monthKey: string]: CaseReportItem[] }>(initialStore);
 
-  // Google Sheets integration state
-  const [sheetUrl, setSheetUrl] = useState<string>(() => {
+  const getEffectiveSheetTarget = (): string => {
     const s = storageService.getSettings();
-    return s.googleSheetUrl || localStorage.getItem('google_sheet_url') || '';
-  });
+    if (s.googleSheetUrl && s.googleSheetUrl.trim()) return s.googleSheetUrl.trim();
+    if (s.reportGoogleSheetId && s.reportGoogleSheetId.trim()) {
+      return `https://docs.google.com/spreadsheets/d/${s.reportGoogleSheetId.trim()}/edit`;
+    }
+    return localStorage.getItem('google_sheet_url') || '';
+  };
+
+  // Google Sheets integration state
+  const [sheetUrl, setSheetUrl] = useState<string>(() => getEffectiveSheetTarget());
 
   // Sync sheetUrl when settings or localStorage change
   useEffect(() => {
-    const s = storageService.getSettings();
-    const currentUrl = s.googleSheetUrl || localStorage.getItem('google_sheet_url') || '';
+    const currentUrl = getEffectiveSheetTarget();
     if (currentUrl !== sheetUrl) {
       setSheetUrl(currentUrl);
     }
@@ -530,27 +624,53 @@ export const ReportsAnalyticsView: React.FC = () => {
     const dayMap: { [day: number]: { bhCol: number; ndCol: number } } = {};
     let foundHeaderRow = false;
 
-    for (let r = 0; r < Math.min(rows.length, 12); r++) {
+    const extractDayNumber = (rawCell: string): number | null => {
+      const val = rawCell.trim();
+      if (!val) return null;
+      // Match "1", "01", "Ngày 1", "Ngày 01", "Ng 1", "N1"
+      const simpleMatch = val.match(/^(?:ngày|ngay|ng|n)?\s*0?(\d{1,2})$/i);
+      if (simpleMatch) {
+        const d = parseInt(simpleMatch[1], 10);
+        if (d >= 1 && d <= 31) return d;
+      }
+      // Match "1/11", "01/11/2026", "01-11-2026"
+      const dateMatch = val.match(/^0?(\d{1,2})\s*[\/\-]\s*0?\d{1,2}(?:\s*[\/\-]\s*\d{2,4})?$/);
+      if (dateMatch) {
+        const d = parseInt(dateMatch[1], 10);
+        if (d >= 1 && d <= 31) return d;
+      }
+      return null;
+    };
+
+    for (let r = 0; r < Math.min(rows.length, 15); r++) {
       const row = rows[r];
       if (!row) continue;
 
       const daysInRow: { day: number; col: number }[] = [];
       for (let c = 0; c < row.length; c++) {
         const val = String(row[c] || '').trim();
-        const num = parseInt(val, 10);
-        // Look for day numbers 1 to 31
-        if (!isNaN(num) && num >= 1 && num <= 31 && String(num) === val) {
+        const dayNum = extractDayNumber(val);
+        if (dayNum !== null) {
           const contextStr = row.slice(Math.max(0, c - 1), c + 2).join(' ').toLowerCase();
-          if (!contextStr.includes('tổng') && !contextStr.includes('total') && !contextStr.includes('tb')) {
-            daysInRow.push({ day: num, col: c });
+          if (!contextStr.includes('tổng') && !contextStr.includes('total') && !contextStr.includes('tb') && !contextStr.includes('tháng')) {
+            daysInRow.push({ day: dayNum, col: c });
           }
         }
       }
 
       if (daysInRow.length >= 3) {
         foundHeaderRow = true;
-        for (const item of daysInRow) {
-          dayMap[item.day] = { bhCol: item.col, ndCol: item.col + 1 };
+        const subHeaderRow = rows[r + 1] || [];
+        for (let idx = 0; idx < daysInRow.length; idx++) {
+          const item = daysInRow[idx];
+          const nextItem = daysInRow[idx + 1];
+          const isSingleColPerDay = nextItem && nextItem.col === item.col + 1;
+          const nextSubCell = String(subHeaderRow[item.col + 1] || '').trim().toUpperCase();
+          const hasExplicitNdCol = !isSingleColPerDay && (nextSubCell === 'ND' || !nextItem || nextItem.col >= item.col + 2);
+          dayMap[item.day] = {
+            bhCol: item.col,
+            ndCol: hasExplicitNdCol ? item.col + 1 : -1
+          };
         }
         break;
       }
@@ -598,10 +718,10 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       for (const day of sortedDays) {
         const { bhCol, ndCol } = dayMap[day];
-        if (bhCol >= row.length && ndCol >= row.length) continue;
+        if (bhCol >= row.length && (ndCol < 0 || ndCol >= row.length)) continue;
 
-        const rawBh = String(row[bhCol] || '').trim();
-        const rawNd = String(row[ndCol] || '').trim();
+        const rawBh = bhCol >= 0 && bhCol < row.length ? String(row[bhCol] || '').trim() : '';
+        const rawNd = ndCol >= 0 && ndCol < row.length ? String(row[ndCol] || '').trim() : '';
 
         let bhVal: number | string = 0;
         let ndVal: number | string = 0;
@@ -628,27 +748,68 @@ export const ReportsAnalyticsView: React.FC = () => {
     return items;
   };
 
-  // Helper to fetch a single tab from Google Sheet
-  const fetchSingleTab = async (targetUrl: string, targetTab: string): Promise<CaseReportItem[] | null> => {
+  // Fetch raw CSV text of a Google Sheet tab (no browser cache)
+  const fetchRawTabCsv = async (spreadsheetId: string, tabName: string): Promise<string | null> => {
     try {
-      const match = targetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
-      const spreadsheetId = match ? match[1] : null;
-      if (!spreadsheetId) return null;
-
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(targetTab)}`;
-      const response = await fetch(csvUrl);
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
+      const response = await fetch(csvUrl, { cache: 'no-store' });
       if (!response.ok) return null;
-
       const csvText = await response.text();
       if (!csvText || csvText.includes('<!DOCTYPE html>')) return null;
+      return csvText;
+    } catch {
+      return null;
+    }
+  };
 
-      const workbook = XLSX.read(csvText, { type: 'string' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  // Parse a raw CSV text into CaseReportItem[]
+  const parseCsvTextToItems = (csvText: string): CaseReportItem[] => {
+    const workbook = XLSX.read(csvText, { type: 'string' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    if (rows && rows.length > 0) {
+      return parseGoogleSheetRowsToCaseReports(rows);
+    }
+    return [];
+  };
 
-      if (rows && rows.length > 0) {
-        return parseGoogleSheetRowsToCaseReports(rows);
+  // Fetch a single month/tab from Google Sheet, avoiding gviz's silent Tab-1 fallback when tabName is missing
+  const fetchSingleTab = async (
+    targetUrl: string,
+    targetTab: string,
+    probeCsv?: string | null
+  ): Promise<CaseReportItem[] | null> => {
+    try {
+      const spreadsheetId = resolveSpreadsheetId(targetUrl);
+      if (!spreadsheetId) return null;
+
+      const resolvedProbeCsv = probeCsv !== undefined
+        ? probeCsv
+        : await fetchRawTabCsv(spreadsheetId, '__cls_probe_nonexistent__');
+      const normalizedProbe = resolvedProbeCsv ? resolvedProbeCsv.trim() : '';
+      const probeDetectedMonth = resolvedProbeCsv ? detectMonthInSheetCsv(resolvedProbeCsv) : null;
+
+      const targetMonthNum = targetTab.startsWith('Tháng') ? getMonthNumber(targetTab) : null;
+      const candidates = targetTab.startsWith('Tháng') ? getCandidateTabNames(targetTab, 2026) : [targetTab];
+
+      for (const candidateTab of candidates) {
+        const csvText = await fetchRawTabCsv(spreadsheetId, candidateTab);
+        if (!csvText) continue;
+
+        const isSameAsProbe = normalizedProbe !== '' && csvText.trim() === normalizedProbe;
+
+        // If gviz returned the exact first tab as a fallback, verify that the first tab actually matches this month
+        if (isSameAsProbe && targetMonthNum !== null) {
+          if (probeDetectedMonth !== targetMonthNum) {
+            continue;
+          }
+        }
+
+        const parsed = parseCsvTextToItems(csvText);
+        if (parsed.length > 0) {
+          return parsed;
+        }
       }
     } catch (e) {
       console.warn(`Error fetching tab ${targetTab}:`, e);
@@ -656,24 +817,47 @@ export const ReportsAnalyticsView: React.FC = () => {
     return null;
   };
 
-  // Sync all available months (Tháng 1, Tháng 2, Tháng 3) concurrently
+  // Sync all 12 months (Tháng 1 .. Tháng 12) concurrently
   const syncAllMonths = async (showToast = true, autoSelectLatest = true) => {
+    const effectiveUrl = sheetUrl || getEffectiveSheetTarget();
+    const spreadsheetId = resolveSpreadsheetId(effectiveUrl);
+
+    if (!spreadsheetId) {
+      if (showToast) {
+        setSyncToast('⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo. Vào mục "Cấu hình hệ thống" để dán URL hoặc ID trang tính.');
+        setTimeout(() => setSyncToast(null), 5000);
+      }
+      return;
+    }
+
+    if (effectiveUrl !== sheetUrl) {
+      setSheetUrl(effectiveUrl);
+    }
+
     setIsSyncing(true);
-    if (showToast) setSyncToast('Đang kết nối & đồng bộ dữ liệu thực tế 3 tháng từ Google Sheet...');
+    if (showToast) setSyncToast('Đang kết nối & đồng bộ dữ liệu thực tế cả 12 tháng (T1 - T12) từ Google Sheet...');
 
     try {
-      const tabsToSync = ['Tháng 1', 'Tháng 2', 'Tháng 3'];
+      const probeCsv = await fetchRawTabCsv(spreadsheetId, '__cls_probe_nonexistent__');
       const updatedStore: { [key: string]: CaseReportItem[] } = {};
 
-      for (const tab of tabsToSync) {
-        const items = await fetchSingleTab(sheetUrl, tab);
-        if (items && items.length > 0) {
-          updatedStore[tab] = items;
-          localStorage.setItem(`google_sheet_data_${tab}`, JSON.stringify(items));
-        }
-      }
+      await Promise.all(
+        ALL_MONTHS.map(async (tab) => {
+          const items = await fetchSingleTab(effectiveUrl, tab, probeCsv);
+          if (items && items.length > 0) {
+            updatedStore[tab] = items;
+            try {
+              localStorage.setItem(`google_sheet_data_${tab}`, JSON.stringify(items));
+            } catch (storageErr) {
+              console.warn(`Unable to cache ${tab} in localStorage:`, storageErr);
+            }
+          }
+        })
+      );
 
-      if (Object.keys(updatedStore).length > 0) {
+      const syncedMonthsList = ALL_MONTHS.filter(m => updatedStore[m] && updatedStore[m].length > 0);
+
+      if (syncedMonthsList.length > 0) {
         setMonthlyDataStore(prev => {
           const merged = { ...prev, ...updatedStore };
           if (autoSelectLatest) {
@@ -681,9 +865,12 @@ export const ReportsAnalyticsView: React.FC = () => {
             setSelectedReportMonth(latest.month);
             setSelectedReportDay(latest.day);
             setSelectedReportWeek(latest.week);
+            setTimePeriod(`${latest.month}/2026`);
             if (merged[latest.month]) {
               setCaseReports(merged[latest.month]);
             }
+          } else if (merged[selectedReportMonth]) {
+            setCaseReports(merged[selectedReportMonth]);
           }
           return merged;
         });
@@ -691,8 +878,13 @@ export const ReportsAnalyticsView: React.FC = () => {
         if (sheetTab.startsWith('Tháng') && updatedStore[sheetTab]) {
           setCaseReports(updatedStore[sheetTab]);
         }
-        localStorage.setItem('google_sheet_url', sheetUrl);
-        if (showToast) setSyncToast('✅ Đã đồng bộ thành công dữ liệu thực tế cả 3 tháng từ Google Sheet!');
+        try {
+          localStorage.setItem('google_sheet_url', effectiveUrl);
+        } catch { /* ignore */ }
+
+        if (showToast) {
+          setSyncToast(`✅ Đã đồng bộ thành công ${syncedMonthsList.length} tháng (${syncedMonthsList.join(', ')}) từ Google Sheets!`);
+        }
       } else {
         if (autoSelectLatest) {
           setMonthlyDataStore(prev => {
@@ -700,13 +892,16 @@ export const ReportsAnalyticsView: React.FC = () => {
             setSelectedReportMonth(latest.month);
             setSelectedReportDay(latest.day);
             setSelectedReportWeek(latest.week);
+            setTimePeriod(`${latest.month}/2026`);
             if (prev[latest.month]) {
               setCaseReports(prev[latest.month]);
             }
             return prev;
           });
         }
-        if (showToast) setSyncToast('✅ Đã kiểm tra kết nối Google Sheet (Dữ liệu trang tính cập nhật mới nhất).');
+        if (showToast) {
+          setSyncToast('⚠️ Không tìm thấy tab tháng hợp lệ (Tháng 1..Tháng 12 hoặc T11, 11/2026). Vui lòng kiểm tra quyền chia sẻ công khai ("Ai có đường liên kết đều có thể xem") và tên tab trên Google Sheet.');
+        }
       }
     } catch (error: any) {
       console.warn('Sync all months error:', error);
@@ -716,23 +911,35 @@ export const ReportsAnalyticsView: React.FC = () => {
           setSelectedReportMonth(latest.month);
           setSelectedReportDay(latest.day);
           setSelectedReportWeek(latest.week);
+          setTimePeriod(`${latest.month}/2026`);
           return prev;
         });
       }
-      if (showToast) setSyncToast('ℹ️ Đã hiển thị bản sao dữ liệu Google Sheet chuẩn.');
+      if (showToast) setSyncToast('⚠️ Không thể kết nối Google Sheet. Đã giữ nguyên dữ liệu lưu tạm gần nhất.');
     } finally {
       setIsSyncing(false);
-      if (showToast) setTimeout(() => setSyncToast(null), 4500);
+      if (showToast) setTimeout(() => setSyncToast(null), 5500);
     }
   };
 
   // Real Google Sheets sync fetcher for single tab
   const fetchGoogleSheetData = async (targetUrl: string, targetTab: string, showToast = true, autoSelectLatest = false) => {
+    const effectiveUrl = targetUrl || getEffectiveSheetTarget();
+    const spreadsheetId = resolveSpreadsheetId(effectiveUrl);
+
+    if (!spreadsheetId) {
+      if (showToast) {
+        setSyncToast('⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo trong "Cấu hình hệ thống".');
+        setTimeout(() => setSyncToast(null), 4500);
+      }
+      return;
+    }
+
     setIsSyncing(true);
-    if (showToast) setSyncToast('Đang kết nối & tải dữ liệu thật từ Google Sheet...');
+    if (showToast) setSyncToast(`Đang tải dữ liệu ${targetTab} từ Google Sheet...`);
 
     try {
-      const parsedItems = await fetchSingleTab(targetUrl, targetTab);
+      const parsedItems = await fetchSingleTab(effectiveUrl, targetTab);
       if (parsedItems && parsedItems.length > 0) {
         setCaseReports(parsedItems);
         setMonthlyDataStore(prev => {
@@ -742,24 +949,29 @@ export const ReportsAnalyticsView: React.FC = () => {
             setSelectedReportMonth(latest.month);
             setSelectedReportDay(latest.day);
             setSelectedReportWeek(latest.week);
+            setTimePeriod(`${latest.month}/2026`);
           }
           return merged;
         });
-        localStorage.setItem(`google_sheet_data_${targetTab}`, JSON.stringify(parsedItems));
-        localStorage.setItem('google_sheet_url', targetUrl);
-        if (showToast) setSyncToast('✅ Đã tải thành công dữ liệu trực tiếp từ Google Sheet!');
+        try {
+          localStorage.setItem(`google_sheet_data_${targetTab}`, JSON.stringify(parsedItems));
+          localStorage.setItem('google_sheet_url', effectiveUrl);
+        } catch { /* ignore */ }
+        if (showToast) setSyncToast(`✅ Đã đồng bộ thành công dữ liệu ${targetTab} từ Google Sheet!`);
       } else {
-        if (showToast) setSyncToast('✅ Đã đồng bộ với Google Sheet thành công!');
+        if (showToast) {
+          setSyncToast(`⚠️ Không tìm thấy dữ liệu trong tab "${targetTab}" (hỗ trợ tên tab: ${targetTab}, ${targetTab}/2026, T${getMonthNumber(targetTab)}, ${getMonthNumber(targetTab)}/2026).`);
+        }
       }
     } catch (error: any) {
       console.warn('Google Sheet fetch info:', error);
       if (showToast) {
-        setSyncToast(`ℹ️ ${error.message || 'Chế độ xem mặc định.'} Đã hiển thị bản sao dữ liệu Google Sheet chuẩn.`);
+        setSyncToast(`⚠️ Lỗi đồng bộ ${targetTab}: ${error.message || 'Không thể truy cập trang tính'}`);
       }
     } finally {
       setIsSyncing(false);
       if (showToast) {
-        setTimeout(() => setSyncToast(null), 4500);
+        setTimeout(() => setSyncToast(null), 5000);
       }
     }
   };
@@ -769,13 +981,17 @@ export const ReportsAnalyticsView: React.FC = () => {
     syncAllMonths(false, true);
   }, []);
 
-  // When sheetTab changes for monthly tabs, ensure caseReports is loaded
+  // When sheetTab changes for monthly tabs, ensure caseReports matches that month
   useEffect(() => {
     if (sheetTab.startsWith('Tháng')) {
       if (monthlyDataStore[sheetTab] && monthlyDataStore[sheetTab].length > 0) {
         setCaseReports(monthlyDataStore[sheetTab]);
       } else {
-        fetchGoogleSheetData(sheetUrl, sheetTab, false);
+        setCaseReports([]);
+        const effectiveUrl = sheetUrl || getEffectiveSheetTarget();
+        if (resolveSpreadsheetId(effectiveUrl)) {
+          fetchGoogleSheetData(effectiveUrl, sheetTab, false);
+        }
       }
     }
   }, [sheetTab]);
@@ -784,13 +1000,11 @@ export const ReportsAnalyticsView: React.FC = () => {
     syncAllMonths(true, true);
   };
 
-  // Dynamic days array for month
+  // Dynamic days array for month (uses numeric month parsing so Tháng 12 is 31 days, not 28)
   const getDaysList = () => {
-    if (sheetTab.includes('2')) return Array.from({ length: 28 }, (_, i) => i + 1);
-    if (sheetTab.includes('4') || sheetTab.includes('6') || sheetTab.includes('9') || sheetTab.includes('11')) {
-      return Array.from({ length: 30 }, (_, i) => i + 1);
-    }
-    return Array.from({ length: 31 }, (_, i) => i + 1);
+    const activeMonth = sheetTab.startsWith('Tháng') ? sheetTab : selectedReportMonth;
+    const count = getDaysInMonth(activeMonth, 2026);
+    return Array.from({ length: count }, (_, i) => i + 1);
   };
   const daysList = getDaysList();
 
@@ -868,7 +1082,7 @@ export const ReportsAnalyticsView: React.FC = () => {
 
   // Get active work days for any specified month
   const getActiveWorkDaysForMonth = (mTab: string, items: CaseReportItem[]) => {
-    const maxDays = mTab.includes('2') ? 28 : (mTab.includes('4') || mTab.includes('6') || mTab.includes('9') || mTab.includes('11') ? 30 : 31);
+    const maxDays = getDaysInMonth(mTab, 2026);
     let activeCount = 0;
     for (let day = 1; day <= maxDays; day++) {
       let isLT = false;
@@ -885,8 +1099,11 @@ export const ReportsAnalyticsView: React.FC = () => {
 
   // SMART DAILY REPORT RENDERER
   const renderDailyReport = () => {
-    const monthItems = monthlyDataStore[selectedReportMonth] || caseReports;
-    const daysInMonth = selectedReportMonth.includes('2') ? 28 : (selectedReportMonth.includes('4') || selectedReportMonth.includes('6') || selectedReportMonth.includes('9') || selectedReportMonth.includes('11') ? 30 : 31);
+    const hasMonthData = Boolean(monthlyDataStore[selectedReportMonth] && monthlyDataStore[selectedReportMonth].length > 0);
+    const monthItems = hasMonthData
+      ? monthlyDataStore[selectedReportMonth]
+      : (selectedReportMonth === 'Tháng 2' ? caseReports : []);
+    const daysInMonth = getDaysInMonth(selectedReportMonth, 2026);
     const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
 
     let totalDayBH = 0;
@@ -1002,6 +1219,35 @@ export const ReportsAnalyticsView: React.FC = () => {
           </div>
         </div>
 
+        {/* Empty state notice when selected month has not been synced yet */}
+        {monthItems.length === 0 && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/70 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="text-sm font-extrabold text-amber-900 dark:text-amber-200">
+                  Chưa có dữ liệu đồng bộ cho {selectedReportMonth}/2026
+                </h4>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90">
+                  Vui lòng kiểm tra trang tính Google Sheets đã có tab tên{' '}
+                  <strong>{selectedReportMonth}</strong>, <strong>{selectedReportMonth}/2026</strong>,{' '}
+                  <strong>T{getMonthNumber(selectedReportMonth)}</strong> hoặc{' '}
+                  <strong>{getMonthNumber(selectedReportMonth)}/2026</strong> và bấm nút Đồng bộ ngay.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => syncAllMonths(true, false)}
+              disabled={isSyncing}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Đang đồng bộ...' : `Đồng bộ ${selectedReportMonth} ngay`}</span>
+            </button>
+          </div>
+        )}
+
         {/* CLINICAL UX: PINNED INDICATORS FAST BENCHMARK PANEL */}
         <PinnedIndicatorsPanel
           pinnedResults={pinnedTriageResults}
@@ -1061,59 +1307,59 @@ export const ReportsAnalyticsView: React.FC = () => {
         </div>
 
         {/* Detailed Daily Table with Fast Pinning & Visual Triage Filter Toolbar */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden space-y-0">
-          <div className="bg-slate-50 dark:bg-slate-800 px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden space-y-0">
+          <div className="bg-slate-50 dark:bg-slate-800/90 px-5 py-4 border-b border-slate-300 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div>
-              <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
+              <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
                 <span>CHI TIẾT CÁC KỸ THUẬT THỰC HIỆN TRONG NGÀY {selectedReportDay} - {selectedReportMonth.toUpperCase()}</span>
               </h4>
-              <p className="text-[11px] text-slate-500">
-                Bấm vào biểu tượng ngôi sao để Ghim chỉ số • Bấm vào nhãn màu để xem Phân tích Bối cảnh Y tế & Độ lệch chuẩn
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Bấm vào biểu tượng ngôi sao để Ghim chỉ số • Bấm vào nhãn trạng thái để xem Phân tích Bối cảnh Y tế &amp; Độ lệch chuẩn
               </p>
             </div>
 
             {/* Quick Triage Filter Group */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
                 <Filter className="w-3.5 h-3.5" /> Lọc nhanh:
               </span>
               <button
                 onClick={() => setDailyTriageFilter('ALL')}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
                   dailyTriageFilter === 'ALL'
                     ? 'bg-indigo-600 text-white shadow-2xs'
-                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 Tất cả ({itemStats.length})
               </button>
               <button
                 onClick={() => setDailyTriageFilter('PINNED')}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                   dailyTriageFilter === 'PINNED'
                     ? 'bg-amber-500 text-slate-950 font-black shadow-2xs'
-                    : 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 border border-slate-200 dark:border-slate-700'
+                    : 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 border border-slate-300 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-slate-800'
                 }`}
               >
-                <Star className="w-3 h-3 fill-current" />
+                <Star className="w-3.5 h-3.5 fill-current" />
                 <span>Đã ghim ({pinnedServiceNames.length})</span>
               </button>
               <button
                 onClick={() => setDailyTriageFilter('SURGE')}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                   dailyTriageFilter === 'SURGE'
                     ? 'bg-rose-600 text-white font-black shadow-2xs'
-                    : 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 border border-slate-200 dark:border-slate-700'
+                    : 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 border border-slate-300 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <span>🚨 Đột biến ({surgeCritCount + surgeModCount})</span>
               </button>
               <button
                 onClick={() => setDailyTriageFilter('DROP')}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                   dailyTriageFilter === 'DROP'
                     ? 'bg-sky-600 text-white font-black shadow-2xs'
-                    : 'bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-300 border border-slate-200 dark:border-slate-700'
+                    : 'bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-300 border border-slate-300 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <span>📉 Sụt giảm ({dropCount})</span>
@@ -1122,98 +1368,143 @@ export const ReportsAnalyticsView: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left border-collapse">
+            <table className="w-full text-sm text-left border-collapse min-w-[820px]">
               <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold border-b border-slate-200 dark:border-slate-700">
-                  <th className="px-3 py-2.5 w-10 text-center">Ghim</th>
-                  <th className="px-3 py-2.5 w-10 text-center">STT</th>
-                  <th className="px-4 py-2.5">Bộ Phận</th>
-                  <th className="px-4 py-2.5">Kỹ Thuật / Dịch Vụ</th>
-                  <th className="px-4 py-2.5 text-center w-36">Cảnh Báo Lâm Sàng</th>
-                  <th className="px-4 py-2.5 text-center w-24">Bảo Hiểm (BH)</th>
-                  <th className="px-4 py-2.5 text-center w-24">Nhân Dân (ND)</th>
-                  <th className="px-4 py-2.5 text-center w-28 bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-200">Tổng Ngày</th>
-                  <th className="px-4 py-2.5 text-center w-24">Tỷ Trọng</th>
-                  <th className="px-4 py-2.5 text-center w-36">So TB 30 Ngày (Z-Score)</th>
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-300 dark:border-slate-600">
+                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-700">Ghim</th>
+                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-700">STT</th>
+                  <th className="px-2.5 py-2.5 w-[92px] border-r border-slate-300 dark:border-slate-700">Bộ<br />Phận</th>
+                  <th className="px-3 py-2.5 min-w-[175px] border-r border-slate-300 dark:border-slate-700">Kỹ Thuật /<br />Dịch Vụ</th>
+                  <th className="px-2 py-2.5 w-[114px] text-center border-r border-slate-300 dark:border-slate-700">Cảnh Báo<br />Lâm Sàng</th>
+                  <th className="px-2.5 py-2.5 w-[78px] text-right border-r border-slate-300 dark:border-slate-700">Bảo Hiểm<br />(BH)</th>
+                  <th className="px-2.5 py-2.5 w-[78px] text-right border-r border-slate-300 dark:border-slate-700">Nhân Dân<br />(ND)</th>
+                  <th className="px-2.5 py-2.5 w-[68px] text-right bg-blue-100/80 dark:bg-blue-950 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-800">Tổng<br />Ngày</th>
+                  <th className="px-2 py-2.5 w-[62px] text-right border-r border-slate-300 dark:border-slate-700">Tỷ<br />Trọng</th>
+                  <th className="px-2.5 py-2.5 w-[116px] text-right">So TB 30 Ngày<br />(Z-Score)</th>
                 </tr>
               </thead>
               <tbody>
                 {catGrouped.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-slate-100/80 dark:bg-slate-800/80 font-black text-indigo-900 dark:text-indigo-300 border-b border-slate-200 dark:border-slate-700">
-                      <td colSpan={5} className="px-4 py-2 uppercase">📌 {group.category}</td>
-                      <td className="text-center py-2 font-bold">{group.catBH}</td>
-                      <td className="text-center py-2 font-bold">{group.catND}</td>
-                      <td className="text-center py-2 font-black text-blue-900 dark:text-blue-200 bg-blue-100/60 dark:bg-blue-950/60">{group.catTotal}</td>
-                      <td className="text-center py-2 font-bold">{totalDayAll > 0 ? ((group.catTotal / totalDayAll) * 100).toFixed(1) : '0'}%</td>
-                      <td className="text-center py-2">-</td>
+                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-300 dark:border-slate-600 text-sm">
+                      <td colSpan={5} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
+                        📌 {group.category} <span className="font-semibold text-xs text-indigo-700 dark:text-indigo-300 ml-1">({group.items.length} kỹ thuật)</span>
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
+                        {group.catBH.toLocaleString()}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
+                        {group.catND.toLocaleString()}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right font-black tabular-nums text-[15px] text-blue-950 dark:text-blue-100 bg-blue-100/80 dark:bg-blue-950/70 border-r border-blue-300 dark:border-blue-800">
+                        {group.catTotal.toLocaleString()}
+                      </td>
+                      <td className="px-2 py-2.5 text-right font-extrabold tabular-nums border-r border-slate-300 dark:border-slate-600">
+                        {totalDayAll > 0 ? ((group.catTotal / totalDayAll) * 100).toFixed(1) : '0.0'}%
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right text-slate-400 font-semibold">-</td>
                     </tr>
                     {group.items.map((item, itemIdx) => {
                       const isPinned = pinnedServiceNames.some(p => p.trim().toLowerCase() === item.name.trim().toLowerCase());
                       const triage = triageMap[item.name] || calculateClinicalTriage(item, selectedReportDay, monthItems, activeDays);
 
                       return (
-                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+                        <tr
+                          key={item.id}
+                          className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors"
+                        >
                           {/* Pin Toggle Button */}
-                          <td className="px-3 py-2 text-center">
+                          <td className="px-1.5 py-2.5 text-center border-r border-slate-200 dark:border-slate-700/80">
                             <button
                               type="button"
                               onClick={() => handleTogglePinService(item.name)}
-                              className={`p-1 rounded-lg transition-all cursor-pointer ${
+                              className={`p-1 rounded-lg transition-colors cursor-pointer ${
                                 isPinned
                                   ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100'
                                   : 'text-slate-300 dark:text-slate-600 hover:text-amber-500'
                               }`}
                               title={isPinned ? 'Bỏ ghim khỏi chỉ số trọng điểm' : 'Ghim chỉ số lên đầu bảng'}
                             >
-                              <Star className={`w-3.5 h-3.5 ${isPinned ? 'fill-current' : ''}`} />
+                              <Star className={`w-4 h-4 ${isPinned ? 'fill-current' : ''}`} />
                             </button>
                           </td>
-                          <td className="px-3 py-2 text-center text-slate-400 font-bold">{itemIdx + 1}</td>
-                          <td className="px-4 py-2 font-medium text-slate-500">{item.category}</td>
-                          
+
+                          {/* STT */}
+                          <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">
+                            {itemIdx + 1}
+                          </td>
+
+                          {/* Bộ phận */}
+                          <td className="px-2.5 py-2.5 font-medium text-slate-600 dark:text-slate-300 leading-snug border-r border-slate-200 dark:border-slate-700/80">
+                            {item.category}
+                          </td>
+
                           {/* Service Name */}
-                          <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">
-                            <span className="flex items-center gap-1.5">
-                              {item.name}
+                          <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700/80">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="leading-snug">{item.name}</span>
                               {isPinned && (
-                                <span className="px-1.5 py-0.2 text-[9px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 rounded border border-amber-300/60">
+                                <span className="shrink-0 px-1.5 py-0.5 text-[11px] font-extrabold bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 rounded border border-amber-300/70 whitespace-nowrap">
                                   Ghim
                                 </span>
                               )}
-                            </span>
+                            </div>
                           </td>
 
                           {/* Visual Triage Alert Pill */}
-                          <td className="px-4 py-2 text-center">
+                          <td className="px-2 py-2.5 text-center border-r border-slate-200 dark:border-slate-700/80 whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => setSelectedBenchmarkingItem(triage)}
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-black border inline-flex items-center gap-1 cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-2xs ${triage.alertBadgeClass}`}
+                              className={`px-2 py-0.5 rounded-full text-xs font-extrabold border inline-flex items-center gap-1 cursor-pointer transition-transform hover:scale-105 active:scale-95 shadow-2xs whitespace-nowrap ${triage.alertBadgeClass}`}
                               title="Bấm để xem đối soát lâm sàng & phân tích bối cảnh y tế"
                             >
-                              {triage.severity === 'SURGE_CRITICAL' && <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />}
-                              {triage.severity === 'SURGE_MODERATE' && <TrendingUp className="w-3 h-3 text-amber-600 shrink-0" />}
-                              {triage.severity === 'DROP_CRITICAL' && <ArrowDownRight className="w-3 h-3 text-indigo-600 shrink-0" />}
-                              <span>{triage.severity === 'SURGE_CRITICAL' ? '🚨 Đột biến cao' : triage.severity === 'SURGE_MODERATE' ? '⚠️ Biến động' : triage.severity === 'DROP_CRITICAL' ? '📉 Sụt giảm' : '🟢 Ổn định'}</span>
+                              {triage.severity === 'SURGE_CRITICAL' && <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
+                              {triage.severity === 'SURGE_MODERATE' && <TrendingUp className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+                              {triage.severity === 'DROP_CRITICAL' && <ArrowDownRight className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                              <span>{triage.severity === 'SURGE_CRITICAL' ? '🚨 Đột biến' : triage.severity === 'SURGE_MODERATE' ? '⚠️ Biến động' : triage.severity === 'DROP_CRITICAL' ? '📉 Sụt giảm' : '🟢 Ổn định'}</span>
                             </button>
                           </td>
 
-                          <td className="px-4 py-2 text-center font-bold text-indigo-700 dark:text-indigo-300">{item.bhVal || '-'}</td>
-                          <td className="px-4 py-2 text-center font-bold text-slate-700 dark:text-slate-300">{item.ndVal || '-'}</td>
-                          <td className="px-4 py-2 text-center font-black text-blue-900 dark:text-blue-200 bg-blue-50/50 dark:bg-blue-950/30">{item.totalDay}</td>
-                          <td className="px-4 py-2 text-center font-semibold text-slate-600">{totalDayAll > 0 ? ((item.totalDay / totalDayAll) * 100).toFixed(1) : '0'}%</td>
-                          <td className={`px-4 py-2 text-center font-bold ${item.diffVsAvg >= 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {/* Bảo hiểm (BH) */}
+                          <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-indigo-700 dark:text-indigo-300 border-r border-slate-200 dark:border-slate-700/80">
+                            {item.bhVal ? item.bhVal.toLocaleString() : <span className="text-slate-300 dark:text-slate-600 font-normal">-</span>}
+                          </td>
+
+                          {/* Nhân dân (ND) */}
+                          <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700/80">
+                            {item.ndVal ? item.ndVal.toLocaleString() : <span className="text-slate-300 dark:text-slate-600 font-normal">-</span>}
+                          </td>
+
+                          {/* Tổng Ngày */}
+                          <td className="px-2.5 py-2.5 text-right font-black text-[15px] tabular-nums text-blue-950 dark:text-blue-100 bg-blue-50/70 dark:bg-blue-950/35 border-r border-blue-200 dark:border-blue-800/80">
+                            {item.totalDay.toLocaleString()}
+                          </td>
+
+                          {/* Tỷ Trọng */}
+                          <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700/80">
+                            {totalDayAll > 0 ? ((item.totalDay / totalDayAll) * 100).toFixed(1) : '0.0'}%
+                          </td>
+
+                          {/* So TB 30 Ngày (Z-Score) */}
+                          <td className={`px-2.5 py-2 text-right font-bold tabular-nums whitespace-nowrap ${item.diffVsAvg >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {item.itemAvgPerDay > 0 ? (
                               <button
                                 type="button"
                                 onClick={() => setSelectedBenchmarkingItem(triage)}
-                                className="hover:underline cursor-pointer inline-flex items-center gap-1"
+                                className="hover:underline cursor-pointer inline-flex flex-col items-end leading-tight ml-auto"
+                                title="Bấm để xem phân tích độ lệch chuẩn chi tiết"
                               >
-                                <span>{item.diffVsAvg >= 0 ? '+' : ''}{item.diffVsAvg.toFixed(1)} ({item.diffPct >= 0 ? '+' : ''}{item.diffPct.toFixed(0)}%)</span>
-                                <span className="text-[10px] text-slate-400 font-normal">| Z: {triage.zScore > 0 ? `+${triage.zScore}` : triage.zScore}</span>
+                                <span className="text-sm font-extrabold">
+                                  {item.diffVsAvg >= 0 ? '+' : ''}{item.diffVsAvg.toFixed(1)} ({item.diffPct >= 0 ? '+' : ''}{item.diffPct.toFixed(0)}%)
+                                </span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                                  Z-Score: {triage.zScore > 0 ? `+${triage.zScore}` : triage.zScore}
+                                </span>
                               </button>
-                            ) : '-'}
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-600 font-normal">-</span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1221,6 +1512,30 @@ export const ReportsAnalyticsView: React.FC = () => {
                   </React.Fragment>
                 ))}
               </tbody>
+              {catGrouped.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-200/90 dark:bg-slate-800 font-black text-slate-950 dark:text-slate-100 border-t-2 border-slate-300 dark:border-slate-600 text-[15px]">
+                    <td colSpan={5} className="px-3 py-3 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
+                      🏆 TỔNG CỘNG TOÀN KHOA NGÀY {selectedReportDay} - {selectedReportMonth.toUpperCase()}
+                    </td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-indigo-900 dark:text-indigo-200 border-r border-slate-300 dark:border-slate-600">
+                      {totalDayBH.toLocaleString()}
+                    </td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-900 dark:text-slate-100 border-r border-slate-300 dark:border-slate-600">
+                      {totalDayND.toLocaleString()}
+                    </td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-blue-950 dark:text-blue-100 bg-blue-200/80 dark:bg-blue-900/70 border-r border-blue-300 dark:border-blue-700">
+                      {totalDayAll.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-3 text-right tabular-nums border-r border-slate-300 dark:border-slate-600">
+                      {totalDayAll > 0 ? '100.0%' : '0.0%'}
+                    </td>
+                    <td className={`px-2.5 py-3 text-right tabular-nums whitespace-nowrap ${totalDiffVsAvg >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {totalDiffVsAvg >= 0 ? '+' : ''}{totalDiffVsAvg.toFixed(1)} ({totalDiffPct >= 0 ? '+' : ''}{totalDiffPct.toFixed(1)}%)
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
@@ -1462,48 +1777,58 @@ export const ReportsAnalyticsView: React.FC = () => {
         </div>
 
         {/* Detailed Weekly Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
-          <div className="bg-slate-50 dark:bg-slate-800 px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden">
+          <div className="bg-slate-50 dark:bg-slate-800/90 px-5 py-4 border-b border-slate-300 dark:border-slate-700 flex items-center justify-between">
+            <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
               BẢNG TỔNG HỢP SỐ CA CÔNG TÁC {currWeekInfo.name.toUpperCase()}
             </h4>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left border-collapse">
+            <table className="w-full text-sm text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold border-b border-slate-200 dark:border-slate-700">
-                  <th className="px-4 py-2.5 w-12 text-center">STT</th>
-                  <th className="px-4 py-2.5">Bộ Phận / Danh Mục</th>
-                  <th className="px-4 py-2.5">Kỹ Thuật / Dịch Vụ</th>
-                  <th className="px-4 py-2.5 text-center w-24">BH Tuần</th>
-                  <th className="px-4 py-2.5 text-center w-24">ND Tuần</th>
-                  <th className="px-4 py-2.5 text-center w-28 bg-indigo-50 dark:bg-indigo-950 text-indigo-900 dark:text-indigo-200">Tổng Tuần</th>
-                  <th className="px-4 py-2.5 text-center w-28">TB/Ngày Tuần</th>
-                  <th className="px-4 py-2.5 text-center w-36">So Với Tuần Trước</th>
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-300 dark:border-slate-600">
+                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-700">STT</th>
+                  <th className="px-2.5 py-2.5 w-[92px] border-r border-slate-300 dark:border-slate-700">Bộ<br />Phận</th>
+                  <th className="px-3 py-2.5 min-w-[180px] border-r border-slate-300 dark:border-slate-700">Kỹ Thuật /<br />Dịch Vụ</th>
+                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-700">BH<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-700">ND<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[80px] text-right bg-indigo-100/80 dark:bg-indigo-950 text-indigo-950 dark:text-indigo-100 border-r border-indigo-300 dark:border-indigo-800">Tổng<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[80px] text-right border-r border-slate-300 dark:border-slate-700">TB/Ngày<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[86px] text-right">So Tuần<br />Trước</th>
                 </tr>
               </thead>
               <tbody>
                 {catGroupedWeek.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-slate-100/80 dark:bg-slate-800/80 font-black text-indigo-900 dark:text-indigo-300 border-b border-slate-200 dark:border-slate-700">
-                      <td colSpan={3} className="px-4 py-2 uppercase">📌 {group.category}</td>
-                      <td className="text-center py-2 font-bold">{group.catBH}</td>
-                      <td className="text-center py-2 font-bold">{group.catND}</td>
-                      <td className="text-center py-2 font-black text-indigo-900 dark:text-indigo-200 bg-indigo-100/60 dark:bg-indigo-950/60">{group.catTotal}</td>
-                      <td className="text-center py-2 font-bold">{(group.catTotal / weekActiveDays).toFixed(1)}</td>
-                      <td className="text-center py-2">-</td>
+                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-300 dark:border-slate-600 text-sm">
+                      <td colSpan={3} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
+                        📌 {group.category}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
+                        {group.catBH.toLocaleString()}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
+                        {group.catND.toLocaleString()}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right font-black tabular-nums text-[15px] text-indigo-950 dark:text-indigo-100 bg-indigo-100/80 dark:bg-indigo-950/70 border-r border-indigo-300 dark:border-indigo-800">
+                        {group.catTotal.toLocaleString()}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums border-r border-slate-300 dark:border-slate-600">
+                        {(group.catTotal / weekActiveDays).toFixed(1)}
+                      </td>
+                      <td className="px-2.5 py-2.5 text-right text-slate-400 font-semibold">-</td>
                     </tr>
                     {group.items.map((item, itemIdx) => (
-                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-                        <td className="px-4 py-2 text-center text-slate-400 font-bold">{itemIdx + 1}</td>
-                        <td className="px-4 py-2 font-medium text-slate-500">{item.category}</td>
-                        <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{item.name}</td>
-                        <td className="px-4 py-2 text-center font-bold text-indigo-700 dark:text-indigo-300">{item.itemWeekBH || '-'}</td>
-                        <td className="px-4 py-2 text-center font-bold text-slate-700 dark:text-slate-300">{item.itemWeekND || '-'}</td>
-                        <td className="px-4 py-2 text-center font-black text-indigo-900 dark:text-indigo-200 bg-indigo-50/50 dark:bg-indigo-950/30">{item.itemWeekTotal}</td>
-                        <td className="px-4 py-2 text-center font-semibold text-slate-600">{item.avgPerDayInWeek.toFixed(1)}</td>
-                        <td className={`px-4 py-2 text-center font-bold ${item.weekDiffPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      <tr key={item.id} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-indigo-50/60 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
+                        <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">{itemIdx + 1}</td>
+                        <td className="px-2.5 py-2.5 font-medium text-slate-600 dark:text-slate-300 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.category}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.name}</td>
+                        <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-indigo-700 dark:text-indigo-300 border-r border-slate-200 dark:border-slate-700/80">{item.itemWeekBH ? item.itemWeekBH.toLocaleString() : '-'}</td>
+                        <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700/80">{item.itemWeekND ? item.itemWeekND.toLocaleString() : '-'}</td>
+                        <td className="px-2.5 py-2.5 text-right font-black text-[15px] tabular-nums text-indigo-950 dark:text-indigo-100 bg-indigo-50/70 dark:bg-indigo-950/35 border-r border-indigo-200 dark:border-indigo-800/80">{item.itemWeekTotal.toLocaleString()}</td>
+                        <td className="px-2.5 py-2.5 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700/80">{item.avgPerDayInWeek.toFixed(1)}</td>
+                        <td className={`px-2.5 py-2.5 text-right font-extrabold tabular-nums ${item.weekDiffPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                           {item.itemPrevWeekTotal > 0 ? `${item.weekDiffPct >= 0 ? '+' : ''}${item.weekDiffPct.toFixed(0)}%` : '-'}
                         </td>
                       </tr>
@@ -1511,6 +1836,30 @@ export const ReportsAnalyticsView: React.FC = () => {
                   </React.Fragment>
                 ))}
               </tbody>
+              {catGroupedWeek.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-200/90 dark:bg-slate-800 font-black text-slate-950 dark:text-slate-100 border-t-2 border-slate-300 dark:border-slate-600 text-[15px]">
+                    <td colSpan={3} className="px-3 py-3 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
+                      🏆 TỔNG CỘNG TUẦN {selectedReportWeek}
+                    </td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-indigo-900 dark:text-indigo-200 border-r border-slate-300 dark:border-slate-600">
+                      {totalWeekBH.toLocaleString()}
+                    </td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-900 dark:text-slate-100 border-r border-slate-300 dark:border-slate-600">
+                      {totalWeekND.toLocaleString()}
+                    </td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-indigo-950 dark:text-indigo-100 bg-indigo-200/80 dark:bg-indigo-900/70 border-r border-indigo-300 dark:border-indigo-700">
+                      {totalWeekAll.toLocaleString()}
+                    </td>
+                    <td className="px-2.5 py-3 text-right tabular-nums border-r border-slate-300 dark:border-slate-600">
+                      {overallWeekAvgPerDay.toFixed(1)}
+                    </td>
+                    <td className={`px-2.5 py-3 text-right tabular-nums ${overallWeekGrowthPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {prevWeekTotal > 0 ? `${overallWeekGrowthPct >= 0 ? '+' : ''}${overallWeekGrowthPct.toFixed(1)}%` : '-'}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
@@ -1520,16 +1869,19 @@ export const ReportsAnalyticsView: React.FC = () => {
 
   // SMART ANNUAL REPORT RENDERER
   const renderAnnualReport = () => {
-    const allMonths = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
-    const actualMonths = ['Tháng 1', 'Tháng 2', 'Tháng 3'];
+    const allMonths = ALL_MONTHS;
+    const storedMonths = allMonths.filter(m => monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+    const actualMonths = storedMonths.length > 0 ? storedMonths : ['Tháng 2'];
+    const actualMonthsSet = new Set(actualMonths);
+    const actualLabelRange = actualMonths.length > 0
+      ? actualMonths.map(m => m.replace('Tháng ', 'T')).join(', ')
+      : 'T2';
 
-    // 1. Build a master deduplicated list of unique services across all available monthly stores
+    // 1. Build a master deduplicated list of unique services across all synced monthly stores
     const serviceMap = new Map<string, { category: string; name: string }>();
 
     const allSourceItems = [
-      ...(monthlyDataStore['Tháng 1'] || []),
-      ...(monthlyDataStore['Tháng 2'] || []),
-      ...(monthlyDataStore['Tháng 3'] || []),
+      ...allMonths.flatMap(m => monthlyDataStore[m] || []),
       ...caseReports
     ];
 
@@ -1545,8 +1897,11 @@ export const ReportsAnalyticsView: React.FC = () => {
 
     const masterServices = Array.from(serviceMap.values());
 
-    // Seasonal coefficients for projected months (T4-T12) based on medical activity trends
+    // Seasonal coefficients for projected months without actual data yet
     const seasonalFactors: { [m: string]: number } = {
+      'Tháng 1': 0.98,
+      'Tháng 2': 0.95,
+      'Tháng 3': 1.0,
       'Tháng 4': 1.02,
       'Tháng 5': 1.05,
       'Tháng 6': 1.03,
@@ -1561,11 +1916,11 @@ export const ReportsAnalyticsView: React.FC = () => {
     // Calculate per-service stats for 12 months
     const annualItemStats = masterServices.map((srv, idx) => {
       const monthlyValues: { [m: string]: { count: number; isActual: boolean } } = {};
-      
+
       let actualSum = 0;
       let actualMonthCount = 0;
 
-      // Calculate actual recorded months
+      // Calculate actual recorded months (across all synced months from T1 to T12)
       actualMonths.forEach(m => {
         const storeForM = monthlyDataStore[m];
         if (storeForM && storeForM.length > 0) {
@@ -1587,9 +1942,10 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       const actualAvgPerMonth = actualMonthCount > 0 ? actualSum / actualMonthCount : 0;
 
-      // Calculate projected months (T4 - T12)
+      // Calculate projected months for remaining unsynced months only
       let projectedSum = 0;
-      allMonths.slice(3).forEach(m => {
+      allMonths.forEach(m => {
+        if (actualMonthsSet.has(m)) return;
         const factor = seasonalFactors[m] || 1.0;
         const projVal = Math.round(actualAvgPerMonth * factor);
         monthlyValues[m] = { count: projVal, isActual: false };
@@ -1614,17 +1970,18 @@ export const ReportsAnalyticsView: React.FC = () => {
     // Monthly totals across ALL services for each month
     const monthlyTotals: { [m: string]: { count: number; isActual: boolean } } = {};
     allMonths.forEach(m => {
-      const isAct = actualMonths.includes(m) && !!(monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+      const isAct = actualMonthsSet.has(m);
       const totalCount = annualItemStats.reduce((acc, item) => acc + (item.monthlyValues[m]?.count || 0), 0);
       monthlyTotals[m] = { count: totalCount, isActual: isAct };
     });
 
+    const displayedColumns = annualViewMode === 'full' ? allMonths : actualMonths;
     const grandActualTotal = actualMonths.reduce((acc, m) => acc + (monthlyTotals[m]?.count || 0), 0);
     const grandFullYearTotal = allMonths.reduce((acc, m) => acc + (monthlyTotals[m]?.count || 0), 0);
-    const actualMonthlyAverage = grandActualTotal / (actualMonths.filter(m => monthlyTotals[m]?.isActual).length || 3);
+    const actualMonthlyAverage = actualMonths.length > 0 ? grandActualTotal / actualMonths.length : 0;
 
     // Peak month among actual months
-    let peakActualMonth = 'Tháng 1';
+    let peakActualMonth = actualMonths[0] || 'Tháng 2';
     let peakActualVal = 0;
     actualMonths.forEach(m => {
       const cnt = monthlyTotals[m]?.count || 0;
@@ -1671,7 +2028,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                 </span>
               </h3>
               <p className="text-xs text-slate-500">
-                Tích hợp dữ liệu thực tế ({actualMonths.join(', ')}) & Dự báo kế hoạch các tháng còn lại
+                Tích hợp dữ liệu thực tế ({actualMonths.join(', ')}) & Dự báo kế hoạch các tháng chưa có dữ liệu
               </p>
             </div>
           </div>
@@ -1682,7 +2039,7 @@ export const ReportsAnalyticsView: React.FC = () => {
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold border border-blue-200 dark:border-blue-800 transition-all cursor-pointer shadow-2xs"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ 3 Tháng Thực Tế'}
+              {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ 12 Tháng Thực Tế'}
             </button>
 
             <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
@@ -1696,7 +2053,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                 onClick={() => setAnnualViewMode('actual_only')}
                 className={`px-3 py-1 rounded-lg transition-all ${annualViewMode === 'actual_only' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
               >
-                Chỉ 3 Tháng Thực Tế (T1-T3)
+                Chỉ {actualMonths.length} Tháng Thực Tế ({actualLabelRange})
               </button>
             </div>
           </div>
@@ -1705,21 +2062,21 @@ export const ReportsAnalyticsView: React.FC = () => {
         {/* Annual KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Lượt Ca Thực Tế (T1 - T3)</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Lượt Ca Thực Tế ({actualLabelRange})</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-blue-900 dark:text-blue-200">{grandActualTotal.toLocaleString()} ca</h4>
-              <span className="text-xs font-extrabold text-blue-700 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">3 Tháng Đã Qua</span>
+              <span className="text-xs font-extrabold text-blue-700 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">{actualMonths.length} Tháng Có Dữ Liệu</span>
             </div>
             <p className="text-xs text-slate-500">Số ca thực tế trích xuất từ Google Sheet</p>
           </div>
 
           <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Dự Báo Tổng Cả Năm 2026</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Hợp Cả Năm 2026</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-purple-900 dark:text-purple-200">{grandFullYearTotal.toLocaleString()} ca</h4>
               <span className="text-xs font-extrabold text-purple-700 bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded-full">12 Tháng Kế Hoạch</span>
             </div>
-            <p className="text-xs text-slate-500">Bao gồm 9 tháng dự báo theo trọng số mùa vụ</p>
+            <p className="text-xs text-slate-500">Gồm {actualMonths.length} tháng thực tế & {12 - actualMonths.length} tháng dự báo</p>
           </div>
 
           <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
@@ -1742,17 +2099,19 @@ export const ReportsAnalyticsView: React.FC = () => {
 
         {/* Annual Month-by-Month Trend Chart */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-purple-600" /> BIỂU ĐỒ DIỄN BIẾN SỐ CA 12 THÁNG TRONG NĂM 2026
             </h4>
             <div className="flex items-center gap-4 text-xs font-bold">
               <span className="flex items-center gap-1 text-blue-700 dark:text-blue-300">
-                <span className="w-3 h-3 bg-blue-600 rounded-xs"></span> Số liệu Thực tế (T1 - T3)
+                <span className="w-3 h-3 bg-blue-600 rounded-xs"></span> Số liệu Thực tế ({actualLabelRange})
               </span>
-              <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                <span className="w-3 h-3 bg-purple-400 rounded-xs opacity-60"></span> Dự báo kế hoạch (T4 - T12)
-              </span>
+              {actualMonths.length < 12 && (
+                <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                  <span className="w-3 h-3 bg-purple-400 rounded-xs opacity-60"></span> Dự báo kế hoạch (Các tháng còn lại)
+                </span>
+              )}
             </div>
           </div>
           <div className="h-64 w-full">
@@ -1775,118 +2134,125 @@ export const ReportsAnalyticsView: React.FC = () => {
         </div>
 
         {/* Annual Matrix Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
-          <div className="bg-slate-50 dark:bg-slate-800 px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
-              MA TRẬN SỐ LIỆU TỔNG HỢP CÔNG TÁC {annualViewMode === 'full' ? '12 THÁNG NĂM 2026' : '3 THÁNG THỰC TẾ (T1 - T3)'}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden">
+          <div className="bg-slate-50 dark:bg-slate-800/90 px-5 py-4 border-b border-slate-300 dark:border-slate-700 flex items-center justify-between">
+            <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+              MA TRẬN SỐ LIỆU TỔNG HỢP CÔNG TÁC {annualViewMode === 'full' ? '12 THÁNG NĂM 2026' : `${actualMonths.length} THÁNG THỰC TẾ (${actualLabelRange})`}
             </h4>
-            <span className="text-xs font-bold text-slate-500">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
               Tổng số kỹ thuật: {masterServices.length} dịch vụ
             </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left border-collapse min-w-[1100px]">
+            <table className="w-full text-sm text-left border-collapse min-w-[920px]">
               <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold border-b border-slate-200 dark:border-slate-700">
-                  <th className="px-3 py-2.5 w-10 text-center">STT</th>
-                  <th className="px-3 py-2.5 min-w-[190px]">Kỹ Thuật / Dịch Vụ</th>
-                  
-                  {/* Actual Months Header Highlighted */}
-                  {actualMonths.map(m => (
-                    <th key={m} className="px-2 py-2.5 text-center bg-blue-100/70 dark:bg-blue-950/70 text-blue-900 dark:text-blue-200 border-x border-blue-200 dark:border-blue-900 font-black min-w-[60px]">
-                      {m.replace('Tháng ', 'T')}<br/>
-                      <span className="text-[9px] font-semibold text-blue-600 dark:text-blue-400">Thực tế</span>
-                    </th>
-                  ))}
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-300 dark:border-slate-600">
+                  <th className="px-1.5 py-2.5 w-10 text-center border-r border-slate-300 dark:border-slate-700">STT</th>
+                  <th className="px-3 py-2.5 min-w-[180px] border-r border-slate-300 dark:border-slate-700">Kỹ Thuật /<br />Dịch Vụ</th>
 
-                  {/* Projected Months Headers (only in 'full' mode) */}
-                  {annualViewMode === 'full' && allMonths.slice(3).map(m => (
-                    <th key={m} className="px-2 py-2.5 text-center text-slate-600 dark:text-slate-400 min-w-[55px] font-bold">
-                      {m.replace('Tháng ', 'T')}<br/>
-                      <span className="text-[9px] font-normal text-slate-400">Dự báo</span>
-                    </th>
-                  ))}
+                  {displayedColumns.map(m => {
+                    const isAct = actualMonthsSet.has(m);
+                    return (
+                      <th
+                        key={m}
+                        className={
+                          isAct
+                            ? 'px-1.5 py-2.5 text-right bg-blue-100/80 dark:bg-blue-950/70 text-blue-950 dark:text-blue-200 border-r border-blue-300 dark:border-blue-800 font-black min-w-[56px]'
+                            : 'px-1.5 py-2.5 text-right text-slate-700 dark:text-slate-300 border-r border-slate-300 dark:border-slate-700 min-w-[52px] font-bold'
+                        }
+                      >
+                        {m.replace('Tháng ', 'T')}<br/>
+                        <span className={isAct ? 'text-[10px] font-bold text-blue-700 dark:text-blue-400' : 'text-[10px] font-normal text-slate-500'}>
+                          {isAct ? 'Thực tế' : 'Dự báo'}
+                        </span>
+                      </th>
+                    );
+                  })}
 
-                  <th className="px-3 py-2.5 text-center bg-blue-100 dark:bg-blue-950 text-blue-900 dark:text-blue-200 font-black min-w-[90px]">
-                    Tổng 3T Thực Tế
+                  <th className="px-2 py-2.5 text-right bg-blue-100 dark:bg-blue-950 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-800 font-black w-[82px]">
+                    Tổng {actualMonths.length}T<br />Thực Tế
                   </th>
 
                   {annualViewMode === 'full' && (
-                    <th className="px-3 py-2.5 text-center bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200 font-black min-w-[95px]">
-                      Dự Báo Cả Năm
+                    <th className="px-2 py-2.5 text-right bg-purple-100 dark:bg-purple-950 text-purple-950 dark:text-purple-100 border-r border-purple-300 dark:border-purple-800 font-black w-[78px]">
+                      Dự Báo<br />Cả Năm
                     </th>
                   )}
 
-                  <th className="px-3 py-2.5 text-center min-w-[75px] font-extrabold">
-                    TB/Tháng
+                  <th className="px-2 py-2.5 text-right w-[68px] font-extrabold">
+                    TB /<br />Tháng
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {catGroupedAnnual.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-slate-100/90 dark:bg-slate-800/90 font-black text-purple-950 dark:text-purple-200 border-b border-slate-200 dark:border-slate-700">
-                      <td colSpan={2} className="px-3 py-2 uppercase tracking-wide">
+                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-purple-950 dark:text-purple-200 border-y border-slate-300 dark:border-slate-600 text-sm">
+                      <td colSpan={2} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
                         📌 {group.category} ({group.items.length} kỹ thuật)
                       </td>
-                      {actualMonths.map(m => (
-                        <td key={m} className="text-center py-2 font-black bg-blue-100/40 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 border-x border-blue-200/50">
-                          {group.monthCatTotals[m] ? group.monthCatTotals[m].toLocaleString() : 0}
-                        </td>
-                      ))}
-                      {annualViewMode === 'full' && allMonths.slice(3).map(m => (
-                        <td key={m} className="text-center py-2 font-bold text-slate-700 dark:text-slate-300">
-                          {group.monthCatTotals[m] ? group.monthCatTotals[m].toLocaleString() : 0}
-                        </td>
-                      ))}
-                      <td className="text-center py-2 font-black bg-blue-100/70 dark:bg-blue-950/70 text-blue-900 dark:text-blue-200">
+                      {displayedColumns.map(m => {
+                        const isAct = actualMonthsSet.has(m);
+                        return (
+                          <td
+                            key={m}
+                            className={
+                              isAct
+                                ? 'px-1.5 text-right py-2.5 font-black tabular-nums bg-blue-100/50 dark:bg-blue-950/40 text-blue-950 dark:text-blue-200 border-r border-blue-300/80 dark:border-blue-800'
+                                : 'px-1.5 text-right py-2.5 font-bold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-300 dark:border-slate-600'
+                            }
+                          >
+                            {group.monthCatTotals[m] ? group.monthCatTotals[m].toLocaleString() : 0}
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 text-right py-2.5 font-black tabular-nums bg-blue-100/80 dark:bg-blue-950/70 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-800">
                         {group.catActualTotal.toLocaleString()}
                       </td>
                       {annualViewMode === 'full' && (
-                        <td className="text-center py-2 font-black bg-purple-100/70 dark:bg-purple-950/70 text-purple-900 dark:text-purple-200">
+                        <td className="px-2 text-right py-2.5 font-black tabular-nums bg-purple-100/80 dark:bg-purple-950/70 text-purple-950 dark:text-purple-100 border-r border-purple-300 dark:border-purple-800">
                           {group.catYearTotal.toLocaleString()}
                         </td>
                       )}
-                      <td className="text-center py-2 font-bold text-slate-800 dark:text-slate-200">
-                        {Math.round(annualViewMode === 'full' ? group.catYearTotal / 12 : group.catActualTotal / 3).toLocaleString()}
+                      <td className="px-2 text-right py-2.5 font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                        {Math.round(annualViewMode === 'full' ? group.catYearTotal / 12 : group.catActualTotal / (actualMonths.length || 1)).toLocaleString()}
                       </td>
                     </tr>
 
                     {group.items.map((item, itemIdx) => (
-                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 transition-colors">
-                        <td className="px-3 py-1.5 text-center text-slate-400 font-bold">{itemIdx + 1}</td>
-                        <td className="px-3 py-1.5 font-bold text-slate-800 dark:text-slate-200">{item.name}</td>
-                        
-                        {actualMonths.map(m => {
+                      <tr key={item.id} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
+                        <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">{itemIdx + 1}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.name}</td>
+
+                        {displayedColumns.map(m => {
+                          const isAct = actualMonthsSet.has(m);
                           const val = item.monthlyValues[m]?.count || 0;
                           return (
-                            <td key={m} className="px-2 py-1.5 text-center font-extrabold text-blue-900 dark:text-blue-300 bg-blue-50/30 dark:bg-blue-950/20 border-x border-blue-100/30 dark:border-blue-900/20">
+                            <td
+                              key={m}
+                              className={
+                                isAct
+                                  ? 'px-1.5 py-2.5 text-right font-extrabold tabular-nums text-blue-900 dark:text-blue-300 bg-blue-50/40 dark:bg-blue-950/20 border-r border-blue-200/80 dark:border-blue-900/50'
+                                  : 'px-1.5 py-2.5 text-right font-medium tabular-nums text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-700/80'
+                              }
+                            >
                               {val > 0 ? val.toLocaleString() : '-'}
                             </td>
                           );
                         })}
 
-                        {annualViewMode === 'full' && allMonths.slice(3).map(m => {
-                          const val = item.monthlyValues[m]?.count || 0;
-                          return (
-                            <td key={m} className="px-2 py-1.5 text-center font-medium text-slate-600 dark:text-slate-400">
-                              {val > 0 ? val.toLocaleString() : '-'}
-                            </td>
-                          );
-                        })}
-
-                        <td className="px-3 py-1.5 text-center font-black text-blue-900 dark:text-blue-200 bg-blue-50/60 dark:bg-blue-950/40">
+                        <td className="px-2 py-2.5 text-right font-black tabular-nums text-blue-950 dark:text-blue-100 bg-blue-50/70 dark:bg-blue-950/40 border-r border-blue-200 dark:border-blue-800">
                           {item.actualSum.toLocaleString()}
                         </td>
 
                         {annualViewMode === 'full' && (
-                          <td className="px-3 py-1.5 text-center font-black text-purple-900 dark:text-purple-200 bg-purple-50/60 dark:bg-purple-950/40">
+                          <td className="px-2 py-2.5 text-right font-black tabular-nums text-purple-950 dark:text-purple-100 bg-purple-50/70 dark:bg-purple-950/40 border-r border-purple-200 dark:border-purple-800">
                             {item.fullYearTotal.toLocaleString()}
                           </td>
                         )}
 
-                        <td className="px-3 py-1.5 text-center font-semibold text-slate-700 dark:text-slate-300">
+                        <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300">
                           {Math.round(annualViewMode === 'full' ? item.fullYearAvg : item.actualAvgPerMonth).toLocaleString()}
                         </td>
                       </tr>
@@ -1895,29 +2261,34 @@ export const ReportsAnalyticsView: React.FC = () => {
                 ))}
 
                 {/* Grand Total Row */}
-                <tr className="bg-slate-200/90 dark:bg-slate-800 font-black text-slate-900 dark:text-slate-100 border-t-2 border-slate-300 dark:border-slate-600 text-xs uppercase">
-                  <td colSpan={2} className="px-3 py-3 font-black text-indigo-950 dark:text-indigo-200">
+                <tr className="bg-slate-200/95 dark:bg-slate-800 font-black text-slate-950 dark:text-slate-100 border-t-2 border-slate-300 dark:border-slate-600 text-[15px] uppercase">
+                  <td colSpan={2} className="px-3 py-3 font-black text-indigo-950 dark:text-indigo-200 border-r border-slate-300 dark:border-slate-600">
                     🏆 TỔNG CỘNG TOÀN KHOA
                   </td>
-                  {actualMonths.map(m => (
-                    <td key={m} className="text-center py-3 font-black text-blue-900 dark:text-blue-200 bg-blue-200/60 dark:bg-blue-950/80 border-x border-blue-300">
-                      {(monthlyTotals[m]?.count || 0).toLocaleString()}
-                    </td>
-                  ))}
-                  {annualViewMode === 'full' && allMonths.slice(3).map(m => (
-                    <td key={m} className="text-center py-3 font-black text-slate-800 dark:text-slate-200">
-                      {(monthlyTotals[m]?.count || 0).toLocaleString()}
-                    </td>
-                  ))}
-                  <td className="text-center py-3 font-black text-blue-950 dark:text-blue-100 bg-blue-300/60 dark:bg-blue-900/80">
+                  {displayedColumns.map(m => {
+                    const isAct = actualMonthsSet.has(m);
+                    return (
+                      <td
+                        key={m}
+                        className={
+                          isAct
+                            ? 'px-1.5 text-right py-3 font-black tabular-nums text-blue-950 dark:text-blue-100 bg-blue-200/70 dark:bg-blue-950/80 border-r border-blue-300 dark:border-blue-800'
+                            : 'px-1.5 text-right py-3 font-black tabular-nums text-slate-800 dark:text-slate-200 border-r border-slate-300 dark:border-slate-600'
+                        }
+                      >
+                        {(monthlyTotals[m]?.count || 0).toLocaleString()}
+                      </td>
+                    );
+                  })}
+                  <td className="px-2 text-right py-3 font-black tabular-nums text-blue-950 dark:text-blue-100 bg-blue-300/70 dark:bg-blue-900/80 border-r border-blue-300 dark:border-blue-700">
                     {grandActualTotal.toLocaleString()}
                   </td>
                   {annualViewMode === 'full' && (
-                    <td className="text-center py-3 font-black text-purple-950 dark:text-purple-100 bg-purple-300/60 dark:bg-purple-900/80">
+                    <td className="px-2 text-right py-3 font-black tabular-nums text-purple-950 dark:text-purple-100 bg-purple-300/70 dark:bg-purple-900/80 border-r border-purple-300 dark:border-purple-700">
                       {grandFullYearTotal.toLocaleString()}
                     </td>
                   )}
-                  <td className="text-center py-3 font-black text-slate-900 dark:text-slate-100">
+                  <td className="px-2 text-right py-3 font-black tabular-nums text-slate-950 dark:text-slate-100">
                     {Math.round(annualViewMode === 'full' ? grandFullYearTotal / 12 : actualMonthlyAverage).toLocaleString()}
                   </td>
                 </tr>
@@ -1991,7 +2362,7 @@ export const ReportsAnalyticsView: React.FC = () => {
     const wb = XLSX.utils.book_new();
 
     if (sheetTab === 'Báo cáo ngày') {
-      const monthItems = monthlyDataStore[selectedReportMonth] || caseReports;
+      const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' ? caseReports : []);
       const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
 
       const dailyRows = monthItems.map(item => {
@@ -2092,17 +2463,19 @@ export const ReportsAnalyticsView: React.FC = () => {
       XLSX.writeFile(wb, `Bao_Cao_Tuan_${selectedReportWeek}_2026.xlsx`);
 
     } else if (sheetTab === 'Báo cáo năm') {
-      const allMonths = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
+      const allMonths = ALL_MONTHS;
+      const storedMonths = allMonths.filter(m => monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+      const actualMonths = storedMonths.length > 0 ? storedMonths : ['Tháng 2'];
+      const actualMonthsSet = new Set(actualMonths);
       const seasonalFactors: { [m: string]: number } = {
+        'Tháng 1': 0.98, 'Tháng 2': 0.95, 'Tháng 3': 1.0,
         'Tháng 4': 1.05, 'Tháng 5': 1.08, 'Tháng 6': 1.10, 'Tháng 7': 1.06,
         'Tháng 8': 1.04, 'Tháng 9': 1.07, 'Tháng 10': 1.09, 'Tháng 11': 1.05, 'Tháng 12': 1.02
       };
 
       const serviceMap = new Map<string, { category: string; name: string }>();
       const allSourceItems = [
-        ...(monthlyDataStore['Tháng 1'] || []),
-        ...(monthlyDataStore['Tháng 2'] || []),
-        ...(monthlyDataStore['Tháng 3'] || []),
+        ...allMonths.flatMap(m => monthlyDataStore[m] || []),
         ...caseReports
       ];
       allSourceItems.forEach(item => {
@@ -2117,7 +2490,7 @@ export const ReportsAnalyticsView: React.FC = () => {
       const masterServices = Array.from(serviceMap.values());
 
       const displayedMonths = annualViewMode === 'actual_only'
-        ? ['Tháng 1', 'Tháng 2', 'Tháng 3']
+        ? actualMonths
         : allMonths;
 
       const annualRows = masterServices.map((srv, idx) => {
@@ -2125,7 +2498,7 @@ export const ReportsAnalyticsView: React.FC = () => {
         let actualMonthCount = 0;
         const monthlyValues: { [m: string]: number } = {};
 
-        ['Tháng 1', 'Tháng 2', 'Tháng 3'].forEach(m => {
+        actualMonths.forEach(m => {
           if (monthlyDataStore[m]) {
             const storeForM = monthlyDataStore[m];
             const matchedItem = storeForM.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
@@ -2146,7 +2519,8 @@ export const ReportsAnalyticsView: React.FC = () => {
 
         const actualAvgPerMonth = actualMonthCount > 0 ? actualSum / actualMonthCount : 0;
         let projectedSum = 0;
-        allMonths.slice(3).forEach(m => {
+        allMonths.forEach(m => {
+          if (actualMonthsSet.has(m)) return;
           const factor = seasonalFactors[m] || 1.0;
           const projVal = Math.round(actualAvgPerMonth * factor);
           monthlyValues[m] = projVal;
@@ -2165,7 +2539,7 @@ export const ReportsAnalyticsView: React.FC = () => {
           row[m] = monthlyValues[m] || 0;
         });
 
-        row['Tổng 3 Tháng Thực Tế'] = actualSum;
+        row[`Tổng ${actualMonths.length} Tháng Thực Tế`] = actualSum;
         if (annualViewMode === 'full') {
           row['Dự Báo Cả Năm 2026'] = fullYearTotal;
           row['TB / Tháng'] = Math.round(fullYearTotal / 12);
@@ -2179,9 +2553,9 @@ export const ReportsAnalyticsView: React.FC = () => {
       XLSX.writeFile(wb, `Bao_Cao_Nam_2026_${annualViewMode}.xlsx`);
 
     } else {
-      // Monthly matrix tab (e.g., Tháng 1, Tháng 2, Tháng 3)
-      const targetMonthItems = monthlyDataStore[sheetTab] || caseReports;
-      const maxDays = sheetTab.includes('2') ? 28 : (sheetTab.includes('4') || sheetTab.includes('6') || sheetTab.includes('9') || sheetTab.includes('11') ? 30 : 31);
+      // Monthly matrix tab (e.g., Tháng 1 .. Tháng 12)
+      const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' ? caseReports : []);
+      const maxDays = getDaysInMonth(sheetTab, 2026);
       
       const matrixRows = targetMonthItems.map(item => {
         const row: any = {
@@ -2213,7 +2587,7 @@ export const ReportsAnalyticsView: React.FC = () => {
     let fileName = '';
 
     if (sheetTab === 'Báo cáo ngày') {
-      const monthItems = monthlyDataStore[selectedReportMonth] || caseReports;
+      const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' ? caseReports : []);
       const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
 
       titleText = `BÁO CÁO GIAO BAN KHOA CẬN LÂM SÀNG - NGÀY ${selectedReportDay}`;
@@ -2481,21 +2855,25 @@ export const ReportsAnalyticsView: React.FC = () => {
       `;
 
     } else if (sheetTab === 'Báo cáo năm') {
+      const allMonths = ALL_MONTHS;
+      const storedMonths = allMonths.filter(m => monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+      const actualMonths = storedMonths.length > 0 ? storedMonths : ['Tháng 2'];
+      const actualMonthsSet = new Set(actualMonths);
+      const actualRangeText = actualMonths.map(m => m.replace('Tháng ', 'T')).join(', ');
+
       titleText = `BÁO CÁO THỐNG KÊ HOẠT ĐỘNG NĂM 2026 - KHOA CẬN LÂM SÀNG`;
-      periodText = `Thời gian: Toàn bộ Năm 2026 (${annualViewMode === 'full' ? 'Dự báo 12 tháng' : '3 tháng thực tế'})`;
+      periodText = `Thời gian: Toàn bộ Năm 2026 (${annualViewMode === 'full' ? 'Dự báo 12 tháng' : `${actualMonths.length} tháng thực tế`})`;
       fileName = `Bao_Cao_Nam_2026_${annualViewMode}.doc`;
 
-      const allMonths = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
       const seasonalFactors: { [m: string]: number } = {
+        'Tháng 1': 0.98, 'Tháng 2': 0.95, 'Tháng 3': 1.0,
         'Tháng 4': 1.05, 'Tháng 5': 1.08, 'Tháng 6': 1.10, 'Tháng 7': 1.06,
         'Tháng 8': 1.04, 'Tháng 9': 1.07, 'Tháng 10': 1.09, 'Tháng 11': 1.05, 'Tháng 12': 1.02
       };
 
       const serviceMap = new Map<string, { category: string; name: string }>();
       const allSourceItems = [
-        ...(monthlyDataStore['Tháng 1'] || []),
-        ...(monthlyDataStore['Tháng 2'] || []),
-        ...(monthlyDataStore['Tháng 3'] || []),
+        ...allMonths.flatMap(m => monthlyDataStore[m] || []),
         ...caseReports
       ];
       allSourceItems.forEach(item => {
@@ -2510,7 +2888,7 @@ export const ReportsAnalyticsView: React.FC = () => {
       const masterServices = Array.from(serviceMap.values());
 
       const displayedMonths = annualViewMode === 'actual_only'
-        ? ['Tháng 1', 'Tháng 2', 'Tháng 3']
+        ? actualMonths
         : allMonths;
 
       tableHeaderHtml = `
@@ -2540,7 +2918,7 @@ export const ReportsAnalyticsView: React.FC = () => {
           let actualMonthCount = 0;
           const monthlyValues: { [m: string]: number } = {};
 
-          ['Tháng 1', 'Tháng 2', 'Tháng 3'].forEach(m => {
+          actualMonths.forEach(m => {
             if (monthlyDataStore[m]) {
               const storeForM = monthlyDataStore[m];
               const matchedItem = storeForM.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
@@ -2561,7 +2939,8 @@ export const ReportsAnalyticsView: React.FC = () => {
 
           const actualAvgPerMonth = actualMonthCount > 0 ? actualSum / actualMonthCount : 0;
           let projectedSum = 0;
-          allMonths.slice(3).forEach(m => {
+          allMonths.forEach(m => {
+            if (actualMonthsSet.has(m)) return;
             const factor = seasonalFactors[m] || 1.0;
             const projVal = Math.round(actualAvgPerMonth * factor);
             monthlyValues[m] = projVal;
@@ -2611,7 +2990,7 @@ export const ReportsAnalyticsView: React.FC = () => {
           <div class="summary-title">TỔNG QUAN HOẠT ĐỘNG CẢ NĂM 2026</div>
           <table style="width: 100%; border: none;">
             <tr>
-              <td style="border: none; padding: 4px 8px;">• <b>Tổng 3 tháng thực tế (T1-T3):</b> <span style="color: #047857; font-size: 13pt;">${grandActualSum.toLocaleString('vi-VN')}</span> ca</td>
+              <td style="border: none; padding: 4px 8px;">• <b>Tổng ${actualMonths.length} tháng thực tế (${actualRangeText}):</b> <span style="color: #047857; font-size: 13pt;">${grandActualSum.toLocaleString('vi-VN')}</span> ca</td>
               ${annualViewMode === 'full' ? `<td style="border: none; padding: 4px 8px;">• <b>Dự báo tổng cả năm 2026:</b> <span style="color: #1e40af; font-size: 13pt;">${grandFullYearTotal.toLocaleString('vi-VN')}</span> ca</td>` : ''}
             </tr>
           </table>
@@ -2619,8 +2998,8 @@ export const ReportsAnalyticsView: React.FC = () => {
       `;
 
     } else {
-      // Monthly tab e.g. Tháng 1, Tháng 2, Tháng 3...
-      const targetMonthItems = monthlyDataStore[sheetTab] || caseReports;
+      // Monthly tab e.g. Tháng 1 .. Tháng 12
+      const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' ? caseReports : []);
       titleText = `BÁO CÁO TỔNG HỢP HOẠT ĐỘNG KHOA CẬN LÂM SÀNG - ${sheetTab.toUpperCase()}`;
       periodText = `Thời gian: ${sheetTab} năm 2026`;
       fileName = `Bao_Cao_${sheetTab.replace(/\s+/g, '_')}_2026.doc`;
@@ -2962,14 +3341,27 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       {/* Toast message for sync */}
       {syncToast && (
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl text-xs font-semibold flex items-center justify-between shadow-xs animate-fade-in">
+        <div
+          className={`p-3 rounded-xl text-xs font-semibold flex items-center justify-between shadow-xs animate-fade-in border ${
+            syncToast.startsWith('⚠️')
+              ? 'bg-amber-50 dark:bg-amber-950/80 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+              : 'bg-emerald-50 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+          }`}
+        >
           <span>{syncToast}</span>
-          <button onClick={() => setSyncToast(null)} className="text-emerald-600 font-bold ml-4">✕</button>
+          <button onClick={() => setSyncToast(null)} className="font-bold ml-4 opacity-70 hover:opacity-100 cursor-pointer">✕</button>
         </div>
       )}
 
       {/* TAB 1: GOOGLE SHEET DAILY CASE REPORT (SLIDES / SPREADSHEET MATRIX) */}
-      {activeTab === 'google_sheet' && (
+      {activeTab === 'google_sheet' && (() => {
+        const effectiveSheetUrl = sheetUrl || getEffectiveSheetTarget();
+        const syncedMonthKeys = ALL_MONTHS.filter(m => monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+        const syncedLabel = syncedMonthKeys.length > 0
+          ? syncedMonthKeys.map(m => m.replace('Tháng ', 'T')).join(', ')
+          : 'Chưa đồng bộ';
+
+        return (
         <div className="space-y-4">
           {/* Google Sheet Link & Sync Integration Card */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
@@ -2983,7 +3375,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                     Liên kết Google Sheets Báo Cáo Giao Ban Khoa CLS
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Đồng bộ trực tiếp từ Google Sheets của Khoa
+                    Hỗ trợ đồng bộ 12 tháng (T1 - T12/2026) • Dữ liệu đã nạp: <strong className="text-emerald-600 dark:text-emerald-400">{syncedLabel}</strong>
                   </p>
                 </div>
               </div>
@@ -2992,17 +3384,27 @@ export const ReportsAnalyticsView: React.FC = () => {
                 <span className="px-2.5 py-1.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-xl text-xs font-extrabold border border-emerald-300/60 shrink-0 inline-flex items-center">
                   Tự động đồng bộ
                 </span>
-                <a
-                  href={sheetUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs group shrink-0"
-                  title="Bấm để mở trang tính Google Sheets trong tab mới (Chỉnh sửa liên kết trong 'Cấu hình hệ thống')"
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  <span>Đã kết nối</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                </a>
+                {resolveSpreadsheetId(effectiveSheetUrl) ? (
+                  <a
+                    href={effectiveSheetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs group shrink-0"
+                    title="Bấm để mở trang tính Google Sheets trong tab mới (Chỉnh sửa liên kết trong 'Cấu hình hệ thống')"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span>Đã kết nối</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </a>
+                ) : (
+                  <span
+                    className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 shrink-0"
+                    title="Vào mục 'Cấu hình hệ thống' để dán URL hoặc ID Google Sheets"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <span>Chưa gắn link Sheet</span>
+                  </span>
+                )}
                 <button
                   onClick={handleSyncGoogleSheet}
                   disabled={isSyncing}
@@ -3098,10 +3500,10 @@ export const ReportsAnalyticsView: React.FC = () => {
                   <span className="text-[11px] font-semibold text-slate-400">Đang xem:</span>
                   <span className="px-3 py-1 bg-blue-600 text-white rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5" />
-                    {sheetTab === 'Báo cáo ngày' && `Ngày ${selectedReportDay} - ${selectedReportMonth}`}
+                    {sheetTab === 'Báo cáo ngày' && `Ngày ${selectedReportDay} - ${selectedReportMonth}/2026`}
                     {sheetTab === 'Báo cáo tuần' && `Tuần ${selectedReportWeek} (${getWeekDateRange(selectedReportWeek).dateRangeLabel}) - Năm 2026`}
-                    {sheetTab.startsWith('Tháng') && `Báo cáo Tổng hợp ${sheetTab}`}
-                    {sheetTab === 'Báo cáo năm' && `Toàn bộ Năm 2026 (${annualViewMode === 'full' ? '12 Tháng' : '3 Tháng thực tế'})`}
+                    {sheetTab.startsWith('Tháng') && `Báo cáo Tổng hợp ${sheetTab}/2026`}
+                    {sheetTab === 'Báo cáo năm' && `Toàn bộ Năm 2026 (${annualViewMode === 'full' ? '12 Tháng' : `${syncedMonthKeys.length || 1} Tháng thực tế`})`}
                   </span>
                 </div>
 
@@ -3184,35 +3586,55 @@ export const ReportsAnalyticsView: React.FC = () => {
 
               {/* Contextual Sub-controls (Dynamic based on selected mode) */}
               <div className="flex flex-wrap items-center gap-2">
-                {/* 1. Month Picker (Common for Day, Week, Month) */}
+                {/* 1. Month Picker (All 12 Months for Day, Week, Month) */}
                 {(sheetTab === 'Báo cáo ngày' || sheetTab === 'Báo cáo tuần' || sheetTab.startsWith('Tháng')) && (
-                  <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                    <span className="text-slate-500 pl-2 text-[11px]">Tháng:</span>
-                    {['Tháng 1', 'Tháng 2', 'Tháng 3'].map(m => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => {
-                          setSelectedReportMonth(m);
-                          const targetItems = monthlyDataStore[m] || (m === selectedReportMonth ? caseReports : []);
-                          const maxD = m.includes('2') ? 28 : (m.includes('4') || m.includes('6') || m.includes('9') || m.includes('11') ? 30 : 31);
-                          const latestDInMonth = findLatestDayInItems(targetItems, maxD);
-                          setSelectedReportDay(latestDInMonth);
-                          const mNum = parseInt(m.replace(/[^0-9]/g, ''), 10) || 1;
-                          setSelectedReportWeek(getWeekNumberForDate(2026, mNum, latestDInMonth));
-                          if (sheetTab.startsWith('Tháng')) {
-                            setSheetTab(m);
-                          }
-                        }}
-                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                          selectedReportMonth === m
-                            ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black shadow-2xs border border-slate-200 dark:border-slate-700'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+                    <span className="text-slate-500 pl-2 pr-1 text-[11px]">Tháng (2026):</span>
+                    {ALL_MONTHS.map(m => {
+                      const mNum = getMonthNumber(m);
+                      const hasSynced = Boolean(monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+                      const isSelected = selectedReportMonth === m;
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          title={`${m}/2026${hasSynced ? ' (Đã có dữ liệu đồng bộ)' : ' (Chưa có dữ liệu - bấm để kiểm tra/đồng bộ)'}`}
+                          onClick={() => {
+                            setSelectedReportMonth(m);
+                            setTimePeriod(`${m}/2026`);
+                            const stored = monthlyDataStore[m];
+                            const targetItems = stored && stored.length > 0 ? stored : (m === 'Tháng 2' ? caseReports : []);
+                            const maxD = getDaysInMonth(m, 2026);
+                            const latestDInMonth = targetItems.length > 0 ? findLatestDayInItems(targetItems, maxD) : 1;
+                            setSelectedReportDay(latestDInMonth);
+                            setSelectedReportWeek(getWeekNumberForDate(2026, mNum, latestDInMonth));
+                            if (targetItems.length > 0) {
+                              setCaseReports(targetItems);
+                            } else {
+                              setCaseReports([]);
+                              if (resolveSpreadsheetId(effectiveSheetUrl) && !sheetTab.startsWith('Tháng')) {
+                                fetchGoogleSheetData(effectiveSheetUrl, m, true, false);
+                              }
+                            }
+                            if (sheetTab.startsWith('Tháng')) {
+                              setSheetTab(m);
+                            }
+                          }}
+                          className={`px-2 py-1 rounded-lg transition-all cursor-pointer inline-flex items-center gap-1 ${
+                            isSelected
+                              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black shadow-2xs border border-slate-200 dark:border-slate-700'
+                              : hasSynced
+                              ? 'text-emerald-700 dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-slate-700/70'
+                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          <span>T{mNum}</span>
+                          {hasSynced && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -3236,7 +3658,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                       onChange={e => setSelectedReportDay(Number(e.target.value))}
                       className="bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 font-black px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none cursor-pointer text-xs"
                     >
-                      {Array.from({ length: selectedReportMonth.includes('2') ? 28 : (selectedReportMonth.includes('4') || selectedReportMonth.includes('6') || selectedReportMonth.includes('9') || selectedReportMonth.includes('11') ? 30 : 31) }, (_, i) => i + 1).map(d => (
+                      {Array.from({ length: getDaysInMonth(selectedReportMonth, 2026) }, (_, i) => i + 1).map(d => (
                         <option key={d} value={d} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                           Ngày {d}
                         </option>
@@ -3246,10 +3668,10 @@ export const ReportsAnalyticsView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        const maxD = selectedReportMonth.includes('2') ? 28 : (selectedReportMonth.includes('4') || selectedReportMonth.includes('6') || selectedReportMonth.includes('9') || selectedReportMonth.includes('11') ? 30 : 31);
+                        const maxD = getDaysInMonth(selectedReportMonth, 2026);
                         setSelectedReportDay(prev => Math.min(maxD, prev + 1));
                       }}
-                      disabled={selectedReportDay >= (selectedReportMonth.includes('2') ? 28 : (selectedReportMonth.includes('4') || selectedReportMonth.includes('6') || selectedReportMonth.includes('9') || selectedReportMonth.includes('11') ? 30 : 31))}
+                      disabled={selectedReportDay >= getDaysInMonth(selectedReportMonth, 2026)}
                       className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       title="Ngày sau"
                     >
@@ -3337,7 +3759,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                       }`}
                     >
-                      3 Tháng Thực Tế (T1-T3)
+                      {syncedMonthKeys.length || 1} Tháng Thực Tế
                     </button>
                   </div>
                 )}
@@ -3371,25 +3793,25 @@ export const ReportsAnalyticsView: React.FC = () => {
             </div>
 
             {/* Scrollable Spreadsheet Table Container */}
-            <div className="overflow-auto scrollbar-thin max-h-[680px] relative">
-              <table className="w-full text-xs text-left border-separate border-spacing-0 min-w-[1600px]">
+            <div className="overflow-auto scrollbar-thin max-h-[680px] relative border-t border-slate-300 dark:border-slate-700">
+              <table className="w-full text-[13px] text-left border-separate border-spacing-0 min-w-[1750px] tabular-nums">
                 <thead>
                   {/* Header Row 1: Day Numbers (1 to 28 / 31) */}
-                  <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 select-none">
-                    <th colSpan={2} className="px-4 py-2.5 font-extrabold text-slate-800 dark:text-slate-100 border-b border-r border-slate-300 dark:border-slate-700 sticky top-0 left-0 z-30 bg-slate-100 dark:bg-slate-800 w-[288px] min-w-[288px] h-[36px]">
+                  <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 select-none">
+                    <th colSpan={2} className="px-4 py-2.5 font-extrabold text-slate-900 dark:text-slate-100 border-b border-r border-slate-300 dark:border-slate-600 sticky top-0 left-0 z-30 bg-slate-100 dark:bg-slate-800 w-[308px] min-w-[308px] h-[38px]">
                       Ngày trong tháng →
                     </th>
                     {daysList.map(day => {
-                      // Highlight LT holiday days (15-21 in Feb) or weekends in yellow like in screenshots!
-                      const isLT = sheetTab.includes('2') && day >= 15 && day <= 21;
+                      // Highlight LT holiday days (15-21 in Feb ONLY - avoid matching Month 12) or weekends in yellow
+                      const isLT = getMonthNumber(sheetTab) === 2 && day >= 15 && day <= 21;
                       const isWeekend = day === 7 || day === 8;
                       return (
                         <th 
                           key={day} 
                           colSpan={2} 
-                          className={`text-center py-2 font-extrabold text-xs border-b border-r border-slate-300 dark:border-slate-700 sticky top-0 z-20 h-[36px] ${
+                          className={`text-center py-2 font-extrabold text-[13px] border-b border-r border-slate-300 dark:border-slate-600 sticky top-0 z-20 h-[38px] ${
                             isLT
-                              ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300'
+                              ? 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300'
                               : isWeekend 
                               ? 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200' 
                               : 'bg-slate-100 dark:bg-slate-800'
@@ -3399,47 +3821,47 @@ export const ReportsAnalyticsView: React.FC = () => {
                         </th>
                       );
                     })}
-                    <th colSpan={4} className="text-center py-2 font-extrabold text-xs bg-indigo-100 dark:bg-indigo-950 text-indigo-950 dark:text-indigo-200 border-b border-l-2 border-indigo-300 dark:border-indigo-700 sticky top-0 z-20 h-[36px]">
+                    <th colSpan={4} className="text-center py-2 font-extrabold text-[13px] bg-indigo-100 dark:bg-indigo-950 text-indigo-950 dark:text-indigo-200 border-b border-l-2 border-indigo-400 dark:border-indigo-700 sticky top-0 z-20 h-[38px]">
                       Tổng
                     </th>
                   </tr>
 
                   {/* Header Row 2: BH / ND / Tất cả / TB(ngày) Sub-columns */}
-                  <tr className="bg-slate-50 dark:bg-slate-850 text-slate-600 dark:text-slate-300 text-[11px] font-bold select-none">
-                    <th className="px-4 py-1.5 sticky top-[36px] left-0 z-30 bg-slate-50 dark:bg-slate-850 border-b border-r border-slate-300 dark:border-slate-700 w-[240px] min-w-[240px] max-w-[240px] h-[30px]">
+                  <tr className="bg-slate-50 dark:bg-slate-800/95 text-slate-700 dark:text-slate-200 text-xs font-extrabold select-none">
+                    <th className="px-4 py-2 sticky top-[38px] left-0 z-30 bg-slate-50 dark:bg-slate-800 border-b-2 border-r border-slate-300 dark:border-slate-600 w-[256px] min-w-[256px] max-w-[256px] h-[34px]">
                       Danh Mục Kỹ Thuật / Dịch Vụ
                     </th>
-                    <th className="w-12 text-center border-b border-r border-slate-300 dark:border-slate-700 sticky top-[36px] left-[240px] z-30 bg-slate-50 dark:bg-slate-850 w-12 min-w-[48px] max-w-[48px] h-[30px]">
+                    <th className="text-center border-b-2 border-r border-slate-300 dark:border-slate-600 sticky top-[38px] left-[256px] z-30 bg-slate-50 dark:bg-slate-800 w-[52px] min-w-[52px] max-w-[52px] h-[34px]">
                       Loại
                     </th>
                     {daysList.map(day => {
-                      const isLT = sheetTab.includes('2') && day >= 15 && day <= 21;
+                      const isLT = getMonthNumber(sheetTab) === 2 && day >= 15 && day <= 21;
                       const isWeekend = day === 7 || day === 8;
                       return (
                         <React.Fragment key={day}>
-                          <th className={`w-9 text-center py-1 border-b border-r border-slate-200 dark:border-slate-700 font-extrabold sticky top-[36px] z-20 h-[30px] ${
-                            isLT ? 'bg-red-50 dark:bg-red-950 text-red-700' : isWeekend ? 'bg-amber-50 dark:bg-amber-950 text-amber-900' : 'bg-slate-50 dark:bg-slate-850'
+                          <th className={`w-10 text-center py-1.5 border-b-2 border-r border-slate-300/80 dark:border-slate-700 font-extrabold sticky top-[38px] z-20 h-[34px] ${
+                            isLT ? 'bg-red-50 dark:bg-red-950 text-red-700' : isWeekend ? 'bg-amber-50 dark:bg-amber-950 text-amber-900' : 'bg-slate-50 dark:bg-slate-800'
                           }`}>
                             BH
                           </th>
-                          <th className={`w-9 text-center py-1 border-b border-r border-slate-300 dark:border-slate-700 font-extrabold sticky top-[36px] z-20 h-[30px] ${
-                            isLT ? 'bg-red-50 dark:bg-red-950 text-red-700' : isWeekend ? 'bg-amber-50 dark:bg-amber-950 text-amber-900' : 'bg-slate-50 dark:bg-slate-850'
+                          <th className={`w-10 text-center py-1.5 border-b-2 border-r border-slate-300 dark:border-slate-600 font-extrabold sticky top-[38px] z-20 h-[34px] ${
+                            isLT ? 'bg-red-50 dark:bg-red-950 text-red-700' : isWeekend ? 'bg-amber-50 dark:bg-amber-950 text-amber-900' : 'bg-slate-50 dark:bg-slate-800'
                           }`}>
                             ND
                           </th>
                         </React.Fragment>
                       );
                     })}
-                    <th className="w-12 text-center py-1 bg-indigo-50 dark:bg-indigo-950 text-indigo-900 dark:text-indigo-200 border-b border-r border-indigo-200 font-extrabold sticky top-[36px] z-20 h-[30px]">
+                    <th className="w-14 text-center py-1.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-900 dark:text-indigo-200 border-b-2 border-r border-l-2 border-l-indigo-400 border-indigo-200 font-extrabold sticky top-[38px] z-20 h-[34px]">
                       BH
                     </th>
-                    <th className="w-12 text-center py-1 bg-indigo-50 dark:bg-indigo-950 text-indigo-900 dark:text-indigo-200 border-b border-r border-indigo-200 font-extrabold sticky top-[36px] z-20 h-[30px]">
+                    <th className="w-14 text-center py-1.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-900 dark:text-indigo-200 border-b-2 border-r border-indigo-200 font-extrabold sticky top-[38px] z-20 h-[34px]">
                       ND
                     </th>
-                    <th className="w-14 text-center py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-950 dark:text-indigo-100 border-b border-r border-indigo-300 font-extrabold sticky top-[36px] z-20 h-[30px]">
+                    <th className="w-16 text-center py-1.5 bg-indigo-100 dark:bg-indigo-900 text-indigo-950 dark:text-indigo-100 border-b-2 border-r border-indigo-300 font-extrabold sticky top-[38px] z-20 h-[34px]">
                       Tất cả
                     </th>
-                    <th className="w-16 text-center py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-950 dark:text-indigo-100 border-b font-extrabold sticky top-[36px] z-20 h-[30px]">
+                    <th className="w-20 text-center py-1.5 bg-indigo-100 dark:bg-indigo-900 text-indigo-950 dark:text-indigo-100 border-b-2 border-indigo-300 font-extrabold sticky top-[38px] z-20 h-[34px]">
                       TB(ngày)
                     </th>
                   </tr>
@@ -3450,14 +3872,14 @@ export const ReportsAnalyticsView: React.FC = () => {
                   {pinnedMatrixItems.length > 0 && !showPinnedOnly && (
                     <React.Fragment>
                       <tr className="bg-amber-100/90 dark:bg-amber-950/80 font-extrabold text-amber-950 dark:text-amber-200">
-                        <td colSpan={2} className="px-4 py-2 text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-300 sticky left-0 z-10 bg-amber-100 dark:bg-amber-950 border-b border-r border-amber-300 dark:border-amber-800 w-[288px] min-w-[288px]">
+                        <td colSpan={2} className="px-4 py-2.5 text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-300 sticky left-0 z-10 bg-amber-100 dark:bg-amber-950 border-b border-r border-amber-300 dark:border-amber-800 w-[308px] min-w-[308px]">
                           ⭐ CHỈ SỐ KỸ THUẬT TRỌNG ĐIỂM ĐÃ GHIM ({pinnedMatrixItems.length})
                         </td>
                         <td colSpan={daysList.length * 2 + 4} className="bg-amber-100/60 dark:bg-amber-950/40 border-b border-amber-300 dark:border-amber-800"></td>
                       </tr>
                       {pinnedMatrixItems.map(item => (
                         <tr key={`pinned-top-${item.id}`} className="bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 transition-colors">
-                          <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200 sticky left-0 z-10 bg-amber-50/90 dark:bg-slate-900 border-b border-r border-amber-200 dark:border-slate-800 w-[240px] min-w-[240px] max-w-[240px]" title={item.name}>
+                          <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-slate-100 sticky left-0 z-10 bg-amber-50/95 dark:bg-slate-900 border-b border-r border-amber-300/70 dark:border-slate-700 w-[256px] min-w-[256px] max-w-[256px]" title={item.name}>
                             <div className="flex items-center gap-1.5 min-w-0">
                               <button
                                 type="button"
@@ -3465,39 +3887,39 @@ export const ReportsAnalyticsView: React.FC = () => {
                                 className="shrink-0 p-0.5 rounded text-amber-500 hover:text-amber-600 transition-all cursor-pointer"
                                 title="Bỏ ghim chỉ số"
                               >
-                                <Star className="w-3.5 h-3.5 fill-current" />
+                                <Star className="w-4 h-4 fill-current" />
                               </button>
-                              <span className="truncate text-xs font-bold text-amber-950 dark:text-amber-200">{item.name}</span>
+                              <span className="truncate text-[13px] font-bold text-amber-950 dark:text-amber-200">{item.name}</span>
                             </div>
                           </td>
-                          <td className="text-center font-semibold text-amber-700 dark:text-amber-400 sticky left-[240px] z-10 bg-amber-50/90 dark:bg-slate-900 border-b border-r border-amber-200 dark:border-slate-800 text-[10px] w-12 min-w-[48px] max-w-[48px]">
+                          <td className="text-center font-semibold text-amber-700 dark:text-amber-400 sticky left-[256px] z-10 bg-amber-50/95 dark:bg-slate-900 border-b border-r border-amber-300/70 dark:border-slate-700 text-[11px] w-[52px] min-w-[52px] max-w-[52px]">
                             Ca
                           </td>
                           {daysList.map(day => {
-                            const isLT = sheetTab.includes('2') && day >= 15 && day <= 21;
+                            const isLT = getMonthNumber(sheetTab) === 2 && day >= 15 && day <= 21;
                             const isWeekend = day === 7 || day === 8;
                             const dayData = item.dailyData[day] || { bh: 0, nd: 0 };
                             return (
                               <React.Fragment key={day}>
-                                <td className={`text-center py-1.5 border-b border-r border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300 ${isLT ? 'bg-red-50/40' : isWeekend ? 'bg-amber-50/40' : ''}`}>
-                                  {dayData.bh === 'LT' ? <span className="text-red-600 font-extrabold italic text-[11px]">LT</span> : (dayData.bh || <span className="text-slate-300 dark:text-slate-700">-</span>)}
+                                <td className={`text-center py-2 border-b border-r border-slate-300/70 dark:border-slate-700 font-semibold text-slate-800 dark:text-slate-200 ${isLT ? 'bg-red-50/50' : isWeekend ? 'bg-amber-50/50' : ''}`}>
+                                  {dayData.bh === 'LT' ? <span className="text-red-600 font-extrabold italic text-xs">LT</span> : (dayData.bh || <span className="text-slate-300 dark:text-slate-700">-</span>)}
                                 </td>
-                                <td className={`text-center py-1.5 border-b border-r border-slate-300 dark:border-slate-700 italic font-medium text-slate-600 dark:text-slate-400 ${isLT ? 'bg-red-50/40' : isWeekend ? 'bg-amber-50/40' : ''}`}>
-                                  {dayData.nd === 'LT' ? <span className="text-red-600 font-extrabold italic text-[11px]">LT</span> : (dayData.nd || <span className="text-slate-300 dark:text-slate-700">-</span>)}
+                                <td className={`text-center py-2 border-b border-r border-slate-300 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 ${isLT ? 'bg-red-50/50' : isWeekend ? 'bg-amber-50/50' : ''}`}>
+                                  {dayData.nd === 'LT' ? <span className="text-red-600 font-extrabold italic text-xs">LT</span> : (dayData.nd || <span className="text-slate-300 dark:text-slate-700">-</span>)}
                                 </td>
                               </React.Fragment>
                             );
                           })}
-                          <td className="text-center py-1.5 font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/30 border-b border-r border-indigo-200">
+                          <td className="text-center py-2 font-bold text-indigo-800 dark:text-indigo-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-l-2 border-l-indigo-400 border-indigo-200">
                             {getRowTotal(item, 'bh') || 0}
                           </td>
-                          <td className="text-center py-1.5 font-bold text-slate-800 dark:text-slate-200 bg-indigo-50/50 dark:bg-indigo-950/30 border-b border-r border-indigo-200">
+                          <td className="text-center py-2 font-bold text-slate-800 dark:text-slate-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-indigo-200">
                             {getRowTotal(item, 'nd') || 0}
                           </td>
-                          <td className="text-center py-1.5 font-extrabold text-blue-900 dark:text-blue-200 bg-blue-100/60 dark:bg-blue-950/60 border-b border-r border-blue-200">
+                          <td className="text-center py-2 font-extrabold text-blue-950 dark:text-blue-100 bg-blue-100/70 dark:bg-blue-950/60 border-b border-r border-blue-300">
                             {getRowTotal(item, 'bh') + getRowTotal(item, 'nd')}
                           </td>
-                          <td className="text-center py-1.5 font-medium italic text-slate-700 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-300">
+                          <td className="text-center py-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-300">
                             {getItemAveragePerDay(item)}
                           </td>
                         </tr>
@@ -3508,11 +3930,11 @@ export const ReportsAnalyticsView: React.FC = () => {
                   {groupedCategories.map(group => (
                     <React.Fragment key={group.categoryName}>
                       {/* Category Parent Row Header */}
-                      <tr className="bg-slate-100 dark:bg-slate-800 font-extrabold text-slate-800 dark:text-slate-100">
-                        <td colSpan={2} className="px-4 py-2 text-xs font-black uppercase tracking-wider text-indigo-900 dark:text-indigo-300 sticky left-0 z-10 bg-slate-100 dark:bg-slate-800 border-b border-r border-slate-300 dark:border-slate-700 w-[288px] min-w-[288px]">
+                      <tr className="bg-indigo-50/90 dark:bg-slate-800 font-extrabold text-slate-900 dark:text-slate-100">
+                        <td colSpan={2} className="px-4 py-2.5 text-[13px] font-black uppercase tracking-wider text-indigo-950 dark:text-indigo-200 sticky left-0 z-10 bg-indigo-50 dark:bg-slate-800 border-b border-r border-slate-300 dark:border-slate-600 w-[308px] min-w-[308px]">
                           📌 {group.categoryName}
                         </td>
-                        <td colSpan={daysList.length * 2 + 4} className="bg-slate-100/60 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700"></td>
+                        <td colSpan={daysList.length * 2 + 4} className="bg-indigo-50/70 dark:bg-slate-800/70 border-b border-slate-300 dark:border-slate-700"></td>
                       </tr>
 
                       {/* Detail Service Rows under Category */}
@@ -3521,10 +3943,10 @@ export const ReportsAnalyticsView: React.FC = () => {
                         return (
                           <tr 
                             key={item.id} 
-                            className="hover:bg-blue-50/50 dark:hover:bg-slate-800/80 transition-colors"
+                            className="odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/80 transition-colors"
                           >
                             {/* Service Name (Sticky Left with Pin Button) */}
-                            <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200 sticky left-0 z-10 bg-white dark:bg-slate-900 border-b border-r border-slate-200 dark:border-slate-800 w-[240px] min-w-[240px] max-w-[240px]" title={item.name}>
+                            <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-slate-100 sticky left-0 z-10 bg-white dark:bg-slate-900 border-b border-r border-slate-300 dark:border-slate-700 w-[256px] min-w-[256px] max-w-[256px]" title={item.name}>
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <button
                                   type="button"
@@ -3536,20 +3958,20 @@ export const ReportsAnalyticsView: React.FC = () => {
                                   }`}
                                   title={isPinned ? 'Bỏ ghim khỏi danh sách trọng điểm' : 'Ghim kỹ thuật lên đầu báo cáo'}
                                 >
-                                  <Star className={`w-3.5 h-3.5 ${isPinned ? 'fill-current' : ''}`} />
+                                  <Star className={`w-4 h-4 ${isPinned ? 'fill-current' : ''}`} />
                                 </button>
-                                <span className={`truncate text-xs ${isPinned ? 'font-bold text-amber-950 dark:text-amber-200' : 'font-medium text-slate-800 dark:text-slate-200'}`}>
+                                <span className={`truncate text-[13px] ${isPinned ? 'font-bold text-amber-950 dark:text-amber-200' : 'font-semibold text-slate-800 dark:text-slate-200'}`}>
                                   {item.name}
                                 </span>
                               </div>
                             </td>
-                            <td className="text-center font-semibold text-slate-400 sticky left-[240px] z-10 bg-white dark:bg-slate-900 border-b border-r border-slate-200 dark:border-slate-800 text-[10px] w-12 min-w-[48px] max-w-[48px]">
+                            <td className="text-center font-semibold text-slate-500 sticky left-[256px] z-10 bg-white dark:bg-slate-900 border-b border-r border-slate-300 dark:border-slate-700 text-[11px] w-[52px] min-w-[52px] max-w-[52px]">
                               Ca
                             </td>
 
                           {/* Days Cells (Read-only data synced directly from Google Sheets) */}
                           {daysList.map(day => {
-                            const isLT = sheetTab.includes('2') && day >= 15 && day <= 21;
+                            const isLT = getMonthNumber(sheetTab) === 2 && day >= 15 && day <= 21;
                             const isWeekend = day === 7 || day === 8;
                             const dayData = item.dailyData[day] || { bh: 0, nd: 0 };
                             
@@ -3557,12 +3979,12 @@ export const ReportsAnalyticsView: React.FC = () => {
                               <React.Fragment key={day}>
                                 {/* BH Cell */}
                                 <td 
-                                  className={`text-center py-1.5 border-b border-r border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300 ${
-                                    isLT ? 'bg-red-50/40 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/40 dark:bg-amber-950/20' : ''
+                                  className={`text-center py-2 border-b border-r border-slate-300/75 dark:border-slate-700/80 font-semibold text-slate-800 dark:text-slate-200 ${
+                                    isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
                                   }`}
                                 >
                                   {dayData.bh === 'LT' ? (
-                                    <span className="text-red-600 dark:text-red-400 font-extrabold italic text-[11px]">LT</span>
+                                    <span className="text-red-600 dark:text-red-400 font-extrabold italic text-xs">LT</span>
                                   ) : (
                                     dayData.bh || <span className="text-slate-300 dark:text-slate-700 font-normal">-</span>
                                   )}
@@ -3570,12 +3992,12 @@ export const ReportsAnalyticsView: React.FC = () => {
 
                                 {/* ND Cell */}
                                 <td 
-                                  className={`text-center py-1.5 border-b border-r border-slate-300 dark:border-slate-700 italic font-medium text-slate-600 dark:text-slate-400 ${
-                                    isLT ? 'bg-red-50/40 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/40 dark:bg-amber-950/20' : ''
+                                  className={`text-center py-2 border-b border-r border-slate-300 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 ${
+                                    isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
                                   }`}
                                 >
                                   {dayData.nd === 'LT' ? (
-                                    <span className="text-red-600 dark:text-red-400 font-extrabold italic text-[11px]">LT</span>
+                                    <span className="text-red-600 dark:text-red-400 font-extrabold italic text-xs">LT</span>
                                   ) : (
                                     dayData.nd || <span className="text-slate-300 dark:text-slate-700 font-normal">-</span>
                                   )}
@@ -3585,16 +4007,16 @@ export const ReportsAnalyticsView: React.FC = () => {
                           })}
 
                           {/* Row Summary Columns: BH, ND, Tất cả, TB(ngày) */}
-                          <td className="text-center py-1.5 font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/30 border-b border-r border-indigo-200">
+                          <td className="text-center py-2 font-bold text-indigo-800 dark:text-indigo-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-l-2 border-l-indigo-400 border-indigo-200">
                             {getRowTotal(item, 'bh') || 0}
                           </td>
-                          <td className="text-center py-1.5 font-bold text-slate-800 dark:text-slate-200 bg-indigo-50/50 dark:bg-indigo-950/30 border-b border-r border-indigo-200">
+                          <td className="text-center py-2 font-bold text-slate-800 dark:text-slate-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-indigo-200">
                             {getRowTotal(item, 'nd') || 0}
                           </td>
-                          <td className="text-center py-1.5 font-extrabold text-blue-900 dark:text-blue-200 bg-blue-100/60 dark:bg-blue-950/60 border-b border-r border-blue-200">
+                          <td className="text-center py-2 font-extrabold text-blue-950 dark:text-blue-100 bg-blue-100/70 dark:bg-blue-950/60 border-b border-r border-blue-300">
                             {getRowTotal(item, 'bh') + getRowTotal(item, 'nd')}
                           </td>
-                          <td className="text-center py-1.5 font-medium italic text-slate-700 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-300">
+                          <td className="text-center py-2 font-semibold text-slate-700 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-300">
                             {getItemAveragePerDay(item)}
                           </td>
                         </tr>
@@ -3603,10 +4025,10 @@ export const ReportsAnalyticsView: React.FC = () => {
 
                       {/* Category Subtotal Row (Blue Highlighted Row matching Screenshots!) */}
                       <tr className="bg-sky-100 dark:bg-sky-950 font-extrabold text-slate-900 dark:text-slate-100">
-                        <td className="px-4 py-2 text-xs font-black text-blue-900 dark:text-blue-200 sticky left-0 z-10 bg-sky-100 dark:bg-sky-950 border-b border-r border-sky-300 dark:border-sky-800 w-[240px] min-w-[240px] max-w-[240px]">
+                        <td className="px-4 py-2.5 text-[13px] font-black text-blue-950 dark:text-blue-100 sticky left-0 z-10 bg-sky-100 dark:bg-sky-950 border-b border-r border-sky-300 dark:border-sky-800 w-[256px] min-w-[256px] max-w-[256px]">
                           Tổng số {group.categoryName}
                         </td>
-                        <td className="text-center text-[10px] text-blue-800 dark:text-blue-300 sticky left-[240px] z-10 bg-sky-100 dark:bg-sky-950 border-b border-r border-sky-300 dark:border-sky-800 w-12 min-w-[48px] max-w-[48px]">
+                        <td className="text-center text-[11px] text-blue-900 dark:text-blue-200 sticky left-[256px] z-10 bg-sky-100 dark:bg-sky-950 border-b border-r border-sky-300 dark:border-sky-800 w-[52px] min-w-[52px] max-w-[52px]">
                           Tổng
                         </td>
                         {daysList.map(day => {
@@ -3614,37 +4036,52 @@ export const ReportsAnalyticsView: React.FC = () => {
                           const ndTotal = getCategoryDayTotal(group.categoryName, day, 'nd');
                           return (
                             <React.Fragment key={day}>
-                              <td className="text-center py-1.5 font-extrabold border-b border-r border-sky-200 dark:border-sky-800">
-                                {bhTotal === 'LT' ? <span className="text-red-600 dark:text-red-400 font-extrabold italic text-[11px]">LT</span> : (bhTotal || '-')}
+                              <td className="text-center py-2 font-extrabold border-b border-r border-sky-300/75 dark:border-sky-800">
+                                {bhTotal === 'LT' ? <span className="text-red-600 dark:text-red-400 font-extrabold italic text-xs">LT</span> : (bhTotal || '-')}
                               </td>
-                              <td className="text-center py-1.5 font-extrabold border-b border-r border-sky-300 dark:border-sky-800">
-                                {ndTotal === 'LT' ? <span className="text-red-600 dark:text-red-400 font-extrabold italic text-[11px]">LT</span> : (ndTotal || '-')}
+                              <td className="text-center py-2 font-extrabold border-b border-r border-sky-300 dark:border-sky-700">
+                                {ndTotal === 'LT' ? <span className="text-red-600 dark:text-red-400 font-extrabold italic text-xs">LT</span> : (ndTotal || '-')}
                               </td>
                             </React.Fragment>
                           );
                         })}
-                        <td className="text-center py-1.5 font-black text-blue-950 dark:text-blue-100 bg-sky-200 dark:bg-sky-900 border-b border-r border-sky-300">
+                        <td className="text-center py-2 font-black text-blue-950 dark:text-blue-100 bg-sky-200 dark:bg-sky-900 border-b border-r border-l-2 border-l-indigo-400 border-sky-300">
                           {group.items.reduce((acc, i) => acc + getRowTotal(i, 'bh'), 0)}
                         </td>
-                        <td className="text-center py-1.5 font-black text-blue-950 dark:text-blue-100 bg-sky-200 dark:bg-sky-900 border-b border-r border-sky-300">
+                        <td className="text-center py-2 font-black text-blue-950 dark:text-blue-100 bg-sky-200 dark:bg-sky-900 border-b border-r border-sky-300">
                           {group.items.reduce((acc, i) => acc + getRowTotal(i, 'nd'), 0)}
                         </td>
-                        <td className="text-center py-1.5 font-black text-blue-900 dark:text-blue-100 bg-blue-200 dark:bg-blue-900 border-b border-r border-blue-300">
+                        <td className="text-center py-2 font-black text-blue-950 dark:text-blue-100 bg-blue-200 dark:bg-blue-900 border-b border-r border-blue-300">
                           {group.items.reduce((acc, i) => acc + getRowTotal(i), 0)}
                         </td>
-                        <td className="text-center py-1.5 font-extrabold italic text-blue-950 dark:text-blue-200 bg-sky-200/80 dark:bg-sky-900/80 border-b border-sky-300">
+                        <td className="text-center py-2 font-extrabold text-blue-950 dark:text-blue-100 bg-sky-200/80 dark:bg-sky-900/80 border-b border-sky-300">
                           {getCategoryAveragePerDay(group.categoryName)}
                         </td>
                       </tr>
                     </React.Fragment>
                   ))}
+                  {groupedCategories.length === 0 && (
+                    <tr>
+                      <td colSpan={daysList.length * 2 + 6} className="px-6 py-10 text-center">
+                        <div className="max-w-lg mx-auto space-y-2">
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                            Chưa có dữ liệu đồng bộ cho {sheetTab}/2026
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Hệ thống hỗ trợ tự động nhận diện các tên tab: <strong>{sheetTab}</strong>, <strong>{sheetTab}/2026</strong>, <strong>T{getMonthNumber(sheetTab)}</strong>, <strong>{getMonthNumber(sheetTab)}/2026</strong>. Hãy đảm bảo Google Sheet đã mở quyền xem công khai và bấm <strong>Đồng bộ ngay</strong>.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         )}
         </div>
-      )}
+        );
+      })()}
 
       {/* TAB 2: OVERVIEW DASHBOARD & CHARTS */}
       {activeTab === 'dashboard' && (

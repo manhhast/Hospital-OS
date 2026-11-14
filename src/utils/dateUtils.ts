@@ -190,6 +190,29 @@ export function toInputDateFormat(dateInput?: string | null): string {
 }
 
 /**
+ * Adds a number of calendar months to an ISO date string (YYYY-MM-DD) or DD/MM/YYYY date string
+ * and returns YYYY-MM-DD suitable for <input type="date" />.
+ * Clamps day of month to the target month's maximum days (e.g. Jan 31 + 1 month -> Feb 28/29).
+ */
+export function addMonthsToISODate(startDateInput?: string | null, months?: number | null): string {
+  if (!startDateInput || !months || !Number.isFinite(months) || months <= 0) return '';
+  const iso = toInputDateFormat(startDateInput);
+  if (!iso) return '';
+
+  const parts = iso.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return '';
+  const [year, month, day] = parts;
+
+  const totalMonths = (year * 12) + (month - 1) + Math.round(months);
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonthIndex = ((totalMonths % 12) + 12) % 12;
+  const maxDayInTargetMonth = new Date(targetYear, targetMonthIndex + 1, 0).getDate();
+  const targetDay = Math.min(day, maxDayInTargetMonth);
+
+  return `${targetYear}-${String(targetMonthIndex + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+}
+
+/**
  * Normalizes Vietnamese phone numbers:
  * - Drops unwanted spaces, dots, dashes
  * - Converts +84 or 84 to 0

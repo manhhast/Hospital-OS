@@ -3,15 +3,15 @@ import {
   Wrench, Activity, AlertTriangle, ShieldCheck, Calendar, Clock, 
   Search, Plus, FileText, CheckCircle2, AlertCircle, RefreshCw, Filter, Layers, 
   LayoutList, LayoutGrid, Eye, User, MapPin, Check, Info, ArrowUpRight, X, Trash2,
-  Gauge, DollarSign, ShieldAlert, Lock, Unlock
+  Gauge, DollarSign, ShieldAlert, Lock, Unlock, Settings, Sliders
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
-import { EquipmentItem, MaintenanceLog, RepairLog, EquipmentStatus } from '../../types/hospital';
+import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus } from '../../types/hospital';
 import { EquipmentDetailModal } from './EquipmentDetailModal';
 import { SafetyInterlockTab } from './SafetyInterlockTab';
 import { OeeReliabilityTab } from './OeeReliabilityTab';
 import { DepreciationUtilizationTab } from './DepreciationUtilizationTab';
-import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN } from '../../utils/dateUtils';
+import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
 import { checkEquipmentSafetyInterlock, calculateEquipmentOEE, calculateEquipmentDepreciation } from '../../utils/equipmentAnalytics';
 
 export const EquipmentManagementView: React.FC = () => {
@@ -36,27 +36,66 @@ export const EquipmentManagementView: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Form states for Add Equipment
+  // Form states for Add Equipment — Phần 1: Thông tin cố định (Lý lịch, Ngày ghi thêm, Người quản lý)
   const [newEqCode, setNewEqCode] = useState('');
   const [newEqName, setNewEqName] = useState('');
   const [newEqCategory, setNewEqCategory] = useState<'Chẩn đoán hình ảnh' | 'Xét nghiệm' | 'Nội soi' | 'Siêu âm' | 'Khác'>('Chẩn đoán hình ảnh');
   const [newEqModel, setNewEqModel] = useState('');
   const [newEqManufacturer, setNewEqManufacturer] = useState('');
   const [newEqOrigin, setNewEqOrigin] = useState('CHLB Đức');
+  const [newEqYear, setNewEqYear] = useState(String(new Date().getFullYear()));
   const [newEqSerial, setNewEqSerial] = useState('');
   const [newEqRoom, setNewEqRoom] = useState('');
   const [newEqTech, setNewEqTech] = useState('');
   const [newEqManager, setNewEqManager] = useState('');
   const [newEqPurchaseDate, setNewEqPurchaseDate] = useState(getTodayISODateVN());
   const [newEqInstallDate, setNewEqInstallDate] = useState(getTodayISODateVN());
-  const [newEqInterval, setNewEqInterval] = useState(3);
   const [newEqPrice, setNewEqPrice] = useState('');
   const [newEqSupplier, setNewEqSupplier] = useState('');
-  const [newEqRadLicense, setNewEqRadLicense] = useState('');
-  const [newEqRadExpiry, setNewEqRadExpiry] = useState('');
-  const [newEqCalibExpiry, setNewEqCalibExpiry] = useState('');
-  const [newEqCalibAgency, setNewEqCalibAgency] = useState('');
   const [newEqSpecs, setNewEqSpecs] = useState('');
+
+  // Pre-configured default durations (cài đặt trước khi nhập thiết bị)
+  const [durationDefaults, setDurationDefaults] = useState<EquipmentDurationDefaults>(() =>
+    storageService.getEquipmentDurationDefaults()
+  );
+  const [showDurationSettingsModal, setShowDurationSettingsModal] = useState(false);
+  const [draftDefaults, setDraftDefaults] = useState<EquipmentDurationDefaults>(() =>
+    storageService.getEquipmentDurationDefaults()
+  );
+
+  // Form states for Add Equipment — Phần 2: Giấy phép, Kiểm định, Kiểm xạ, Bảo dưỡng & Ghi chú
+  // 2.1 Giấy phép
+  const [newEqPermitNumber, setNewEqPermitNumber] = useState('');
+  const [newEqPermitIssueDate, setNewEqPermitIssueDate] = useState('');
+  const [newEqPermitDuration, setNewEqPermitDuration] = useState<number>(() => storageService.getEquipmentDurationDefaults().permitMonths);
+  const [newEqPermitExpiry, setNewEqPermitExpiry] = useState('');
+  const [permitExpiryManual, setPermitExpiryManual] = useState(false);
+
+  // 2.2 Kiểm định
+  const [newEqCalibNumber, setNewEqCalibNumber] = useState('');
+  const [newEqCalibAgency, setNewEqCalibAgency] = useState('');
+  const [newEqCalibDate, setNewEqCalibDate] = useState('');
+  const [newEqCalibDuration, setNewEqCalibDuration] = useState<number>(() => storageService.getEquipmentDurationDefaults().calibrationMonths);
+  const [newEqCalibExpiry, setNewEqCalibExpiry] = useState('');
+  const [calibExpiryManual, setCalibExpiryManual] = useState(false);
+
+  // 2.3 Kiểm xạ
+  const [newEqRadLicense, setNewEqRadLicense] = useState('');
+  const [newEqRadSurveyDate, setNewEqRadSurveyDate] = useState('');
+  const [newEqRadSurveyDuration, setNewEqRadSurveyDuration] = useState<number>(() => storageService.getEquipmentDurationDefaults().radiationSurveyMonths);
+  const [newEqRadSurveyExpiry, setNewEqRadSurveyExpiry] = useState('');
+  const [radExpiryManual, setRadExpiryManual] = useState(false);
+
+  // 2.4 Bảo dưỡng
+  const [newEqLastMaintDate, setNewEqLastMaintDate] = useState(getTodayISODateVN());
+  const [newEqInterval, setNewEqInterval] = useState<number>(() => storageService.getEquipmentDurationDefaults().maintenanceMonths);
+  const [newEqNextMaintDate, setNewEqNextMaintDate] = useState(() =>
+    addMonthsToISODate(getTodayISODateVN(), storageService.getEquipmentDurationDefaults().maintenanceMonths)
+  );
+  const [maintExpiryManual, setMaintExpiryManual] = useState(false);
+
+  // 2.5 Ghi chú
+  const [newEqNotes, setNewEqNotes] = useState('');
 
   // Form states for Quick Modals
   const [newRepairDesc, setNewRepairDesc] = useState('');
@@ -99,49 +138,126 @@ export const EquipmentManagementView: React.FC = () => {
   const safetyViolations = checkEquipmentSafetyInterlock(equipmentList);
   const criticalViolationsCount = safetyViolations.filter(v => v.severity === 'CRITICAL').length;
 
+  const handleOpenAddModal = () => {
+    const latestDefaults = storageService.getEquipmentDurationDefaults();
+    setDurationDefaults(latestDefaults);
+    setDraftDefaults(latestDefaults);
+    const today = getTodayISODateVN();
+    setNewEqPurchaseDate(today);
+    setNewEqInstallDate(today);
+    setNewEqPermitDuration(latestDefaults.permitMonths);
+    setNewEqCalibDuration(latestDefaults.calibrationMonths);
+    setNewEqRadSurveyDuration(latestDefaults.radiationSurveyMonths);
+    setNewEqInterval(latestDefaults.maintenanceMonths);
+    setNewEqLastMaintDate(today);
+    setNewEqNextMaintDate(addMonthsToISODate(today, latestDefaults.maintenanceMonths));
+    setPermitExpiryManual(false);
+    setCalibExpiryManual(false);
+    setRadExpiryManual(false);
+    setMaintExpiryManual(false);
+    setShowAddModal(true);
+  };
+
+  const handleSaveDurationDefaults = (e: React.FormEvent) => {
+    e.preventDefault();
+    const saved = storageService.saveEquipmentDurationDefaults(draftDefaults);
+    setDurationDefaults(saved);
+    setDraftDefaults(saved);
+    // Cập nhật ngay vào form thêm mới nếu đang mở (và tính lại ngày hết hạn nếu có ngày bắt đầu)
+    setNewEqPermitDuration(saved.permitMonths);
+    if (newEqPermitIssueDate) {
+      setNewEqPermitExpiry(addMonthsToISODate(newEqPermitIssueDate, saved.permitMonths));
+      setPermitExpiryManual(false);
+    }
+    setNewEqCalibDuration(saved.calibrationMonths);
+    if (newEqCalibDate) {
+      setNewEqCalibExpiry(addMonthsToISODate(newEqCalibDate, saved.calibrationMonths));
+      setCalibExpiryManual(false);
+    }
+    setNewEqRadSurveyDuration(saved.radiationSurveyMonths);
+    if (newEqRadSurveyDate) {
+      setNewEqRadSurveyExpiry(addMonthsToISODate(newEqRadSurveyDate, saved.radiationSurveyMonths));
+      setRadExpiryManual(false);
+    }
+    setNewEqInterval(saved.maintenanceMonths);
+    if (newEqLastMaintDate) {
+      setNewEqNextMaintDate(addMonthsToISODate(newEqLastMaintDate, saved.maintenanceMonths));
+      setMaintExpiryManual(false);
+    }
+    setShowDurationSettingsModal(false);
+    setToastMessage('Đã lưu cài đặt thời hạn mặc định cho thiết bị mới!');
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   const handleCreateEquipment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEqName || !newEqCode) return;
 
-    const nextMaint = new Date(Date.now() + newEqInterval * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const baseMaintDate = newEqLastMaintDate || newEqInstallDate || getTodayISODateVN();
+    const computedNextMaint =
+      newEqNextMaintDate ||
+      addMonthsToISODate(baseMaintDate, newEqInterval) ||
+      getTodayISODateVN();
 
+    const computedPermitExpiry =
+      newEqPermitExpiry ||
+      (newEqPermitIssueDate ? addMonthsToISODate(newEqPermitIssueDate, newEqPermitDuration) : '');
+    const computedCalibExpiry =
+      newEqCalibExpiry ||
+      (newEqCalibDate ? addMonthsToISODate(newEqCalibDate, newEqCalibDuration) : '');
+    const computedRadSurveyExpiry =
+      newEqRadSurveyExpiry ||
+      (newEqRadSurveyDate ? addMonthsToISODate(newEqRadSurveyDate, newEqRadSurveyDuration) : '');
+
+    const newEqId = `EQ-${Date.now().toString().slice(-6)}`;
     const item: EquipmentItem = {
-      id: `EQ-${Date.now().toString().slice(-6)}`,
+      id: newEqId,
       code: newEqCode,
       name: newEqName,
       category: newEqCategory,
       model: newEqModel || 'Standard Series',
       manufacturer: newEqManufacturer || 'Hãng Y Tế Chính Hãng',
       originCountry: newEqOrigin,
-      yearOfManufacture: new Date().getFullYear(),
+      yearOfManufacture: newEqYear ? parseInt(newEqYear, 10) : new Date().getFullYear(),
       serialNumber: newEqSerial || `SN-${Math.floor(Math.random() * 900000 + 100000)}`,
       room: newEqRoom || 'Phòng Cận Lâm Sàng',
       assignedTechnician: newEqTech || storageService.getCurrentUser().name,
       managerInCharge: newEqManager || 'Ban Chủ Nhiệm Khoa',
       status: 'Hoạt động tốt',
       purchaseDate: newEqPurchaseDate,
-      installationDate: newEqInstallDate,
+      installationDate: newEqInstallDate || newEqPurchaseDate,
       purchasePrice: newEqPrice ? parseInt(newEqPrice) : undefined,
-      supplier: newEqSupplier,
+      supplier: newEqSupplier || undefined,
       maintenanceIntervalMonths: newEqInterval,
-      lastMaintenanceDate: newEqInstallDate,
-      nextMaintenanceDate: nextMaint,
-      radiationLicenseExpiry: newEqRadExpiry || undefined,
-      radiationLicenseNumber: newEqRadLicense || undefined,
-      calibrationExpiry: newEqCalibExpiry || undefined,
-      calibrationIssuedBy: newEqCalibAgency || undefined,
+      lastMaintenanceDate: baseMaintDate,
+      nextMaintenanceDate: computedNextMaint,
+      operatingPermitNumber: newEqPermitNumber.trim() || undefined,
+      operatingPermitIssueDate: newEqPermitIssueDate || undefined,
+      operatingPermitDurationMonths: newEqPermitDuration || undefined,
+      operatingPermitExpiry: computedPermitExpiry || undefined,
+      radiationLicenseNumber: newEqRadLicense.trim() || undefined,
+      radiationLicenseExpiry: computedRadSurveyExpiry || undefined,
+      radiationSurveyDate: newEqRadSurveyDate || undefined,
+      radiationSurveyIntervalMonths: newEqRadSurveyDuration || undefined,
+      radiationSurveyExpiry: computedRadSurveyExpiry || undefined,
+      calibrationNumber: newEqCalibNumber.trim() || undefined,
+      calibrationDate: newEqCalibDate || undefined,
+      calibrationIntervalMonths: newEqCalibDuration || undefined,
+      calibrationExpiry: computedCalibExpiry || undefined,
+      calibrationIssuedBy: newEqCalibAgency.trim() || undefined,
       specifications: newEqSpecs || 'Thiết bị y tế phục vụ công tác chẩn đoán và điều trị tại khoa Cận Lâm Sàng.',
+      notes: newEqNotes.trim() || undefined,
       maintenanceHistory: [
         {
           id: `MNT-${Date.now()}`,
-          equipmentId: `EQ-${Date.now().toString().slice(-6)}`,
+          equipmentId: newEqId,
           equipmentName: newEqName,
-          date: newEqInstallDate,
+          date: baseMaintDate,
           type: 'Hiệu chuẩn',
           performedBy: 'Hội đồng nghiệm thu kỹ thuật bàn giao',
           result: 'Đạt',
           notes: 'Nghiệm thu lắp đặt ban đầu, kiểm chuẩn an toàn điện & thông số kỹ thuật xuất xưởng.',
-          nextDueDate: nextMaint
+          nextDueDate: computedNextMaint
         }
       ],
       repairHistory: []
@@ -150,21 +266,41 @@ export const EquipmentManagementView: React.FC = () => {
     storageService.saveEquipment(item);
     setShowAddModal(false);
     // Reset form
+    const latestDefaults = storageService.getEquipmentDurationDefaults();
+    const today = getTodayISODateVN();
     setNewEqCode('');
     setNewEqName('');
     setNewEqModel('');
     setNewEqManufacturer('');
+    setNewEqYear(String(new Date().getFullYear()));
     setNewEqSerial('');
     setNewEqRoom('');
     setNewEqTech('');
     setNewEqManager('');
     setNewEqPrice('');
     setNewEqSupplier('');
+    setNewEqPermitNumber('');
+    setNewEqPermitIssueDate('');
+    setNewEqPermitDuration(latestDefaults.permitMonths);
+    setNewEqPermitExpiry('');
+    setPermitExpiryManual(false);
     setNewEqRadLicense('');
-    setNewEqRadExpiry('');
+    setNewEqRadSurveyDate('');
+    setNewEqRadSurveyDuration(latestDefaults.radiationSurveyMonths);
+    setNewEqRadSurveyExpiry('');
+    setRadExpiryManual(false);
+    setNewEqCalibNumber('');
+    setNewEqCalibDate('');
+    setNewEqCalibDuration(latestDefaults.calibrationMonths);
     setNewEqCalibExpiry('');
     setNewEqCalibAgency('');
+    setCalibExpiryManual(false);
+    setNewEqInterval(latestDefaults.maintenanceMonths);
+    setNewEqLastMaintDate(today);
+    setNewEqNextMaintDate(addMonthsToISODate(today, latestDefaults.maintenanceMonths));
+    setMaintExpiryManual(false);
     setNewEqSpecs('');
+    setNewEqNotes('');
     refreshData();
     // Auto open detail modal for the new machine
     setDetailEquipment(item);
@@ -253,10 +389,22 @@ export const EquipmentManagementView: React.FC = () => {
             Quản lý hồ sơ lý lịch máy, người phụ trách, thời hạn kiểm định/cấp phép ATBX và toàn bộ nhật ký bảo dưỡng - sửa chữa.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95"
+            type="button"
+            onClick={() => {
+              setDraftDefaults(storageService.getEquipmentDurationDefaults());
+              setShowDurationSettingsModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+            title="Cài đặt sẵn thời hạn mặc định cho Giấy phép, Kiểm định, Kiểm xạ, Bảo dưỡng trước khi nhập thiết bị"
+          >
+            <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Cài Đặt Thời Hạn</span>
+          </button>
+          <button
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Thêm Thiết Bị Mới
           </button>
@@ -533,7 +681,8 @@ export const EquipmentManagementView: React.FC = () => {
                     ) : (
                       filteredList.map(item => {
                         const isOverdueMaint = isDatePastVN(item.nextMaintenanceDate);
-                        const isOverdueRad = item.radiationLicenseExpiry ? isDatePastVN(item.radiationLicenseExpiry) : false;
+                        const radExpiryValue = item.radiationSurveyExpiry || item.radiationLicenseExpiry;
+                        const isOverdueRad = radExpiryValue ? isDatePastVN(radExpiryValue) : false;
                         const isOverduePermit = item.operatingPermitExpiry ? isDatePastVN(item.operatingPermitExpiry) : false;
                         const isOverdueCalib = item.calibrationExpiry ? isDatePastVN(item.calibrationExpiry) : false;
                         const oee = calculateEquipmentOEE(item);
@@ -655,15 +804,15 @@ export const EquipmentManagementView: React.FC = () => {
                                     <span>☢️ Hạn KX:</span>
                                   </div>
                                   <div className="text-xs font-bold">
-                                    {item.radiationLicenseExpiry ? (
+                                    {radExpiryValue ? (
                                       <span className={isOverdueRad ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}>
-                                        {formatDateVN(item.radiationLicenseExpiry)}
+                                        {formatDateVN(radExpiryValue)}
                                       </span>
                                     ) : (
                                       <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal italic">K.áp dụng</span>
                                     )}
                                   </div>
-                                  {item.radiationLicenseExpiry && isOverdueRad && (
+                                  {radExpiryValue && isOverdueRad && (
                                     <span className="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60">
                                       ⚠️ Quá hạn KX
                                     </span>
@@ -859,9 +1008,9 @@ export const EquipmentManagementView: React.FC = () => {
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="font-bold text-amber-700 dark:text-amber-400">☢️ Hạn Kiểm Xạ:</span>
-                            {item.radiationLicenseExpiry ? (
-                              <span className={`font-bold ${isDatePastVN(item.radiationLicenseExpiry) ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                {formatDateVN(item.radiationLicenseExpiry)} {isDatePastVN(item.radiationLicenseExpiry) && '⚠️ Quá hạn'}
+                            {(item.radiationSurveyExpiry || item.radiationLicenseExpiry) ? (
+                              <span className={`font-bold ${isDatePastVN(item.radiationSurveyExpiry || item.radiationLicenseExpiry) ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                {formatDateVN(item.radiationSurveyExpiry || item.radiationLicenseExpiry)} {isDatePastVN(item.radiationSurveyExpiry || item.radiationLicenseExpiry) && '⚠️ Quá hạn'}
                               </span>
                             ) : (
                               <span className="text-slate-400 dark:text-slate-500 italic">Không áp dụng</span>
@@ -1062,205 +1211,689 @@ export const EquipmentManagementView: React.FC = () => {
       {/* ADD EQUIPMENT MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
-                <Wrench className="w-5 h-5" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Thêm Thiết Bị Mới Vào Hệ Thống</h3>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-3xl w-full p-5 sm:p-6 space-y-5 shadow-xl border border-slate-200 dark:border-slate-800 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3.5">
+              <div className="flex items-center gap-2.5 text-indigo-600 dark:text-indigo-400">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/80 flex items-center justify-center">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Thêm Thiết Bị Mới Vào Hệ Thống</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Phân tách rõ thông tin lý lịch cố định và hồ sơ pháp lý, kiểm định, kiểm xạ, bảo dưỡng định kỳ</p>
+                </div>
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => setShowAddModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateEquipment} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Mã thiết bị (*):</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ví dụ: CT-128-02, XN-ROCHE-02"
-                    value={newEqCode}
-                    onChange={e => setNewEqCode(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+            <form onSubmit={handleCreateEquipment} className="space-y-5 text-xs">
+              {/* PHẦN 1: THÔNG TIN CỐ ĐỊNH — LÝ LỊCH & THÔNG TIN THIẾT BỊ, NGÀY GHI THÊM, NGƯỜI QUẢN LÝ */}
+              <div className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/70 bg-slate-50/80 dark:bg-slate-800/45 overflow-hidden">
+                <div className="bg-indigo-50/90 dark:bg-indigo-950/60 px-4 py-3 border-b border-indigo-200/80 dark:border-indigo-800/70 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[11px] font-black uppercase tracking-wider">Phần 1</span>
+                    <h4 className="text-sm font-extrabold text-indigo-950 dark:text-indigo-100 uppercase tracking-wide">
+                      Thông Tin Cố Định: Lý Lịch Thiết Bị, Ngày Ghi Thêm &amp; Người Quản Lý
+                    </h4>
+                  </div>
+                  <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">Hồ sơ gốc cố định</span>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bộ phận chuyên môn (*):</label>
-                  <select
-                    value={newEqCategory}
-                    onChange={e => setNewEqCategory(e.target.value as any)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh (CT / MRI / X-Quang)</option>
-                    <option value="Xét nghiệm">Xét nghiệm (Hóa sinh / Huyết học / Vi sinh)</option>
-                    <option value="Siêu âm">Siêu âm màu / Thăm dò chức năng</option>
-                    <option value="Nội soi">Nội soi tiêu hóa can thiệp</option>
-                    <option value="Khác">Khác</option>
-                  </select>
-                </div>
+                <div className="p-4 space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Mã thiết bị (*):</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ví dụ: CT-128-02, XN-ROCHE-02"
+                        value={newEqCode}
+                        onChange={e => setNewEqCode(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-bold"
+                      />
+                    </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tên thiết bị y tế (*):</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ví dụ: Máy Chụp Cắt Lớp Vi Tính Somatom Go.Top 128 Dải"
-                    value={newEqName}
-                    onChange={e => setNewEqName(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+                    <div className="sm:col-span-1 lg:col-span-2">
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tên thiết bị y tế (*):</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ví dụ: Máy Chụp Cắt Lớp Vi Tính Somatom Go.Top 128 Dải"
+                        value={newEqName}
+                        onChange={e => setNewEqName(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hãng sản xuất:</label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: Siemens Healthineers, Roche, GE"
-                    value={newEqManufacturer}
-                    onChange={e => setNewEqManufacturer(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bộ phận chuyên môn (*):</label>
+                      <select
+                        value={newEqCategory}
+                        onChange={e => setNewEqCategory(e.target.value as any)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh (CT / MRI / X-Quang)</option>
+                        <option value="Xét nghiệm">Xét nghiệm (Hóa sinh / Huyết học / Vi sinh)</option>
+                        <option value="Siêu âm">Siêu âm màu / Thăm dò chức năng</option>
+                        <option value="Nội soi">Nội soi tiêu hóa can thiệp</option>
+                        <option value="Khác">Khác</option>
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nước sản xuất / Xuất xứ:</label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: CHLB Đức, Nhật Bản, Thụy Sĩ, Mỹ"
-                    value={newEqOrigin}
-                    onChange={e => setNewEqOrigin(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hãng sản xuất:</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Siemens Healthineers, Roche, GE"
+                        value={newEqManufacturer}
+                        onChange={e => setNewEqManufacturer(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Model máy:</label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: Somatom Go.Top 128, Lumina 3.0T"
-                    value={newEqModel}
-                    onChange={e => setNewEqModel(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nước sản xuất / Xuất xứ:</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: CHLB Đức, Nhật Bản, Thụy Sĩ, Mỹ"
+                        value={newEqOrigin}
+                        onChange={e => setNewEqOrigin(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Số Serial máy (S/N):</label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: SN-CT128-2025-998"
-                    value={newEqSerial}
-                    onChange={e => setNewEqSerial(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none font-mono"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Model máy:</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Somatom Go.Top 128, Lumina 3.0T"
+                        value={newEqModel}
+                        onChange={e => setNewEqModel(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Vị trí phòng đặt máy:</label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: Phòng MSCT 128 Dải - Tầng 1"
-                    value={newEqRoom}
-                    onChange={e => setNewEqRoom(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Số Serial máy (S/N):</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: SN-CT128-2025-998"
+                        value={newEqSerial}
+                        onChange={e => setNewEqSerial(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bác sĩ / Người quản lý phụ trách:</label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: TS. BS. Phạm Đức Thành"
-                    value={newEqManager}
-                    onChange={e => setNewEqManager(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Năm sản xuất:</label>
+                      <input
+                        type="number"
+                        min={1990}
+                        max={2100}
+                        value={newEqYear}
+                        onChange={e => setNewEqYear(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">KTV vận hành chính:</label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: KTV. Vũ Văn Hải"
-                    value={newEqTech}
-                    onChange={e => setNewEqTech(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Vị trí phòng đặt máy:</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Phòng MSCT 128 Dải - Tầng 1"
+                        value={newEqRoom}
+                        onChange={e => setNewEqRoom(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày ghi thêm / Nhập thiết bị:</label>
-                  <input
-                    type="date"
-                    value={newEqPurchaseDate}
-                    onChange={e => setNewEqPurchaseDate(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bác sĩ / Người quản lý phụ trách:</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: TS. BS. Phạm Đức Thành"
+                        value={newEqManager}
+                        onChange={e => setNewEqManager(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Chu kỳ bảo dưỡng (tháng):</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={24}
-                    value={newEqInterval}
-                    onChange={e => setNewEqInterval(parseInt(e.target.value) || 3)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">KTV vận hành chính:</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: KTV. Vũ Văn Hải"
+                        value={newEqTech}
+                        onChange={e => setNewEqTech(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hạn Giấy phép An toàn Bức xạ (nếu có):</label>
-                  <input
-                    type="date"
-                    value={newEqRadExpiry}
-                    onChange={e => setNewEqRadExpiry(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
-                </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày ghi thêm / Nhập thiết bị:</label>
+                      <input
+                        type="date"
+                        value={newEqPurchaseDate}
+                        onChange={e => setNewEqPurchaseDate(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hạn kiểm định / Hiệu chuẩn ISO:</label>
-                  <input
-                    type="date"
-                    value={newEqCalibExpiry}
-                    onChange={e => setNewEqCalibExpiry(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                  />
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày nghiệm thu / Lắp đặt:</label>
+                      <input
+                        type="date"
+                        value={newEqInstallDate}
+                        onChange={e => setNewEqInstallDate(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Đơn vị cung ứng / Phân phối:</label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Siemens VN, Phương Đông Medical"
+                        value={newEqSupplier}
+                        onChange={e => setNewEqSupplier(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Lý lịch máy &amp; Mô tả thông số kỹ thuật:</label>
+                    <textarea
+                      rows={2}
+                      placeholder="Mô tả công nghệ đầu dò, số dãy lát cắt, công suất đo, quy chuẩn an toàn..."
+                      value={newEqSpecs}
+                      onChange={e => setNewEqSpecs(e.target.value)}
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Lý lịch máy & Mô tả thông số kỹ thuật:</label>
-                <textarea
-                  rows={2}
-                  placeholder="Mô tả công nghệ đầu dò, số dãy lát cắt, công suất đo, quy chuẩn an toàn..."
-                  value={newEqSpecs}
-                  onChange={e => setNewEqSpecs(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none"
-                />
+              {/* PHẦN 2: GIẤY PHÉP, KIỂM ĐỊNH, KIỂM XẠ, BẢO DƯỠNG THIẾT BỊ & GHI CHÚ */}
+              <div className="rounded-2xl border border-emerald-200/90 dark:border-emerald-800/70 bg-emerald-50/25 dark:bg-slate-800/45 overflow-hidden">
+                <div className="bg-emerald-50/95 dark:bg-emerald-950/60 px-4 py-3 border-b border-emerald-200/80 dark:border-emerald-800/70 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[11px] font-black uppercase tracking-wider">Phần 2</span>
+                    <h4 className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100 uppercase tracking-wide">
+                      Giấy Phép, Kiểm Định, Kiểm Xạ, Bảo Dưỡng &amp; Ghi Chú
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftDefaults(durationDefaults);
+                      setShowDurationSettingsModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold hover:bg-emerald-100/60 dark:hover:bg-emerald-950/50 transition-all cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>Cài đặt mặc định thời hạn ({durationDefaults.permitMonths}/{durationDefaults.calibrationMonths}/{durationDefaults.radiationSurveyMonths}/{durationDefaults.maintenanceMonths}T)</span>
+                  </button>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {/* 2.1 GIẤY PHÉP */}
+                  <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                        1. Giấy Phép
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Nhập Ngày cấp để tự tính Ngày hết hạn (hoặc nhập thủ công)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Số giấy phép:</label>
+                        <input
+                          type="text"
+                          placeholder="VD: GPHĐ-BYT/2026"
+                          value={newEqPermitNumber}
+                          onChange={e => setNewEqPermitNumber(e.target.value)}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày cấp:</label>
+                        <input
+                          type="date"
+                          value={newEqPermitIssueDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setNewEqPermitIssueDate(val);
+                            if (val && newEqPermitDuration > 0) {
+                              setNewEqPermitExpiry(addMonthsToISODate(val, newEqPermitDuration));
+                              setPermitExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={240}
+                          value={newEqPermitDuration}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setNewEqPermitDuration(months);
+                            if (newEqPermitIssueDate) {
+                              setNewEqPermitExpiry(addMonthsToISODate(newEqPermitIssueDate, months));
+                              setPermitExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          <span>Ngày hết hạn:</span>
+                          {newEqPermitExpiry && (
+                            <span className={`text-[10px] font-bold ${permitExpiryManual ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                              {permitExpiryManual ? 'Thủ công' : 'Tự động'}
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="date"
+                          value={newEqPermitExpiry}
+                          onChange={e => {
+                            setNewEqPermitExpiry(e.target.value);
+                            setPermitExpiryManual(true);
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2.2 KIỂM ĐỊNH */}
+                  <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                        2. Kiểm Định
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Số chứng chỉ KĐ (tùy chọn)"
+                          value={newEqCalibNumber}
+                          onChange={e => setNewEqCalibNumber(e.target.value)}
+                          className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-sky-500 w-40"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Đơn vị KĐ (Quatest...)"
+                          value={newEqCalibAgency}
+                          onChange={e => setNewEqCalibAgency(e.target.value)}
+                          className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-sky-500 w-40"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày kiểm định:</label>
+                        <input
+                          type="date"
+                          value={newEqCalibDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setNewEqCalibDate(val);
+                            if (val && newEqCalibDuration > 0) {
+                              setNewEqCalibExpiry(addMonthsToISODate(val, newEqCalibDuration));
+                              setCalibExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={newEqCalibDuration}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setNewEqCalibDuration(months);
+                            if (newEqCalibDate) {
+                              setNewEqCalibExpiry(addMonthsToISODate(newEqCalibDate, months));
+                              setCalibExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          <span>Ngày hết hạn:</span>
+                          {newEqCalibExpiry && (
+                            <span className={`text-[10px] font-bold ${calibExpiryManual ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                              {calibExpiryManual ? 'Thủ công' : 'Tự động'}
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="date"
+                          value={newEqCalibExpiry}
+                          onChange={e => {
+                            setNewEqCalibExpiry(e.target.value);
+                            setCalibExpiryManual(true);
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 font-semibold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2.3 KIỂM XẠ */}
+                  <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        3. Kiểm Xạ
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="Số GP ATBX (nếu có: GP-ATBX-...)"
+                        value={newEqRadLicense}
+                        onChange={e => setNewEqRadLicense(e.target.value)}
+                        className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-amber-500 w-56"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày kiểm xạ:</label>
+                        <input
+                          type="date"
+                          value={newEqRadSurveyDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setNewEqRadSurveyDate(val);
+                            if (val && newEqRadSurveyDuration > 0) {
+                              setNewEqRadSurveyExpiry(addMonthsToISODate(val, newEqRadSurveyDuration));
+                              setRadExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={newEqRadSurveyDuration}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setNewEqRadSurveyDuration(months);
+                            if (newEqRadSurveyDate) {
+                              setNewEqRadSurveyExpiry(addMonthsToISODate(newEqRadSurveyDate, months));
+                              setRadExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          <span>Ngày hết hạn:</span>
+                          {newEqRadSurveyExpiry && (
+                            <span className={`text-[10px] font-bold ${radExpiryManual ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                              {radExpiryManual ? 'Thủ công' : 'Tự động'}
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="date"
+                          value={newEqRadSurveyExpiry}
+                          onChange={e => {
+                            setNewEqRadSurveyExpiry(e.target.value);
+                            setRadExpiryManual(true);
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2.4 BẢO DƯỠNG */}
+                  <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wide flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        4. Bảo Dưỡng
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Tự động tính hạn kế tiếp từ Ngày bảo dưỡng + Thời hạn
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày bảo dưỡng:</label>
+                        <input
+                          type="date"
+                          value={newEqLastMaintDate}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setNewEqLastMaintDate(val);
+                            if (val && newEqInterval > 0) {
+                              setNewEqNextMaintDate(addMonthsToISODate(val, newEqInterval));
+                              setMaintExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Thời hạn (tháng):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={60}
+                          value={newEqInterval}
+                          onChange={e => {
+                            const months = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setNewEqInterval(months);
+                            if (newEqLastMaintDate) {
+                              setNewEqNextMaintDate(addMonthsToISODate(newEqLastMaintDate, months));
+                              setMaintExpiryManual(false);
+                            }
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          <span>Ngày hết hạn:</span>
+                          {newEqNextMaintDate && (
+                            <span className={`text-[10px] font-bold ${maintExpiryManual ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                              {maintExpiryManual ? 'Thủ công' : 'Tự động'}
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          type="date"
+                          value={newEqNextMaintDate}
+                          onChange={e => {
+                            setNewEqNextMaintDate(e.target.value);
+                            setMaintExpiryManual(true);
+                          }}
+                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2.5 GHI CHÚ */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">5. Ghi chú (Giấy phép, Kiểm định, Kiểm xạ, Bảo dưỡng...):</label>
+                    <textarea
+                      rows={2}
+                      placeholder="Ghi chú thêm về tiến độ gia hạn giấy phép, lưu ý kiểm xạ phòng máy, lịch bảo dưỡng hoặc yêu cầu đặc biệt..."
+                      value={newEqNotes}
+                      onChange={e => setNewEqNotes(e.target.value)}
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-sm"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-sm cursor-pointer"
                 >
                   Lưu Thiết Bị Mới
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CÀI ĐẶT THỜI HẠN MẶC ĐỊNH TRƯỚC KHI NHẬP THIẾT BỊ */}
+      {showDurationSettingsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Cài Đặt Thời Hạn Mặc Định</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Tự động áp dụng khi nhập thiết bị mới</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDurationSettingsModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDurationDefaults} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 gap-3">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">1. Thời hạn Giấy phép</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Số tháng hiệu lực mặc định (VD: 60T = 5 năm)</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      min={1}
+                      max={240}
+                      required
+                      value={draftDefaults.permitMonths}
+                      onChange={e => setDraftDefaults({ ...draftDefaults, permitMonths: parseInt(e.target.value, 10) || 1 })}
+                      className="w-20 p-2 text-center font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">tháng</span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">2. Thời hạn Kiểm định</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Chu kỳ hiệu chuẩn / kiểm định (VD: 12T)</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      required
+                      value={draftDefaults.calibrationMonths}
+                      onChange={e => setDraftDefaults({ ...draftDefaults, calibrationMonths: parseInt(e.target.value, 10) || 1 })}
+                      className="w-20 p-2 text-center font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">tháng</span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">3. Thời hạn Kiểm xạ</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Chu kỳ đo kiểm xạ phòng máy (VD: 12T)</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      required
+                      value={draftDefaults.radiationSurveyMonths}
+                      onChange={e => setDraftDefaults({ ...draftDefaults, radiationSurveyMonths: parseInt(e.target.value, 10) || 1 })}
+                      className="w-20 p-2 text-center font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">tháng</span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">4. Thời hạn Bảo dưỡng</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Chu kỳ bảo dưỡng định kỳ (VD: 3T hoặc 6T)</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      required
+                      value={draftDefaults.maintenanceMonths}
+                      onChange={e => setDraftDefaults({ ...draftDefaults, maintenanceMonths: parseInt(e.target.value, 10) || 1 })}
+                      className="w-20 p-2 text-center font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">tháng</span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-indigo-50/70 dark:bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-200/70 dark:border-indigo-800/60">
+                💡 Khi nhập thiết bị, chỉ cần chọn ngày bắt đầu, hệ thống sẽ tự động cộng số tháng thời hạn để ra <strong>Ngày hết hạn</strong>. Bạn vẫn có thể sửa lại Thời hạn hoặc Ngày hết hạn bất cứ lúc nào.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowDurationSettingsModal(false)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  Lưu Cài Đặt Mặc Định
                 </button>
               </div>
             </form>
