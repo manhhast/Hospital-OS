@@ -251,7 +251,7 @@ export const StaffManagementView: React.FC = () => {
   const [newStaffForm, setNewStaffForm] = useState({
     userId: '',
     fullName: '',
-    title: 'Kỹ thuật viên' as CLSTitle,
+    title: 'Nhân viên' as CLSTitle,
     role: 'Staff' as UserRole,
     departmentSection: '',
     room: '',
@@ -618,7 +618,7 @@ export const StaffManagementView: React.FC = () => {
     setNewStaffForm({
       userId: `NV-${Math.floor(1000 + Math.random() * 9000)}`,
       fullName: '',
-      title: 'Kỹ thuật viên' as CLSTitle,
+      title: 'Nhân viên' as CLSTitle,
       role: 'Staff' as UserRole,
       departmentSection: allDepartments[0] || 'Chẩn đoán hình ảnh',
       room: allRoomNames[0] || (rooms[0]?.name ?? 'Phòng Chụp X-Quang Kỹ Thuật Số'),
@@ -806,7 +806,7 @@ export const StaffManagementView: React.FC = () => {
 
         const parsed = rawData.map((row, index) => {
           const fullName = String(normalizeKey(row, ['họvàtên', 'hoten', 'họtên', 'fullname', 'tên', 'họ']) || '').trim();
-          const rawTitle = String(normalizeKey(row, ['chứcdanh', 'chucdanh', 'vịtrí', 'vitri', 'title']) || 'Kỹ thuật viên').trim();
+          const rawTitle = String(normalizeKey(row, ['chứcdanh', 'chucdanh', 'vịtrí', 'vitri', 'title']) || 'Nhân viên').trim();
           const rawRole = String(normalizeKey(row, ['vaitrò', 'vaitro', 'role']) || (rawTitle.toLowerCase().includes('bác sĩ') ? 'Doctor' : rawTitle.toLowerCase().includes('trưởng khoa') ? 'Manager' : 'Staff')).trim();
           const dept = String(normalizeKey(row, ['bộphận', 'bophan', 'khoa', 'phânkhoa', 'department']) || (rooms[0]?.departmentSection || 'Chẩn đoán hình ảnh')).trim();
           const room = String(normalizeKey(row, ['phòng', 'phong', 'room']) || (rooms[0]?.name || 'Phòng xét nghiệm')).trim();
@@ -978,7 +978,7 @@ export const StaffManagementView: React.FC = () => {
           name: r.fullName,
           email: r.email || `${r.userId.toLowerCase()}@hospital.vn`,
           role: (r.role as UserRole) || 'Staff',
-          title: (r.title as CLSTitle) || 'Kỹ thuật viên',
+          title: (r.title as CLSTitle) || 'Nhân viên',
           department: r.departmentSection,
           room: r.room,
           avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150',
@@ -1059,7 +1059,7 @@ export const StaffManagementView: React.FC = () => {
         name: newProfile.fullName,
         email: newProfile.email || `${finalUserId.toLowerCase()}@hospital.vn`,
         role: (newProfile.role as UserRole) || 'Staff',
-        title: (newProfile.title as CLSTitle) || 'Kỹ thuật viên',
+        title: (newProfile.title as CLSTitle) || 'Nhân viên',
         department: newProfile.departmentSection,
         room: newProfile.room,
         avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150',
@@ -1152,7 +1152,7 @@ export const StaffManagementView: React.FC = () => {
     setDetailModalTab(defaultTab);
     const validRole = (['Admin', 'Manager', 'Doctor', 'Staff'].includes(staff.role) ? staff.role : 'Staff') as UserRole;
     setAssignedRole(validRole);
-    setAssignedTitle(staff.title || '');
+    setAssignedTitle(staff.title?.trim() ? staff.title : 'Nhân viên');
     setAssignedDept(staff.departmentSection || '');
     setAssignedRoom(staff.room || '');
     setPermissionSuccessMsg('');
@@ -1165,6 +1165,7 @@ export const StaffManagementView: React.FC = () => {
     setSelectedDetailStaff(null);
     setEditingStaff({
       ...staffToEdit,
+      title: staffToEdit.title?.trim() ? staffToEdit.title : 'Nhân viên',
       experienceYears: staffToEdit.joinDate ? calculateYearsOfService(staffToEdit.joinDate, staffToEdit.experienceYears) : staffToEdit.experienceYears
     });
   };
@@ -1203,7 +1204,7 @@ export const StaffManagementView: React.FC = () => {
         name: updatedStaff.fullName,
         email: updatedStaff.email || `${selectedDetailStaff.userId.toLowerCase()}@hospital.vn`,
         role: assignedRole,
-        title: (assignedTitle as CLSTitle) || 'Kỹ thuật viên',
+        title: (assignedTitle as CLSTitle) || 'Nhân viên',
         department: assignedDept || updatedStaff.departmentSection,
         room: assignedRoom || updatedStaff.room,
         phone: updatedStaff.phone,
@@ -1520,7 +1521,7 @@ export const StaffManagementView: React.FC = () => {
                       {/* Top Row: Chức danh badge (trái) & Action buttons + Số năm công tác gọn (phải) */}
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-extrabold px-2 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 rounded uppercase whitespace-nowrap shrink-0 border border-indigo-100 dark:border-indigo-900/50">
-                          {staff.title}
+                          {staff.title?.trim() || 'Nhân viên'}
                         </span>
 
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -1530,6 +1531,7 @@ export const StaffManagementView: React.FC = () => {
                               <button
                                 onClick={() => setEditingStaff({
                                   ...staff,
+                                  title: staff.title?.trim() ? staff.title : 'Nhân viên',
                                   experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
                                 })}
                                 title="Chỉnh sửa thông tin cán bộ (Dành cho Admin)"
@@ -1806,6 +1808,7 @@ export const StaffManagementView: React.FC = () => {
                                       <button
                                         onClick={() => setEditingStaff({
                                           ...staff,
+                                          title: staff.title?.trim() ? staff.title : 'Nhân viên',
                                           experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
                                         })}
                                         className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 shrink-0"
@@ -2297,16 +2300,17 @@ export const StaffManagementView: React.FC = () => {
                     Chức Danh Chuyên Môn <span className="text-rose-500 ml-0.5">*</span>:
                   </label>
                   <select
-                    value={editingStaff.title}
+                    value={editingStaff.title?.trim() || 'Nhân viên'}
                     onChange={e => setEditingStaff({ ...editingStaff, title: e.target.value })}
                     className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
                   >
+                    {editingStaff.title?.trim() && !['Trưởng khoa', 'Phó khoa', 'Điều dưỡng trưởng', 'Nhân viên'].includes(editingStaff.title.trim()) && (
+                      <option value={editingStaff.title.trim()}>{editingStaff.title.trim()}</option>
+                    )}
                     <option value="Trưởng khoa">Trưởng khoa</option>
                     <option value="Phó khoa">Phó khoa</option>
                     <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
-                    <option value="Kỹ thuật viên">Kỹ thuật viên</option>
-                    <option value="Bác sĩ">Bác sĩ</option>
-                    <option value="Nhân viên hành chính">Nhân viên hành chính</option>
+                    <option value="Nhân viên">Nhân viên</option>
                   </select>
                 </div>
               </div>
@@ -4164,16 +4168,14 @@ export const StaffManagementView: React.FC = () => {
                     Chức Danh <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={newStaffForm.title}
+                    value={newStaffForm.title?.trim() || 'Nhân viên'}
                     onChange={e => setNewStaffForm({ ...newStaffForm, title: e.target.value as CLSTitle })}
                     className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
                   >
-                    <option value="Bác sĩ">Bác sĩ</option>
-                    <option value="Kỹ thuật viên">Kỹ thuật viên</option>
-                    <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
                     <option value="Trưởng khoa">Trưởng khoa</option>
                     <option value="Phó khoa">Phó khoa</option>
-                    <option value="Nhân viên hành chính">Nhân viên hành chính</option>
+                    <option value="Điều dưỡng trưởng">Điều dưỡng trưởng</option>
+                    <option value="Nhân viên">Nhân viên</option>
                   </select>
                 </div>
 

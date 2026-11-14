@@ -1213,7 +1213,7 @@ class HospitalStorageService {
               name: s.fullName,
               email: s.email || `${s.userId.toLowerCase()}@hospital.vn`,
               role: (s.role as UserRole) || 'Staff',
-              title: (s.title as CLSTitle) || 'Kỹ thuật viên',
+              title: (s.title as CLSTitle) || 'Nhân viên',
               department: s.departmentSection || 'Khoa Cận Lâm Sàng',
               phone: s.phone,
               avatar: s.avatar || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
