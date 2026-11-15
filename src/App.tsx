@@ -284,6 +284,7 @@ export default function App() {
                 setActiveModule('documents');
                 setIsUploadDocOpen(true);
               }}
+              onShowToast={showToast}
             />
           )}
 

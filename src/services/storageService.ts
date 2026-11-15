@@ -70,6 +70,30 @@ const DEFAULT_DEPARTMENTS: DepartmentUnit[] = [
 class HospitalStorageService {
   private currentUser: User = initialUsers[0]; // Default to Admin
   private listeners: Array<() => void> = [];
+  private idSeq = 0;
+
+  private nextUniqueId(prefix: string): string {
+    this.idSeq = (this.idSeq + 1) % 1000000;
+    return `${prefix}-${Date.now().toString().slice(-6)}-${this.idSeq}-${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  private ensureUniqueIds<T extends { id: string }>(items: T[]): T[] {
+    const seen = new Set<string>();
+    return items.map((item, idx) => {
+      const baseId = item.id || `ITEM-${idx}`;
+      if (!seen.has(baseId)) {
+        seen.add(baseId);
+        return item;
+      }
+      let unique = `${baseId}-${idx}`;
+      let suffix = 1;
+      while (seen.has(unique)) {
+        unique = `${baseId}-${idx}-${suffix++}`;
+      }
+      seen.add(unique);
+      return { ...item, id: unique };
+    });
+  }
 
   constructor() {
     this.initDefaultData();
@@ -565,7 +589,7 @@ class HospitalStorageService {
   }): ChatChannelMessage {
     const msgs = this.getChatMessages();
     const newMsg: ChatChannelMessage = {
-      id: `MSG-${Date.now().toString().slice(-6)}`,
+      id: this.nextUniqueId('MSG'),
       channelId: params.channelId,
       channelName: params.channelName,
       dmUserId: params.dmUserId,
@@ -698,7 +722,7 @@ class HospitalStorageService {
     const msg = msgs[idx];
     const replies = msg.replies || [];
     replies.push({
-      id: `RPL-${Date.now().toString().slice(-6)}`,
+      id: this.nextUniqueId('RPL'),
       senderId: this.currentUser.id,
       senderName: this.currentUser.name,
       senderRole: this.currentUser.title || this.currentUser.role,
@@ -801,7 +825,7 @@ class HospitalStorageService {
     const sanitizedOld = oldData ? this.sanitizeForAudit(oldData) : undefined;
     const sanitizedNew = newData ? this.sanitizeForAudit(newData) : undefined;
     const newLog: AuditLogItem = {
-      id: `LOG-${Date.now().toString().slice(-6)}`,
+      id: this.nextUniqueId('LOG'),
       userEmail: this.currentUser.email,
       userName: this.currentUser.name,
       userRole: this.currentUser.role,
@@ -821,9 +845,10 @@ class HospitalStorageService {
   public getAuditLogs(): AuditLogItem[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
-      return raw ? JSON.parse(raw) : [];
+      const parsed: AuditLogItem[] = raw ? JSON.parse(raw) : [];
+      return this.ensureUniqueIds(Array.isArray(parsed) ? parsed : []);
     } catch (e) {
-      return initialAuditLogs;
+      return this.ensureUniqueIds(initialAuditLogs);
     }
   }
 
@@ -1069,9 +1094,10 @@ class HospitalStorageService {
   public getNotifications(): NotificationLog[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      return raw ? JSON.parse(raw) : [];
+      const parsed: NotificationLog[] = raw ? JSON.parse(raw) : [];
+      return this.ensureUniqueIds(Array.isArray(parsed) ? parsed : []);
     } catch (e) {
-      return initialNotifications;
+      return this.ensureUniqueIds(initialNotifications);
     }
   }
 
@@ -1079,7 +1105,7 @@ class HospitalStorageService {
     const logs = this.getNotifications();
     const newNotif: NotificationLog = {
       ...notif,
-      id: `NOTIF-${Date.now().toString().slice(-6)}`,
+      id: this.nextUniqueId('NOTIF'),
       sentAt: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16)
     };
     logs.unshift(newNotif);

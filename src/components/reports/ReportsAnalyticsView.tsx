@@ -3,7 +3,7 @@ import {
   BarChart3, TrendingUp, PieChart, Calendar, FileSpreadsheet, Download, 
   CheckCircle2, Wrench, Activity, Users, FileText, ArrowUpRight, ArrowDownRight, Search,
   RefreshCw, Link, Edit3, Table, Layers, Sparkles, Filter, Check, Save, Upload, Plus, ChevronLeft, ChevronRight,
-  Pin, Star, Bookmark, AlertTriangle, AlertCircle, Eye, EyeOff, SlidersHorizontal
+  Pin, Star, Bookmark, AlertTriangle, AlertCircle, Eye, EyeOff, SlidersHorizontal, Copy, Send, Printer, X
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -18,6 +18,7 @@ import {
   getPinnedServiceNames, savePinnedServiceNames, calculateClinicalTriage, 
   ClinicalTriageResult, DEFAULT_PINNED_SERVICE_NAMES 
 } from '../../utils/clinicalAnalytics';
+import { scanEquipmentExpirations, scanTaskReminders } from '../../utils/operationalAlerts';
 
 // Data model for daily case report row matching the Google Sheet screenshot
 export interface CaseReportItem {
@@ -336,6 +337,9 @@ export const ReportsAnalyticsView: React.FC = () => {
   const [selectedBenchmarkingItem, setSelectedBenchmarkingItem] = useState<ClinicalTriageResult | null>(null);
   const [showPinnedOnly, setShowPinnedOnly] = useState<boolean>(false);
   const [dailyTriageFilter, setDailyTriageFilter] = useState<'ALL' | 'PINNED' | 'SURGE' | 'DROP'>('ALL');
+  const [isDailyEntryOpen, setIsDailyEntryOpen] = useState<boolean>(false);
+  const [dailyDraftValues, setDailyDraftValues] = useState<Record<string, { bh: string; nd: string }>>({});
+  const [copiedHandover, setCopiedHandover] = useState<boolean>(false);
 
   // Toggle Pin for a service
   const handleTogglePinService = (serviceName: string) => {
@@ -1194,6 +1198,114 @@ export const ReportsAnalyticsView: React.FC = () => {
     const surgeModCount = Object.values(triageMap).filter(t => t.severity === 'SURGE_MODERATE').length;
     const dropCount = Object.values(triageMap).filter(t => t.severity === 'DROP_CRITICAL' || t.severity === 'DROP_MODERATE').length;
 
+    // Previous active day baseline (so với hôm qua)
+    let prevActiveDayNum: number | null = null;
+    let prevDayTotal = 0;
+    for (let d = selectedReportDay - 1; d >= 1; d--) {
+      let daySum = 0;
+      let isPrevLT = false;
+      for (const it of monthItems) {
+        const entry = it.dailyData?.[d];
+        if (entry?.bh === 'LT' || entry?.nd === 'LT') isPrevLT = true;
+        const bh = typeof entry?.bh === 'number' ? entry.bh : (parseInt(String(entry?.bh || '').replace(/[^0-9]/g, ''), 10) || 0);
+        const nd = typeof entry?.nd === 'number' ? entry.nd : (parseInt(String(entry?.nd || '').replace(/[^0-9]/g, ''), 10) || 0);
+        daySum += bh + nd;
+      }
+      if (!isPrevLT && daySum > 0) {
+        prevActiveDayNum = d;
+        prevDayTotal = daySum;
+        break;
+      }
+    }
+    const diffVsPrevDay = prevActiveDayNum !== null ? totalDayAll - prevDayTotal : 0;
+    const diffVsPrevPct = prevActiveDayNum !== null && prevDayTotal > 0 ? (diffVsPrevDay / prevDayTotal) * 100 : 0;
+
+    // Department share breakdown for all items in the day (independent of triage filter)
+    const allCatDaily = categories
+      .filter((c) => c !== 'Tất cả')
+      .map((cat) => {
+        const items = itemStats.filter((i) => i.category === cat);
+        const bh = items.reduce((s, x) => s + x.bhVal, 0);
+        const nd = items.reduce((s, x) => s + x.ndVal, 0);
+        return { category: cat, bh, nd, total: bh + nd };
+      })
+      .filter((g) => g.total > 0);
+
+    const buildHandoverBriefingText = () => {
+      const mNum = getMonthNumber(selectedReportMonth);
+      const eqSummary = scanEquipmentExpirations(storageService.getEquipment(), 30);
+      const tskSummary = scanTaskReminders(storageService.getTasks(), 3);
+      const bhPct = totalDayAll > 0 ? ((totalDayBH / totalDayAll) * 100).toFixed(1) : '0.0';
+      const ndPct = totalDayAll > 0 ? ((totalDayND / totalDayAll) * 100).toFixed(1) : '0.0';
+      const anomalyLines = Object.values(triageMap)
+        .filter((t) => t.severity === 'SURGE_CRITICAL' || t.severity === 'DROP_CRITICAL')
+        .slice(0, 5)
+        .map((t) => `  • ${t.itemName}: ${t.todayCount} ca (TB ${t.mean.toFixed(1)}, Z=${t.zScore > 0 ? `+${t.zScore}` : t.zScore})`);
+
+      return [
+        `📊 BÁO CÁO SỐ LIỆU GIAO BAN NGÀY ${String(selectedReportDay).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/2026 — KHOA CẬN LÂM SÀNG`,
+        `────────────────────────────────────────`,
+        `• Tổng số ca thực hiện: ${totalDayAll.toLocaleString('vi-VN')} ca${isHolidayLT ? ' (Lễ Tết - LT)' : ''}`,
+        `  - Bảo hiểm (BHYT): ${totalDayBH.toLocaleString('vi-VN')} ca (${bhPct}%)`,
+        `  - Nhân dân (Viện phí): ${totalDayND.toLocaleString('vi-VN')} ca (${ndPct}%)`,
+        prevActiveDayNum !== null
+          ? `  - So với ngày ${prevActiveDayNum}/${mNum}: ${diffVsPrevDay >= 0 ? '+' : ''}${diffVsPrevDay} ca (${diffVsPrevPct >= 0 ? '+' : ''}${diffVsPrevPct.toFixed(1)}%)`
+          : `  - So với TB tháng (${overallMonthAvgPerDay.toFixed(1)} ca/ngày): ${totalDiffVsAvg >= 0 ? '+' : ''}${totalDiffVsAvg.toFixed(1)} ca`,
+        ``,
+        `🏥 CHI TIẾT THEO BỘ PHẬN:`,
+        ...allCatDaily.map((c) => {
+          const pct = totalDayAll > 0 ? ((c.total / totalDayAll) * 100).toFixed(1) : '0.0';
+          return `  • ${c.category}: ${c.total.toLocaleString('vi-VN')} ca (${pct}%) [BH: ${c.bh} | ND: ${c.nd}]`;
+        }),
+        ...(anomalyLines.length > 0 ? [``, `🚨 BIẾN ĐỘNG CHUYÊN MÔN ĐÁNG CHÚ Ý:`, ...anomalyLines] : []),
+        ``,
+        `🛡️ CẢNH BÁO VẬN HÀNH & NHẮC VIỆC:`,
+        `  • Thời hạn thiết bị (≤30 ngày/quá hạn): ${eqSummary.overdueCount} quá hạn, ${eqSummary.critical7Count} khẩn cấp ≤7 ngày, ${eqSummary.warning30Count} sắp hạn.`,
+        `  • Công việc tồn đọng: ${tskSummary.overdueCount} quá hạn, ${tskSummary.dueTodayCount} hạn hôm nay, ${tskSummary.dueSoon3DaysCount} sắp hạn ≤3 ngày.`,
+        `────────────────────────────────────────`,
+        `Người lập báo cáo: ${storageService.getCurrentUser().name}`
+      ].join('\n');
+    };
+
+    const handleCopyHandover = () => {
+      const text = buildHandoverBriefingText();
+      navigator.clipboard.writeText(text);
+      setCopiedHandover(true);
+      setSyncToast('✅ Đã sao chép Bản tin Giao ban Số liệu Hằng ngày vào clipboard!');
+      setTimeout(() => {
+        setCopiedHandover(false);
+        setSyncToast(null);
+      }, 3000);
+    };
+
+    const handleDispatchHandoverNotification = () => {
+      const text = buildHandoverBriefingText();
+      const mNum = getMonthNumber(selectedReportMonth);
+      storageService.sendNotification({
+        recipient: 'Ban Chủ Nhiệm Khoa CLS',
+        targetAddress: storageService.getSettings().defaultTelegramChatId || '@cls_giaoban',
+        title: `Báo cáo số liệu ngày ${selectedReportDay}/${mNum}/2026 (${totalDayAll.toLocaleString('vi-VN')} ca)`,
+        content: text,
+        channel: 'Telegram',
+        status: 'Đã gửi'
+      });
+      setSyncToast(`✅ Đã phát Bản tin Giao ban Ngày ${selectedReportDay}/${mNum} tới Ban Chủ Nhiệm Khoa!`);
+      setTimeout(() => setSyncToast(null), 3500);
+    };
+
+    const handleOpenDailyEntryModal = () => {
+      const draft: Record<string, { bh: string; nd: string }> = {};
+      monthItems.forEach((item) => {
+        const d = item.dailyData?.[selectedReportDay] || { bh: 0, nd: 0 };
+        draft[item.id] = {
+          bh: d.bh === 'LT' ? 'LT' : String(d.bh ?? 0),
+          nd: d.nd === 'LT' ? 'LT' : String(d.nd ?? 0)
+        };
+      });
+      setDailyDraftValues(draft);
+      setIsDailyEntryOpen(true);
+    };
+
     return (
       <div className="space-y-6">
         {/* Controls Header */}
@@ -1203,23 +1315,51 @@ export const ReportsAnalyticsView: React.FC = () => {
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                BÁO CÁO CÔNG TÁC NGÀY
-                <span className="px-2.5 py-0.5 text-xs font-black bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                <span>BÁO CÁO SỐ LIỆU THỐNG KÊ HẰNG NGÀY</span>
+                <span className="px-2.5 py-0.5 text-xs font-black bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 tabular-nums">
                   Ngày {selectedReportDay} - {selectedReportMonth}
                 </span>
               </h3>
-              <p className="text-xs text-slate-500">Trích xuất chính xác theo số liệu ngày từ dữ liệu công tác các tháng • Đối soát cảnh báo lâm sàng tự động</p>
+              <p className="text-xs text-slate-500">Tổng hợp BHYT/Nhân dân &middot; Đối chiếu ngày liền trước &amp; TB 30 ngày &middot; Xuất bản tin giao ban 1 chạm</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {monthItems.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleOpenDailyEntryModal}
+                  className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Nhập / Sửa số liệu ngày {selectedReportDay}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyHandover}
+                  className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  {copiedHandover ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedHandover ? 'Đã sao chép' : 'Sao chép Giao ban'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDispatchHandoverNotification}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Gửi Giao Ban</span>
+                </button>
+              </>
+            )}
             <button
               onClick={() => setIsPinManagerOpen(true)}
               className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <Pin className="w-3.5 h-3.5 fill-current text-amber-500" />
-              <span>Quản Lý Chỉ Số Ghim ({pinnedServiceNames.length})</span>
+              <span>Ghim ({pinnedServiceNames.length})</span>
             </button>
           </div>
         </div>
@@ -1263,16 +1403,20 @@ export const ReportsAnalyticsView: React.FC = () => {
         />
 
         {/* Daily Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
           <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Ca Trong Ngày</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-blue-900 dark:text-blue-200">{totalDayAll.toLocaleString()} ca</h4>
-              <span className={`text-xs font-extrabold px-2 py-0.5 rounded-full ${isHolidayLT ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-800'}`}>
+              <span className={`text-xs font-extrabold px-2 py-0.5 rounded-full ${isHolidayLT ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'}`}>
                 {isHolidayLT ? 'Lễ Tết (LT)' : `Ngày ${selectedReportDay}`}
               </span>
             </div>
-            <p className="text-xs text-slate-500">Toàn bộ lượt thực hiện trong ngày</p>
+            <p className="text-xs text-slate-500">
+              {prevActiveDayNum !== null
+                ? `So ngày ${prevActiveDayNum}: ${diffVsPrevDay >= 0 ? '+' : ''}${diffVsPrevDay} ca (${diffVsPrevPct >= 0 ? '+' : ''}${diffVsPrevPct.toFixed(1)}%)`
+                : 'Toàn bộ lượt thực hiện trong ngày'}
+            </p>
           </div>
 
           <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
@@ -1310,6 +1454,39 @@ export const ReportsAnalyticsView: React.FC = () => {
             <p className="text-xs text-slate-500">TB tháng: {overallMonthAvgPerDay.toFixed(1)} ca/ngày</p>
           </div>
         </div>
+
+        {/* Cơ Cấu Theo Bộ Phận Trong Ngày (Single-Elevation Executive Summary Strip) */}
+        {allCatDaily.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                Cơ Cấu Thực Hiện Theo Bộ Phận &mdash; Ngày {selectedReportDay}/{getMonthNumber(selectedReportMonth)}
+              </h4>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                {allCatDaily.length} bộ phận có phát sinh ca &middot; Tỷ lệ BH/ND: {totalDayAll > 0 ? Math.round((totalDayBH / totalDayAll) * 100) : 0}% / {totalDayAll > 0 ? Math.round((totalDayND / totalDayAll) * 100) : 0}%
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 tabular-nums">
+              {allCatDaily.map((c) => {
+                const share = totalDayAll > 0 ? (c.total / totalDayAll) * 100 : 0;
+                return (
+                  <div key={c.category} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 truncate" title={c.category}>
+                      {c.category}
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                      <span className="text-base font-black text-slate-900 dark:text-white">{c.total.toLocaleString()}</span>
+                      <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">{share.toFixed(1)}%</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      BH {c.bh} &middot; ND {c.nd}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Detailed Daily Table with Fast Pinning & Visual Triage Filter Toolbar */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden space-y-0">
@@ -4247,6 +4424,131 @@ export const ReportsAnalyticsView: React.FC = () => {
           pinnedNames={pinnedServiceNames}
           onSavePinnedNames={handleSavePinnedNames}
         />
+      )}
+
+      {/* Quick Daily Data Entry Modal */}
+      {isDailyEntryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-3xl w-full overflow-hidden flex flex-col max-h-[88vh]">
+            <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  Nhập / Cập Nhật Số Liệu Ngày {selectedReportDay} - {selectedReportMonth}/2026
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Nhập số ca BHYT và Nhân dân (hoặc nhập "LT" nếu là ngày nghỉ Lễ/Tết). Số liệu được lưu tự động cho báo cáo ngày/tuần/tháng.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDailyEntryOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-4 space-y-2 custom-scrollbar flex-1">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold uppercase text-[11px] sticky top-0">
+                  <tr>
+                    <th className="py-2.5 px-3">Bộ Phận</th>
+                    <th className="py-2.5 px-3">Kỹ Thuật / Dịch Vụ</th>
+                    <th className="py-2.5 px-3 w-28 text-right">Bảo Hiểm (BH)</th>
+                    <th className="py-2.5 px-3 w-28 text-right">Nhân Dân (ND)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(monthlyDataStore[selectedReportMonth] || caseReports).map((item) => {
+                    const draft = dailyDraftValues[item.id] || { bh: '0', nd: '0' };
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                        <td className="py-2 px-3 text-slate-500 dark:text-slate-400 font-medium">{item.category}</td>
+                        <td className="py-2 px-3 font-semibold text-slate-800 dark:text-slate-100">{item.name}</td>
+                        <td className="py-1.5 px-3">
+                          <input
+                            type="text"
+                            value={draft.bh}
+                            onChange={(e) =>
+                              setDailyDraftValues((prev) => ({
+                                ...prev,
+                                [item.id]: { ...draft, bh: e.target.value }
+                              }))
+                            }
+                            className="w-full px-2.5 py-1.5 text-right font-bold tabular-nums bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-indigo-700 dark:text-indigo-300 outline-none focus:border-blue-500"
+                          />
+                        </td>
+                        <td className="py-1.5 px-3">
+                          <input
+                            type="text"
+                            value={draft.nd}
+                            onChange={(e) =>
+                              setDailyDraftValues((prev) => ({
+                                ...prev,
+                                [item.id]: { ...draft, nd: e.target.value }
+                              }))
+                            }
+                            className="w-full px-2.5 py-1.5 text-right font-bold tabular-nums bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-emerald-700 dark:text-emerald-300 outline-none focus:border-emerald-500"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDailyEntryOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const parseCell = (v: string): number | string => {
+                    const clean = v.trim().toUpperCase();
+                    if (clean === 'LT') return 'LT';
+                    const num = parseInt(clean.replace(/[^0-9]/g, ''), 10);
+                    return Number.isFinite(num) ? num : 0;
+                  };
+                  const currentList = monthlyDataStore[selectedReportMonth] || caseReports;
+                  const updatedList = currentList.map((item) => {
+                    const draft = dailyDraftValues[item.id];
+                    if (!draft) return item;
+                    return {
+                      ...item,
+                      dailyData: {
+                        ...item.dailyData,
+                        [selectedReportDay]: {
+                          bh: parseCell(draft.bh),
+                          nd: parseCell(draft.nd)
+                        }
+                      }
+                    };
+                  });
+                  setMonthlyDataStore((prev) => ({ ...prev, [selectedReportMonth]: updatedList }));
+                  setCaseReports(updatedList);
+                  try {
+                    localStorage.setItem(`google_sheet_data_${selectedReportMonth}`, JSON.stringify(updatedList));
+                  } catch {
+                    // ignore quota errors
+                  }
+                  setIsDailyEntryOpen(false);
+                  setSyncToast(`✅ Đã lưu số liệu Ngày ${selectedReportDay} - ${selectedReportMonth}!`);
+                  setTimeout(() => setSyncToast(null), 3500);
+                }}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Lưu Số Liệu Ngày {selectedReportDay}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

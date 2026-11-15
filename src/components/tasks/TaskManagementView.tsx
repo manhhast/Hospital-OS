@@ -3,13 +3,20 @@ import {
   Plus, Search, Filter, Download, Upload, Trash2, CheckCircle2, 
   Copy, Edit2, Calendar as CalendarIcon, LayoutList, Kanban, 
   MoreVertical, FileSpreadsheet, FileText, RefreshCw, X, ArrowUpDown, 
-  AlertCircle, ChevronLeft, ChevronRight, Eye, Paperclip, Send
+  AlertCircle, ChevronLeft, ChevronRight, Eye, Paperclip, Send, BellRing, Clock, AlertTriangle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { TaskItem, TaskPriority, TaskStatus, TaskType, TaskRecurrence, User } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
+import { formatDateVN, getTodayISODateVN } from '../../utils/dateUtils';
+import {
+  scanTaskReminders,
+  getDaysDiffFromTodayVN,
+  formatDaysRemainingLabel,
+  dispatchTaskReminder
+} from '../../utils/operationalAlerts';
 
 interface TaskManagementViewProps {
   tasks: TaskItem[];
@@ -33,6 +40,8 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [selectedPriority, setSelectedPriority] = useState<string>('ALL');
   const [selectedType, setSelectedType] = useState<string>('ALL');
+  const [deadlineFilter, setDeadlineFilter] = useState<'ALL' | 'OVERDUE' | 'DUE_TODAY' | 'DUE_SOON'>('ALL');
+  const [reminderTick, setReminderTick] = useState(0);
   const [sortBy, setSortBy] = useState<'dueDate' | 'createdDate' | 'priority'>('dueDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -53,18 +62,25 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   const [formData, setFormData] = useState<Partial<TaskItem>>({
     title: '',
     description: '',
-    dueDate: new Date().toISOString().split('T')[0],
+    dueDate: getTodayISODateVN(),
     assignee: users[0]?.name || '',
     assigneeEmail: users[0]?.email || '',
     telegramChatId: users[0]?.telegramChatId || '',
-    taskType: 'Hội chẩn',
+    taskType: 'Xét nghiệm khẩn',
     priority: 'Trung bình',
     status: 'Chờ xử lý',
-    level: 'Khoa Ngoại',
+    level: 'Bộ phận Xét nghiệm',
     recurrence: 'Không',
     recurrenceCount: 0,
     notes: ''
   });
+
+  const taskReminderSummary = useMemo(() => scanTaskReminders(tasks, 7), [tasks, reminderTick]);
+  const reminderByTaskId = useMemo(() => {
+    const map = new Map<string, typeof taskReminderSummary.alerts[number]>();
+    taskReminderSummary.alerts.forEach((a) => map.set(a.task.id, a));
+    return map;
+  }, [taskReminderSummary]);
 
   // Filter & Search Logic
   const filteredTasks = useMemo(() => {
@@ -78,7 +94,22 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       const matchesPriority = selectedPriority === 'ALL' || t.priority === selectedPriority;
       const matchesType = selectedType === 'ALL' || t.taskType === selectedType;
 
-      return matchesSearch && matchesStatus && matchesPriority && matchesType;
+      let matchesDeadline = true;
+      if (deadlineFilter !== 'ALL') {
+        const isDone = t.status === 'Đã hoàn thành' || t.status === 'Hủy';
+        const days = getDaysDiffFromTodayVN(t.dueDate);
+        if (isDone || days === null) {
+          matchesDeadline = false;
+        } else if (deadlineFilter === 'OVERDUE') {
+          matchesDeadline = days < 0;
+        } else if (deadlineFilter === 'DUE_TODAY') {
+          matchesDeadline = days === 0;
+        } else if (deadlineFilter === 'DUE_SOON') {
+          matchesDeadline = days >= 0 && days <= 3;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesPriority && matchesType && matchesDeadline;
     }).sort((a, b) => {
       let comparison = 0;
       if (sortBy === 'dueDate') {
@@ -91,7 +122,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       }
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [tasks, searchQuery, selectedStatus, selectedPriority, selectedType, sortBy, sortOrder]);
+  }, [tasks, searchQuery, selectedStatus, selectedPriority, selectedType, deadlineFilter, sortBy, sortOrder]);
 
   // Paginated data
   const totalPages = Math.ceil(filteredTasks.length / pageSize) || 1;
@@ -159,6 +190,32 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       onTasksUpdated();
       onShowToast('Đã nhân bản', `Đã tạo bản sao "${duplicated.id}"`, 'success');
     }
+  };
+
+  const handleSendSingleReminder = (task: TaskItem) => {
+    const days = getDaysDiffFromTodayVN(task.dueDate) ?? 0;
+    dispatchTaskReminder(task, days, 'Telegram');
+    setReminderTick((t) => t + 1);
+    onShowToast(
+      'Đã gửi nhắc việc',
+      `Đã phát nhắc nhở "${task.title}" tới ${task.assignee} (${formatDaysRemainingLabel(days)})`,
+      'success'
+    );
+  };
+
+  const handleBatchRemindUrgentTasks = () => {
+    const urgent = taskReminderSummary.alerts.filter((a) => a.daysRemaining <= 3);
+    if (urgent.length === 0) {
+      onShowToast('Không có việc cần nhắc', 'Hiện không có công việc quá hạn hoặc đến hạn trong 3 ngày tới.', 'info');
+      return;
+    }
+    urgent.forEach((a) => dispatchTaskReminder(a.task, a.daysRemaining, 'Telegram'));
+    setReminderTick((t) => t + 1);
+    onShowToast(
+      'Đã phát nhắc việc hàng loạt',
+      `Đã gửi ${urgent.length} thông báo nhắc việc (quá hạn & hạn ≤ 3 ngày) tới cán bộ phụ trách.`,
+      'success'
+    );
   };
 
   // Save / Update Task Form
@@ -310,8 +367,82 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     }
   };
 
+  const urgentReminderCount =
+    taskReminderSummary.overdueCount + taskReminderSummary.dueTodayCount + taskReminderSummary.dueSoon3DaysCount;
+
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+      {/* Task Deadline & Reminder Escalation Strip */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2 pr-2 border-r border-slate-200 dark:border-slate-800">
+            <BellRing className={`w-4 h-4 ${urgentReminderCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`} />
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+              Theo dõi hạn &amp; Nhắc việc
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => { setDeadlineFilter('ALL'); setCurrentPage(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer tabular-nums ${
+              deadlineFilter === 'ALL'
+                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            Tất cả ({tasks.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setDeadlineFilter(deadlineFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE'); setCurrentPage(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
+              deadlineFilter === 'OVERDUE'
+                ? 'bg-rose-600 text-white border-rose-600'
+                : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60 hover:bg-rose-100'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>Quá hạn ({taskReminderSummary.overdueCount})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setDeadlineFilter(deadlineFilter === 'DUE_TODAY' ? 'ALL' : 'DUE_TODAY'); setCurrentPage(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
+              deadlineFilter === 'DUE_TODAY'
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Hạn hôm nay ({taskReminderSummary.dueTodayCount})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setDeadlineFilter(deadlineFilter === 'DUE_SOON' ? 'ALL' : 'DUE_SOON'); setCurrentPage(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
+              deadlineFilter === 'DUE_SOON'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/60 hover:bg-blue-100'
+            }`}
+          >
+            <span>Sắp hạn ≤ 3 ngày ({taskReminderSummary.dueTodayCount + taskReminderSummary.dueSoon3DaysCount})</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleBatchRemindUrgentTasks}
+          className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 tabular-nums"
+        >
+          <Send className="w-3.5 h-3.5" />
+          <span>Nhắc việc quá hạn &amp; sắp hạn ({urgentReminderCount})</span>
+        </button>
+      </div>
+
       {/* Search, Filter & Actions Bar */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -343,7 +474,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Tìm tiêu đề, mã task, bác sĩ..."
+                placeholder="Tìm tiêu đề, mã task, người phụ trách..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
@@ -413,11 +544,14 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
           >
             <option value="ALL">Tất cả Loại công việc</option>
-            <option value="Hội chẩn">Hội chẩn</option>
-            <option value="Phẫu thuật">Phẫu thuật</option>
+            <option value="Xét nghiệm khẩn">Xét nghiệm khẩn</option>
+            <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh</option>
             <option value="Bảo trì thiết bị">Bảo trì thiết bị</option>
+            <option value="Kiểm chuẩn ISO">Kiểm chuẩn ISO</option>
+            <option value="Hội chẩn">Hội chẩn</option>
             <option value="Đào tạo">Đào tạo</option>
             <option value="Hành chính">Hành chính</option>
+            <option value="Khác">Khác</option>
           </select>
         </div>
       </div>
@@ -522,10 +656,33 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                           <div className="text-[10px] text-slate-400">{task.level}</div>
                         </td>
 
-                        <td className="p-3.5 font-medium">
-                          <span className={task.dueDate < new Date().toISOString().split('T')[0] && task.status !== 'Đã hoàn thành' ? 'text-rose-600 font-bold' : ''}>
-                            {task.dueDate}
-                          </span>
+                        <td className="p-3.5 font-medium tabular-nums">
+                          {(() => {
+                            const isDone = task.status === 'Đã hoàn thành' || task.status === 'Hủy';
+                            const days = getDaysDiffFromTodayVN(task.dueDate);
+                            const rInfo = reminderByTaskId.get(task.id);
+                            return (
+                              <div className="space-y-0.5">
+                                <span className={!isDone && days !== null && days < 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-800 dark:text-slate-200'}>
+                                  {formatDateVN(task.dueDate)}
+                                </span>
+                                {!isDone && days !== null && days <= 7 && (
+                                  <div className={`text-[10px] font-bold ${
+                                    days < 0 ? 'text-rose-600 dark:text-rose-400' :
+                                    days === 0 ? 'text-amber-600 dark:text-amber-400' :
+                                    'text-blue-600 dark:text-blue-400'
+                                  }`}>
+                                    {formatDaysRemainingLabel(days)}
+                                  </div>
+                                )}
+                                {rInfo?.lastRemindedAt && (
+                                  <div className="text-[10px] text-slate-400" title={`Đã nhắc ${rInfo.reminderCount} lần`}>
+                                    Đã nhắc ({rInfo.reminderCount})
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         <td className="p-3.5">
@@ -543,7 +700,16 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                           </button>
                         </td>
 
-                        <td className="p-3.5 text-right space-x-1">
+                        <td className="p-3.5 text-right space-x-1 whitespace-nowrap">
+                          {task.status !== 'Đã hoàn thành' && task.status !== 'Hủy' && (
+                            <button
+                              onClick={() => handleSendSingleReminder(task)}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Gửi nhắc việc qua Telegram / In-App"
+                            >
+                              <BellRing className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setDetailTask(task)}
                             className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
@@ -715,12 +881,14 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     onChange={(e) => setFormData({ ...formData, taskType: e.target.value as TaskType })}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
                   >
-                    <option value="Hội chẩn">Hội chẩn</option>
-                    <option value="Phẫu thuật">Phẫu thuật</option>
-                    <option value="Lịch khám">Lịch khám</option>
+                    <option value="Xét nghiệm khẩn">Xét nghiệm khẩn</option>
+                    <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh</option>
                     <option value="Bảo trì thiết bị">Bảo trì thiết bị</option>
+                    <option value="Kiểm chuẩn ISO">Kiểm chuẩn ISO</option>
+                    <option value="Hội chẩn">Hội chẩn</option>
                     <option value="Đào tạo">Đào tạo</option>
                     <option value="Hành chính">Hành chính</option>
+                    <option value="Khác">Khác</option>
                   </select>
                 </div>
 
@@ -861,6 +1029,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             </div>
 
             <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              {detailTask.status !== 'Đã hoàn thành' && detailTask.status !== 'Hủy' && (
+                <button
+                  onClick={() => handleSendSingleReminder(detailTask)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <BellRing className="w-3.5 h-3.5" />
+                  <span>Gửi nhắc việc ngay</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   setEditingTask(detailTask);

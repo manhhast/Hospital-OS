@@ -1,13 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Bell, Search, User as UserIcon, Shield, Bug, Sun, Moon, Monitor, Check,
   Plus, CheckCircle2, AlertTriangle, Hospital, Activity, KeyRound, LogIn,
   X, FileText, CheckSquare, Wrench, Building2, Clock, Users, ArrowRight,
-  Sparkles, Command, ChevronRight, LogOut, ArrowLeftRight
+  Sparkles, Command, ChevronRight, LogOut, ArrowLeftRight, Send, BellRing
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
-import { User, UserRole } from '../../types/hospital';
+import { EquipmentItem, TaskItem, User, UserRole } from '../../types/hospital';
 import { medicalSearchEngine, SearchResultItem, removeVietnameseTones } from '../../services/searchService';
+import {
+  scanEquipmentExpirations,
+  scanTaskReminders,
+  formatDaysRemainingLabel,
+  dispatchEquipmentReminder,
+  dispatchTaskReminder
+} from '../../utils/operationalAlerts';
+import { formatDateVN } from '../../utils/dateUtils';
 
 interface HeaderProps {
   onSearchChange?: (query: string) => void;
@@ -39,10 +47,15 @@ export const Header: React.FC<HeaderProps> = ({
   onShowToast
 }) => {
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
+  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(() => storageService.getEquipment());
+  const [taskList, setTaskList] = useState<TaskItem[]>(() => storageService.getTasks());
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showThemeDropdown, setShowThemeDropdown] = useState(false);
+  const [showAlertPopover, setShowAlertPopover] = useState(false);
+  const [alertTab, setAlertTab] = useState<'all' | 'equipment' | 'tasks'>('all');
   const themeDropdownRef = useRef<HTMLDivElement>(null);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
+  const alertPopoverRef = useRef<HTMLDivElement>(null);
 
   // Live Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,9 +68,15 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     const unsubscribe = storageService.subscribe(() => {
       setCurrentUser(storageService.getCurrentUser());
+      setEquipmentList(storageService.getEquipment());
+      setTaskList(storageService.getTasks());
     });
     return () => unsubscribe();
   }, []);
+
+  const eqCompliance = useMemo(() => scanEquipmentExpirations(equipmentList, 30), [equipmentList]);
+  const taskReminders = useMemo(() => scanTaskReminders(taskList, 3), [taskList]);
+  const totalUrgentBadge = eqCompliance.alerts.length + taskReminders.alerts.length;
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -70,6 +89,9 @@ export const Header: React.FC<HeaderProps> = ({
       }
       if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target as Node)) {
         setShowRoleDropdown(false);
+      }
+      if (alertPopoverRef.current && !alertPopoverRef.current.contains(event.target as Node)) {
+        setShowAlertPopover(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -303,6 +325,225 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Debug</span>
           </div>
         )}
+
+        {/* Unified Equipment Expiration & Task Reminder Bell */}
+        <div className="relative" ref={alertPopoverRef}>
+          <button
+            type="button"
+            onClick={() => setShowAlertPopover((prev) => !prev)}
+            className="relative p-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Cảnh báo thời hạn thiết bị & Nhắc việc đến hạn"
+          >
+            <Bell className={`w-5 h-5 ${totalUrgentBadge > 0 ? 'text-rose-600 dark:text-rose-400' : ''}`} />
+            {totalUrgentBadge > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                {totalUrgentBadge > 99 ? '99+' : totalUrgentBadge}
+              </span>
+            )}
+          </button>
+
+          {showAlertPopover && (
+            <div className="absolute right-0 mt-2 w-[340px] sm:w-[420px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <BellRing className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                    Cảnh Báo Hạn Thiết Bị &amp; Nhắc Việc
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                    {eqCompliance.overdueCount + taskReminders.overdueCount} quá hạn &middot; {eqCompliance.critical7Count + taskReminders.dueTodayCount} khẩn cấp
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAlertPopover(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center gap-1.5 bg-white dark:bg-slate-900">
+                <button
+                  type="button"
+                  onClick={() => setAlertTab('all')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer tabular-nums ${
+                    alertTab === 'all'
+                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  Tất cả ({totalUrgentBadge})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlertTab('equipment')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer tabular-nums ${
+                    alertTab === 'equipment'
+                      ? 'bg-amber-600 text-white'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  Thiết bị ({eqCompliance.alerts.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlertTab('tasks')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer tabular-nums ${
+                    alertTab === 'tasks'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  Công việc ({taskReminders.alerts.length})
+                </button>
+              </div>
+
+              {/* Alert List */}
+              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 custom-scrollbar">
+                {totalUrgentBadge === 0 ? (
+                  <div className="p-8 text-center text-slate-400 space-y-2">
+                    <CheckCircle2 className="w-7 h-7 mx-auto text-emerald-500" />
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      Không có thiết bị sắp hết hạn (≤ 30 ngày) hay công việc quá hạn.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {(alertTab === 'all' || alertTab === 'equipment') &&
+                      eqCompliance.alerts.slice(0, 6).map((item) => {
+                        const isOverdue = item.daysRemaining < 0;
+                        return (
+                          <div
+                            key={item.id}
+                            className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex items-start justify-between gap-2.5"
+                          >
+                            <div
+                              className="min-w-0 flex-1 cursor-pointer"
+                              onClick={() => {
+                                setShowAlertPopover(false);
+                                onNavigateModule('equipment', item.equipmentId);
+                              }}
+                            >
+                              <div className="flex items-center gap-1.5 text-[11px]">
+                                <Wrench className={`w-3.5 h-3.5 shrink-0 ${isOverdue ? 'text-rose-600' : 'text-amber-600'}`} />
+                                <span className={`font-bold tabular-nums ${isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                                  {formatDaysRemainingLabel(item.daysRemaining)}
+                                </span>
+                                <span className="text-slate-400">&middot;</span>
+                                <span className="font-mono text-slate-500 dark:text-slate-400 truncate">{item.equipmentCode}</span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate mt-0.5">
+                                {item.trackLabel}: {item.equipmentName}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 tabular-nums">
+                                Hạn: {item.expiryDateVN} &middot; {item.assignedTechnician}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                dispatchEquipmentReminder(item, 'Telegram');
+                                onShowToast?.('Đã gửi nhắc hạn thiết bị', `${item.equipmentCode} (${item.trackLabel}) tới ${item.assignedTechnician}`, 'success');
+                              }}
+                              className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-indigo-950/60 shrink-0 cursor-pointer flex items-center gap-1"
+                              title="Gửi nhắc nhở ngay"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>Nhắc</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                    {(alertTab === 'all' || alertTab === 'tasks') &&
+                      taskReminders.alerts.slice(0, 6).map((item) => {
+                        const isOverdue = item.daysRemaining < 0;
+                        return (
+                          <div
+                            key={item.task.id}
+                            className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex items-start justify-between gap-2.5"
+                          >
+                            <div
+                              className="min-w-0 flex-1 cursor-pointer"
+                              onClick={() => {
+                                setShowAlertPopover(false);
+                                onNavigateModule('tasks', item.task.id);
+                              }}
+                            >
+                              <div className="flex items-center gap-1.5 text-[11px]">
+                                <CheckSquare className={`w-3.5 h-3.5 shrink-0 ${isOverdue ? 'text-rose-600' : 'text-blue-600'}`} />
+                                <span className={`font-bold tabular-nums ${isOverdue ? 'text-rose-600 dark:text-rose-400' : item.daysRemaining === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                                  {formatDaysRemainingLabel(item.daysRemaining)}
+                                </span>
+                                <span className="text-slate-400">&middot;</span>
+                                <span className="font-mono text-slate-500 dark:text-slate-400">{item.task.id}</span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate mt-0.5">
+                                {item.task.title}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 tabular-nums">
+                                Hạn: {formatDateVN(item.task.dueDate)} &middot; {item.task.assignee}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                dispatchTaskReminder(item.task, item.daysRemaining, 'Telegram');
+                                onShowToast?.('Đã nhắc việc', `Đã gửi nhắc nhở "${item.task.title}" cho ${item.task.assignee}`, 'success');
+                              }}
+                              className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-blue-950/60 shrink-0 cursor-pointer flex items-center gap-1"
+                              title="Gửi nhắc việc qua Telegram/In-App"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>Nhắc</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </>
+                )}
+              </div>
+
+              {/* Footer Links */}
+              <div className="px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAlertPopover(false);
+                    onNavigateModule('equipment');
+                  }}
+                  className="text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+                >
+                  Hạn thiết bị &rarr;
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAlertPopover(false);
+                    onNavigateModule('tasks');
+                  }}
+                  className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  Quản lý nhắc việc &rarr;
+                </button>
+                {currentUser.role === 'Admin' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAlertPopover(false);
+                      onNavigateModule('notifications');
+                    }}
+                    className="text-slate-600 dark:text-slate-300 hover:underline cursor-pointer"
+                  >
+                    Trung tâm TB &rarr;
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Theme Mode Dropdown */}
         <div className="relative" ref={themeDropdownRef}>

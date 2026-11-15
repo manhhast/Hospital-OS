@@ -32,8 +32,8 @@ export const AuditLogView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {auditLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+              {auditLogs.map((log, idx) => (
+                <tr key={`${log.id}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                   <td className="p-3.5 font-mono text-slate-400">{log.timestamp}</td>
                   <td className="p-3.5">
                     <div className="font-bold text-slate-800 dark:text-slate-100">{log.userName}</div>

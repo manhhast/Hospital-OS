@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Wrench, Activity, AlertTriangle, ShieldCheck, Calendar, Clock, 
   Search, Plus, FileText, CheckCircle2, AlertCircle, RefreshCw, Filter, Layers, 
   LayoutList, LayoutGrid, Eye, User, MapPin, Check, Info, ArrowUpRight, X, Trash2,
-  Gauge, DollarSign, ShieldAlert, Lock, Unlock, Settings, Sliders
+  Gauge, DollarSign, ShieldAlert, Lock, Unlock, Settings, Sliders, BellRing, Send, CheckSquare
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus } from '../../types/hospital';
@@ -13,14 +13,25 @@ import { OeeReliabilityTab } from './OeeReliabilityTab';
 import { DepreciationUtilizationTab } from './DepreciationUtilizationTab';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
 import { checkEquipmentSafetyInterlock, calculateEquipmentOEE, calculateEquipmentDepreciation } from '../../utils/equipmentAnalytics';
+import {
+  scanEquipmentExpirations,
+  formatDaysRemainingLabel,
+  createTaskFromEquipmentAlert,
+  dispatchEquipmentReminder,
+  getEquipmentReminderInfo,
+  getDaysDiffFromTodayVN,
+  EquipmentExpirationAlert
+} from '../../utils/operationalAlerts';
 
 export const EquipmentManagementView: React.FC = () => {
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'list' | 'interlock' | 'oee' | 'utilization' | 'maintenance' | 'repairs'>('list');
+  const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'overdue' | 'within30' | 'within60'>('all');
+  const [activeTab, setActiveTab] = useState<'list' | 'expirations' | 'interlock' | 'oee' | 'utilization' | 'maintenance' | 'repairs'>('list');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); // Default to LIST as requested
+  const [reminderTick, setReminderTick] = useState(0);
   
   // Selected equipment for Full Detail Modal
   const [detailEquipment, setDetailEquipment] = useState<EquipmentItem | null>(null);
@@ -117,6 +128,18 @@ export const EquipmentManagementView: React.FC = () => {
     return storageService.subscribe(refreshData);
   }, []);
 
+  // 4-track expiration compliance scan (within 60 days + overdue)
+  const compliance = useMemo(() => scanEquipmentExpirations(equipmentList, 60), [equipmentList, reminderTick]);
+  const alertsByEquipmentId = useMemo(() => {
+    const map = new Map<string, EquipmentExpirationAlert[]>();
+    compliance.alerts.forEach((a) => {
+      const list = map.get(a.equipmentId) || [];
+      list.push(a);
+      map.set(a.equipmentId, list);
+    });
+    return map;
+  }, [compliance]);
+
   // Filtered equipment
   const filteredList = equipmentList.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -127,7 +150,18 @@ export const EquipmentManagementView: React.FC = () => {
                           (item.managerInCharge && item.managerInCharge.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesStatus = selectedStatus === 'all' || item.status === selectedStatus;
-    return matchesSearch && matchesCategory && matchesStatus;
+    let matchesDeadline = true;
+    if (deadlineFilter !== 'all') {
+      const eqAlerts = alertsByEquipmentId.get(item.id) || [];
+      if (deadlineFilter === 'overdue') {
+        matchesDeadline = eqAlerts.some(a => a.daysRemaining < 0);
+      } else if (deadlineFilter === 'within30') {
+        matchesDeadline = eqAlerts.some(a => a.daysRemaining <= 30);
+      } else if (deadlineFilter === 'within60') {
+        matchesDeadline = eqAlerts.length > 0;
+      }
+    }
+    return matchesSearch && matchesCategory && matchesStatus && matchesDeadline;
   });
 
   // Analytics counters
@@ -137,6 +171,38 @@ export const EquipmentManagementView: React.FC = () => {
   const brokenCount = equipmentList.filter(e => e.status === 'Sự cố hỏng hóc').length;
   const safetyViolations = checkEquipmentSafetyInterlock(equipmentList);
   const criticalViolationsCount = safetyViolations.filter(v => v.severity === 'CRITICAL').length;
+
+  const showQuickToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleCreateAlertTask = (alert: EquipmentExpirationAlert) => {
+    const res = createTaskFromEquipmentAlert(alert);
+    setReminderTick(t => t + 1);
+    if (res.created) {
+      showQuickToast(`Đã tạo công việc #${res.task.id} nhắc xử lý "${alert.trackLabel}" cho ${res.task.assignee}`);
+    } else {
+      showQuickToast(`Đã có công việc đang mở (#${res.task.id}) cho mốc ${alert.trackLabel} của ${alert.equipmentCode}`);
+    }
+  };
+
+  const handleSendAlertReminder = (alert: EquipmentExpirationAlert) => {
+    dispatchEquipmentReminder(alert, 'Telegram');
+    setReminderTick(t => t + 1);
+    showQuickToast(`Đã gửi nhắc hạn ${alert.equipmentCode} (${alert.trackLabel}) tới ${alert.assignedTechnician}`);
+  };
+
+  const handleBatchRemindExpiring = () => {
+    const targets = compliance.alerts.filter(a => a.daysRemaining <= 30);
+    if (targets.length === 0) {
+      showQuickToast('Không có thiết bị nào quá hạn hoặc sắp hết hạn trong 30 ngày tới.');
+      return;
+    }
+    targets.forEach(a => dispatchEquipmentReminder(a, 'Telegram'));
+    setReminderTick(t => t + 1);
+    showQuickToast(`Đã phát ${targets.length} cảnh báo nhắc gia hạn (≤ 30 ngày & quá hạn) qua Telegram/In-App!`);
+  };
 
   const handleOpenAddModal = () => {
     const latestDefaults = storageService.getEquipmentDurationDefaults();
@@ -458,6 +524,90 @@ export const EquipmentManagementView: React.FC = () => {
         </div>
       </div>
 
+      {/* 4-Track Compliance Expiration Strip */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 pr-3 border-r border-slate-200 dark:border-slate-800">
+            <BellRing className={`w-4 h-4 ${compliance.overdueCount + compliance.critical7Count > 0 ? 'text-rose-600' : 'text-indigo-600'}`} />
+            <div>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                Kiểm Soát Thời Hạn 4 Chu Kỳ
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Giấy phép &middot; Kiểm định &middot; Kiểm xạ &middot; Bảo dưỡng
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('list');
+              setDeadlineFilter(deadlineFilter === 'overdue' ? 'all' : 'overdue');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
+              deadlineFilter === 'overdue' && activeTab === 'list'
+                ? 'bg-rose-600 text-white border-rose-600'
+                : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60 hover:bg-rose-100'
+            }`}
+          >
+            Quá hạn ({compliance.overdueCount})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('list');
+              setDeadlineFilter(deadlineFilter === 'within30' ? 'all' : 'within30');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
+              deadlineFilter === 'within30' && activeTab === 'list'
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100'
+            }`}
+          >
+            Hạn ≤ 30 ngày ({compliance.overdueCount + compliance.critical7Count + compliance.warning30Count})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('list');
+              setDeadlineFilter(deadlineFilter === 'within60' ? 'all' : 'within60');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
+              deadlineFilter === 'within60' && activeTab === 'list'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/60 hover:bg-blue-100'
+            }`}
+          >
+            Theo dõi ≤ 60 ngày ({compliance.alerts.length})
+          </button>
+
+          <span className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+            Đạt chuẩn: {compliance.compliantEquipmentCount}/{totalEquipment} máy
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveTab('expirations')}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+          >
+            Mở bảng chi tiết hạn ({compliance.alerts.length})
+          </button>
+          <button
+            type="button"
+            onClick={handleBatchRemindExpiring}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Nhắc tất cả ≤ 30 ngày</span>
+          </button>
+        </div>
+      </div>
+
       {/* Tabs & Search Filter Divided Into Two Rows */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         {/* Dòng 1: Thanh Menu / Tabs Chuyên Mục */}
@@ -473,11 +623,30 @@ export const EquipmentManagementView: React.FC = () => {
             >
               <Wrench className={`w-3.5 h-3.5 ${activeTab === 'list' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
               <span>Danh Sách Máy</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black tabular-nums ${
                 activeTab === 'list' ? 'bg-white/30 text-white' : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
               }`}>
                 {equipmentList.length}
               </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('expirations')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                activeTab === 'expirations' 
+                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30 scale-[1.01]' 
+                  : 'bg-white/80 dark:bg-slate-800/60 text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 shadow-xs'
+              }`}
+            >
+              <Clock className={`w-3.5 h-3.5 ${activeTab === 'expirations' ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`} />
+              <span>Cảnh Báo Thời Hạn</span>
+              {compliance.alerts.length > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black tabular-nums ${
+                  activeTab === 'expirations' ? 'bg-white text-amber-800' : 'bg-amber-500 text-white'
+                }`}>
+                  {compliance.alerts.length}
+                </span>
+              )}
             </button>
 
             <button
@@ -624,12 +793,13 @@ export const EquipmentManagementView: React.FC = () => {
               <option value="Đang hiệu chuẩn">Đang hiệu chuẩn</option>
             </select>
 
-            {(searchTerm || selectedCategory !== 'all' || selectedStatus !== 'all') && (
+            {(searchTerm || selectedCategory !== 'all' || selectedStatus !== 'all' || deadlineFilter !== 'all') && (
               <button
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedCategory('all');
                   setSelectedStatus('all');
+                  setDeadlineFilter('all');
                 }}
                 className="px-2.5 py-2 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/30 rounded-xl transition-colors shrink-0"
                 title="Xóa tất cả bộ lọc"
@@ -760,99 +930,140 @@ export const EquipmentManagementView: React.FC = () => {
                             </td>
 
                             {/* Lịch Bảo Dưỡng */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80">
-                              <div className="space-y-0.5">
-                                <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                                  Lịch BD:
-                                </div>
-                                <div className={`text-xs font-bold ${isOverdueMaint ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                  {formatDateVN(item.nextMaintenanceDate)}
-                                </div>
-                              </div>
-                              {isOverdueMaint ? (
-                                <span className="inline-flex items-center gap-0.5 mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60">
-                                  ⚠️ Quá hạn
-                                </span>
-                              ) : (
-                                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                                  CK {item.maintenanceIntervalMonths}T
-                                </div>
-                              )}
+                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80 tabular-nums">
+                              {(() => {
+                                const maintDays = getDaysDiffFromTodayVN(item.nextMaintenanceDate);
+                                return (
+                                  <div className="space-y-0.5">
+                                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                      Lịch BD:
+                                    </div>
+                                    <div className={`text-xs font-bold ${isOverdueMaint ? 'text-red-600 dark:text-red-400' : maintDays !== null && maintDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                      {formatDateVN(item.nextMaintenanceDate)}
+                                    </div>
+                                    {maintDays !== null && maintDays <= 60 ? (
+                                      <span className={`inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                        maintDays < 0
+                                          ? 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/60'
+                                          : maintDays <= 30
+                                          ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+                                          : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/60'
+                                      }`}>
+                                        {formatDaysRemainingLabel(maintDays)}
+                                      </span>
+                                    ) : (
+                                      <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                        CK {item.maintenanceIntervalMonths}T
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
 
                             {/* Cột 6: Kiểm Định & Kiểm Xạ */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80">
-                              <div className="space-y-1.5">
-                                {/* Hạn Kiểm Định */}
-                                <div className="space-y-0.5">
-                                  <div className="text-[11px] font-bold text-sky-700 dark:text-sky-300 flex items-center gap-1">
-                                    <span>🔬 Hạn KĐ:</span>
-                                  </div>
-                                  <div className={`text-xs font-bold ${isOverdueCalib ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                    {formatDateVN(item.calibrationExpiry, 'Hàng năm')}
-                                  </div>
-                                  {isOverdueCalib && (
-                                    <span className="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60">
-                                      ⚠️ Quá hạn
-                                    </span>
-                                  )}
-                                </div>
+                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80 tabular-nums">
+                              {(() => {
+                                const calibDays = getDaysDiffFromTodayVN(item.calibrationExpiry);
+                                const radDays = getDaysDiffFromTodayVN(radExpiryValue);
+                                return (
+                                  <div className="space-y-1.5">
+                                    {/* Hạn Kiểm Định */}
+                                    <div className="space-y-0.5">
+                                      <div className="text-[11px] font-bold text-sky-700 dark:text-sky-300 flex items-center gap-1">
+                                        <span>🔬 Hạn KĐ:</span>
+                                      </div>
+                                      <div className={`text-xs font-bold ${isOverdueCalib ? 'text-red-600 dark:text-red-400' : calibDays !== null && calibDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                        {formatDateVN(item.calibrationExpiry, 'Hàng năm')}
+                                      </div>
+                                      {calibDays !== null && calibDays <= 60 && (
+                                        <span className={`inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold border ${
+                                          calibDays < 0
+                                            ? 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/60'
+                                            : calibDays <= 30
+                                            ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+                                            : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/60'
+                                        }`}>
+                                          {formatDaysRemainingLabel(calibDays)}
+                                        </span>
+                                      )}
+                                    </div>
 
-                                {/* Hạn Kiểm Xạ */}
-                                <div className="pt-1 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
-                                  <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                                    <span>☢️ Hạn KX:</span>
+                                    {/* Hạn Kiểm Xạ */}
+                                    <div className="pt-1 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+                                      <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                                        <span>☢️ Hạn KX:</span>
+                                      </div>
+                                      <div className="text-xs font-bold">
+                                        {radExpiryValue ? (
+                                          <span className={isOverdueRad ? 'text-red-600 dark:text-red-400' : radDays !== null && radDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}>
+                                            {formatDateVN(radExpiryValue)}
+                                          </span>
+                                        ) : (
+                                          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal italic">K.áp dụng</span>
+                                        )}
+                                      </div>
+                                      {radExpiryValue && radDays !== null && radDays <= 60 && (
+                                        <span className={`inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold border ${
+                                          radDays < 0
+                                            ? 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/60'
+                                            : radDays <= 30
+                                            ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+                                            : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/60'
+                                        }`}>
+                                          {formatDaysRemainingLabel(radDays)}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="text-xs font-bold">
-                                    {radExpiryValue ? (
-                                      <span className={isOverdueRad ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}>
-                                        {formatDateVN(radExpiryValue)}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal italic">K.áp dụng</span>
-                                    )}
-                                  </div>
-                                  {radExpiryValue && isOverdueRad && (
-                                    <span className="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60">
-                                      ⚠️ Quá hạn KX
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                                );
+                              })()}
                             </td>
 
                             {/* Cột 7: Thời Hạn Cấp Phép */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80">
-                              <div className="space-y-1">
-                                <div className="space-y-0.5">
-                                  <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                                    <span>📋 Hạn GP:</span>
+                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80 tabular-nums">
+                              {(() => {
+                                const permitDate = item.operatingPermitExpiry || item.radiationLicenseExpiry;
+                                const permitDays = getDaysDiffFromTodayVN(permitDate);
+                                return (
+                                  <div className="space-y-1">
+                                    <div className="space-y-0.5">
+                                      <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                        <span>📋 Hạn GP:</span>
+                                      </div>
+                                      <div className={`text-xs font-bold ${isOverduePermit ? 'text-red-600 dark:text-red-400' : permitDays !== null && permitDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                        {formatDateVN(permitDate, 'Theo chuẩn BYT')}
+                                      </div>
+                                    </div>
+                                    {item.operatingPermitNumber && (
+                                      <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-[120px]" title={item.operatingPermitNumber}>
+                                        {item.operatingPermitNumber}
+                                      </div>
+                                    )}
+                                    <div>
+                                      {permitDays !== null && permitDays <= 60 ? (
+                                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                          permitDays < 0
+                                            ? 'bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/60'
+                                            : permitDays <= 30
+                                            ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+                                            : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/60'
+                                        }`}>
+                                          {formatDaysRemainingLabel(permitDays)}
+                                        </span>
+                                      ) : item.operatingPermitExpiry ? (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                                          ✓ Còn hiệu lực
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                          Lưu hành BYT
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className={`text-xs font-bold ${isOverduePermit ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                    {formatDateVN(item.operatingPermitExpiry || item.radiationLicenseExpiry, 'Theo chuẩn BYT')}
-                                  </div>
-                                </div>
-                                {item.operatingPermitNumber && (
-                                  <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-[120px]" title={item.operatingPermitNumber}>
-                                    {item.operatingPermitNumber}
-                                  </div>
-                                )}
-                                <div>
-                                  {isOverduePermit ? (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60">
-                                      ⚠️ Quá hạn GP
-                                    </span>
-                                  ) : item.operatingPermitExpiry ? (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                                      ✓ Còn hiệu lực
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                      Lưu hành BYT
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                                );
+                              })()}
                             </td>
 
                             {/* Thao tác (Dạng 1 cột biểu tượng thu gọn kèm Tooltip khi rê chuột) */}
@@ -1061,6 +1272,141 @@ export const EquipmentManagementView: React.FC = () => {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Content: Cảnh Báo Thời Hạn Thiết Bị (60 ngày & Quá hạn) */}
+        {activeTab === 'expirations' && (
+          <div className="p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-600" />
+                  <span>Danh Sách Cảnh Báo Thời Hạn Pháp Lý &amp; Bảo Dưỡng (Trong 60 Ngày &amp; Quá Hạn)</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Theo dõi tập trung 4 mốc: Giấy phép hoạt động, Kiểm định ISO 15189, Kiểm xạ ATBX và Bảo dưỡng định kỳ.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleBatchRemindExpiring}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Gửi nhắc tất cả ≤ 30 ngày</span>
+              </button>
+            </div>
+
+            {compliance.alerts.length === 0 ? (
+              <div className="p-10 text-center bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl space-y-2">
+                <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-600" />
+                <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
+                  Toàn bộ thiết bị đều còn hiệu lực trên 60 ngày!
+                </h4>
+                <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                  Không có giấy phép, kiểm định, kiểm xạ hay lịch bảo dưỡng nào sắp đến hạn trong 60 ngày tới.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 uppercase font-bold text-[11px] border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="py-3 px-4">Mức Độ &amp; Còn Lại</th>
+                      <th className="py-3 px-4">Thiết Bị &amp; Phòng</th>
+                      <th className="py-3 px-4">Hạng Mục Thời Hạn</th>
+                      <th className="py-3 px-4">Ngày Hết Hạn</th>
+                      <th className="py-3 px-4">Phụ Trách</th>
+                      <th className="py-3 px-4 text-right">Hành Động Nhanh</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                    {compliance.alerts.map((al) => {
+                      const eqObj = equipmentList.find((e) => e.id === al.equipmentId);
+                      const rInfo = getEquipmentReminderInfo(al.id);
+                      const isOverdue = al.daysRemaining < 0;
+                      const isCritical = al.daysRemaining >= 0 && al.daysRemaining <= 7;
+                      return (
+                        <tr key={al.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3 px-4 tabular-nums whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ${
+                                isOverdue
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-900'
+                                  : isCritical
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-900'
+                                  : al.daysRemaining <= 30
+                                  ? 'bg-amber-50/60 text-amber-700 border-amber-200/80 dark:bg-amber-950/30 dark:text-amber-300'
+                                  : 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900'
+                              }`}
+                            >
+                              {formatDaysRemainingLabel(al.daysRemaining)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                              {al.equipmentCode}
+                            </div>
+                            <div className="font-bold text-slate-900 dark:text-slate-100">{al.equipmentName}</div>
+                            <div className="text-[11px] text-slate-500">{al.room}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-slate-800 dark:text-slate-200">{al.trackLabel}</div>
+                            {al.referenceNumber && (
+                              <div className="text-[11px] font-mono text-slate-400">Số HS: {al.referenceNumber}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-bold tabular-nums text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                            {al.expiryDateVN}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-slate-800 dark:text-slate-200">{al.assignedTechnician}</div>
+                            <div className="text-[11px] text-slate-400">{al.managerInCharge}</div>
+                            {rInfo && (
+                              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                Đã nhắc {rInfo.count} lần ({rInfo.lastRemindedAt})
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleCreateAlertTask(al)}
+                                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-600 rounded-lg text-[11px] font-bold border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                title="Tạo công việc xử lý & gán ngày hạn tự động"
+                              >
+                                <CheckSquare className="w-3.5 h-3.5" />
+                                <span>Tạo việc</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSendAlertReminder(al)}
+                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-600 rounded-lg text-[11px] font-bold border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                title="Gửi nhắc nhở qua Telegram/In-App"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                <span>Nhắc</span>
+                              </button>
+                              {eqObj && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDetailEquipment(eqObj)}
+                                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                                >
+                                  Hồ sơ
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
