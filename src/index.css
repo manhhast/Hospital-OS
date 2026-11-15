@@ -29,8 +29,12 @@
   }
 
   html {
-    color-scheme: light dark;
+    color-scheme: light;
     transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
