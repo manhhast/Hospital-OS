@@ -29,8 +29,9 @@ import {
   type CloudBucketKey
 } from './storageService';
 import {
-  AVAILABLE_REPORT_YEARS,
   DEFAULT_REPORT_YEAR,
+  getKnownReportYears,
+  isValidReportYear,
   REPORT_MONTHS,
   registerCloudReportArchiveHandler,
   reportArchiveService,
@@ -738,10 +739,61 @@ class FirebaseSyncService {
       delete this.pendingReportTimers[archiveKey];
       const activeUser = this.currentFirebaseUser;
       if (!activeUser) return;
+      this.ensureYearTrackedInSettings(year);
       void this.writeReportArchiveDoc(activeUser, year, monthKey, items).catch((err) => {
         this.setState({ errorMessage: err instanceof Error ? err.message : String(err) });
       });
     }, 350);
+  }
+
+  private ensureYearTrackedInSettings(year: number): void {
+    if (!isValidReportYear(year)) return;
+    const settings = storageService.getSettings();
+    const existingYears = Array.isArray(settings.archivedReportYears) ? settings.archivedReportYears : [];
+    if (!existingYears.includes(year)) {
+      const nextYears = Array.from(new Set([...existingYears, year])).sort((a, b) => a - b);
+      storageService.saveSettings({
+        ...settings,
+        archivedReportYears: nextYears
+      });
+    }
+  }
+
+  public async forceSaveReportMonthToCloud(
+    year: number,
+    monthKey: string,
+    items: ArchivedCaseReportItem[]
+  ): Promise<{ savedOnFirebase: boolean; reason?: string }> {
+    this.ensureYearTrackedInSettings(year);
+    const archiveKey = toFirestoreReportArchiveKey(year, monthKey);
+    if (this.pendingReportTimers[archiveKey]) {
+      window.clearTimeout(this.pendingReportTimers[archiveKey]);
+      delete this.pendingReportTimers[archiveKey];
+    }
+
+    const fbUser = this.currentFirebaseUser;
+    if (!fbUser || !fbUser.emailVerified) {
+      return {
+        savedOnFirebase: false,
+        reason: 'Chưa đăng nhập Google Firebase trên thiết bị này.'
+      };
+    }
+    if (this.state.status !== 'synced' && this.state.status !== 'syncing') {
+      return {
+        savedOnFirebase: false,
+        reason: this.state.errorMessage || 'Tài khoản chưa được kích hoạt đồng bộ Firebase.'
+      };
+    }
+
+    try {
+      await this.writeReportArchiveDoc(fbUser, year, monthKey, items);
+      return { savedOnFirebase: true };
+    } catch (err) {
+      return {
+        savedOnFirebase: false,
+        reason: err instanceof Error ? err.message : String(err)
+      };
+    }
   }
 
   private attachAdminDirectoryListeners(fbUser: FirebaseUser): void {
@@ -901,11 +953,18 @@ class FirebaseSyncService {
         bucketsPushed++;
       }
 
-      for (const year of AVAILABLE_REPORT_YEARS) {
+      const idbYears = await reportArchiveService.getAllKnownYearsFromIDB();
+      const yearsToSync = getKnownReportYears(storageService.getSettings(), [
+        ...idbYears,
+        this.state.activeReportYear
+      ]);
+
+      for (const year of yearsToSync) {
         const yearStore = await reportArchiveService.hydrateYearArchiveFromIDB(year);
         for (const monthKey of REPORT_MONTHS) {
           const items = yearStore[monthKey];
           if (items && items.length > 0) {
+            this.ensureYearTrackedInSettings(year);
             await this.writeReportArchiveDoc(fbUser, year, monthKey, items);
             reportMonthsPushed++;
           }
@@ -961,7 +1020,13 @@ class FirebaseSyncService {
         })
       );
 
-      for (const year of AVAILABLE_REPORT_YEARS) {
+      const idbYears = await reportArchiveService.getAllKnownYearsFromIDB();
+      const yearsToPull = getKnownReportYears(storageService.getSettings(), [
+        ...idbYears,
+        this.state.activeReportYear
+      ]);
+
+      for (const year of yearsToPull) {
         for (const monthKey of REPORT_MONTHS) {
           const archiveKey = toFirestoreReportArchiveKey(year, monthKey);
           const path = `workspaces/${FIRESTORE_WORKSPACE_ID}/report_archives/${archiveKey}`;

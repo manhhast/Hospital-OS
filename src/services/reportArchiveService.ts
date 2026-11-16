@@ -31,7 +31,13 @@ export const REPORT_MONTHS = [
 ];
 
 export const DEFAULT_REPORT_YEAR = 2026;
+export const MIN_REPORT_YEAR = 1900;
+export const MAX_REPORT_YEAR = 2100;
 export const AVAILABLE_REPORT_YEARS = [2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030];
+
+export function isValidReportYear(year: number): boolean {
+  return Number.isInteger(year) && year >= MIN_REPORT_YEAR && year <= MAX_REPORT_YEAR;
+}
 
 const IDB_NAME = 'CLS_WorkHub_ReportArchiveDB';
 const IDB_STORE = 'monthly_archives';
@@ -40,6 +46,7 @@ const IDB_VERSION = 1;
 const LEGACY_DATA_KEY_PREFIX = 'google_sheet_data_';
 const YEARLY_DATA_KEY_PREFIX = 'cls_report_archive_v1_';
 const YEARLY_META_KEY_PREFIX = 'cls_report_archive_meta_v1_';
+const KNOWN_YEARS_STORAGE_KEY = 'cls_report_known_years_v1';
 
 export interface YearArchiveMeta {
   year: number;
@@ -196,6 +203,118 @@ export function getReportSheetConfigForYear(
   return { url: '', sheetId: '' };
 }
 
+function rememberKnownYear(year: number): void {
+  if (!isValidReportYear(year) || typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(KNOWN_YEARS_STORAGE_KEY);
+    const parsed: number[] = raw ? JSON.parse(raw) : [];
+    const set = new Set<number>(Array.isArray(parsed) ? parsed.filter(isValidReportYear) : []);
+    if (!set.has(year)) {
+      set.add(year);
+      localStorage.setItem(KNOWN_YEARS_STORAGE_KEY, JSON.stringify(Array.from(set).sort((a, b) => a - b)));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function getKnownReportYears(settings?: AppSettings, extraYears: number[] = []): number[] {
+  const set = new Set<number>([2024, 2025, 2026, 2027, DEFAULT_REPORT_YEAR, new Date().getFullYear()]);
+
+  if (settings?.reportSheetYear && isValidReportYear(settings.reportSheetYear)) {
+    set.add(settings.reportSheetYear);
+  }
+  if (Array.isArray(settings?.archivedReportYears)) {
+    settings.archivedReportYears.forEach((y) => {
+      if (isValidReportYear(Number(y))) set.add(Number(y));
+    });
+  }
+  if (settings?.reportGoogleSheetsByYear) {
+    Object.keys(settings.reportGoogleSheetsByYear).forEach((k) => {
+      const y = Number(k);
+      if (isValidReportYear(y)) set.add(y);
+    });
+  }
+  extraYears.forEach((y) => {
+    if (isValidReportYear(y)) set.add(y);
+  });
+
+  if (typeof window !== 'undefined') {
+    try {
+      const rawKnown = localStorage.getItem(KNOWN_YEARS_STORAGE_KEY);
+      if (rawKnown) {
+        const arr = JSON.parse(rawKnown);
+        if (Array.isArray(arr)) {
+          arr.forEach((y) => {
+            if (isValidReportYear(Number(y))) set.add(Number(y));
+          });
+        }
+      }
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith(YEARLY_DATA_KEY_PREFIX)) {
+          const y = parseInt(k.slice(YEARLY_DATA_KEY_PREFIX.length, YEARLY_DATA_KEY_PREFIX.length + 4), 10);
+          if (isValidReportYear(y)) set.add(y);
+        } else if (k.startsWith(YEARLY_META_KEY_PREFIX)) {
+          const y = parseInt(k.slice(YEARLY_META_KEY_PREFIX.length), 10);
+          if (isValidReportYear(y)) set.add(y);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return Array.from(set).sort((a, b) => a - b);
+}
+
+export interface RangeResyncOptions {
+  year: number;
+  monthKey: string;
+  incomingItems: ArchivedCaseReportItem[];
+  startDay: number;
+  endDay: number;
+  overwriteExistingSheetDays?: boolean;
+  overwriteManualEdits?: boolean;
+}
+
+export interface RangeResyncResult {
+  mergedItems: ArchivedCaseReportItem[];
+  updatedDaysCount: number;
+  newlyCapturedDays: number;
+  newlyAddedServices: number;
+  skippedManualDays: number;
+}
+
+export type AuditDiscrepancyType =
+  | 'value_changed'
+  | 'new_from_sheet'
+  | 'cleared_on_sheet'
+  | 'new_service';
+
+export interface RangeAuditDiscrepancy {
+  id: string;
+  year: number;
+  monthKey: string;
+  day: number;
+  dateLabel: string;
+  category: string;
+  serviceName: string;
+  serviceId?: string;
+  type: AuditDiscrepancyType;
+  systemValue: DailyCaseCount;
+  sheetValue: DailyCaseCount;
+  isManualLocked: boolean;
+  manualUpdatedBy?: string;
+  manualUpdatedAt?: string;
+}
+
+export interface RangeAuditResult {
+  discrepancies: RangeAuditDiscrepancy[];
+  checkedCellsCount: number;
+}
+
 export const reportArchiveService = {
   /**
    * Synchronous read from localStorage for initial render, including automatic one-time migration
@@ -270,12 +389,42 @@ export const reportArchiveService = {
     return combined;
   },
 
+  async getAllKnownYearsFromIDB(): Promise<number[]> {
+    const db = await openArchiveDB();
+    if (!db) return [];
+    return new Promise((resolve) => {
+      const years = new Set<number>();
+      try {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const rows = Array.isArray(req.result) ? req.result : [];
+          for (const row of rows) {
+            const y = Number(row?.year);
+            if (isValidReportYear(y)) years.add(y);
+          }
+          try { db.close(); } catch { /* ignore */ }
+          resolve(Array.from(years).sort((a, b) => a - b));
+        };
+        req.onerror = () => {
+          try { db.close(); } catch { /* ignore */ }
+          resolve([]);
+        };
+      } catch {
+        try { db.close(); } catch { /* ignore */ }
+        resolve([]);
+      }
+    });
+  },
+
   persistMonthArchive(
     year: number,
     monthKey: string,
     items: ArchivedCaseReportItem[],
     skipCloudPush = false
   ): void {
+    rememberKnownYear(year);
     try {
       localStorage.setItem(getYearMonthStorageKey(year, monthKey), JSON.stringify(items));
     } catch (err) {
@@ -528,6 +677,373 @@ export const reportArchiveService = {
       newlyAddedServices,
       protectedExistingDays
     };
+  },
+
+  /**
+   * Selective time-range re-sync from Google Sheets:
+   * - Days OUTSIDE [startDay..endDay] remain 100% untouched.
+   * - Days INSIDE [startDay..endDay] are updated from Google Sheet when `overwriteExistingSheetDays` is true.
+   * - Manually edited cells (`manualDays[d]`) remain protected unless `overwriteManualEdits` is explicitly enabled.
+   */
+  resyncMonthRangeIntoArchive(options: RangeResyncOptions): RangeResyncResult {
+    const {
+      year,
+      monthKey,
+      incomingItems,
+      startDay,
+      endDay,
+      overwriteExistingSheetDays = true,
+      overwriteManualEdits = false
+    } = options;
+
+    const minD = Math.max(1, Math.min(31, startDay));
+    const maxD = Math.max(minD, Math.min(31, endDay));
+    const existingStore = this.loadYearArchiveSync(year);
+    const existingItems = existingStore[monthKey] || [];
+    const nowIso = new Date().toISOString();
+
+    if (incomingItems.length === 0) {
+      return {
+        mergedItems: existingItems,
+        updatedDaysCount: 0,
+        newlyCapturedDays: 0,
+        newlyAddedServices: 0,
+        skippedManualDays: 0
+      };
+    }
+
+    let updatedDaysCount = 0;
+    let newlyCapturedDays = 0;
+    let newlyAddedServices = 0;
+    let skippedManualDays = 0;
+
+    if (existingItems.length === 0) {
+      const slicedItems = incomingItems.map((item) => {
+        const filteredDaily: { [day: number]: DailyCaseCount } = {};
+        for (let d = minD; d <= maxD; d++) {
+          const val = item.dailyData?.[d];
+          if (hasRecordedDayValue(val) && val) {
+            filteredDaily[d] = { ...val };
+            newlyCapturedDays += 1;
+          }
+        }
+        return {
+          ...item,
+          dailyData: filteredDaily,
+          lastSyncedAt: nowIso
+        };
+      });
+
+      this.persistMonthArchive(year, monthKey, slicedItems);
+      this.updateYearMeta(year, { lastSyncedAt: nowIso });
+      return {
+        mergedItems: slicedItems,
+        updatedDaysCount: 0,
+        newlyCapturedDays,
+        newlyAddedServices: slicedItems.length,
+        skippedManualDays: 0
+      };
+    }
+
+    const incomingByFullKey = new Map<string, ArchivedCaseReportItem>();
+    const incomingByName = new Map<string, ArchivedCaseReportItem>();
+    for (const inc of incomingItems) {
+      incomingByFullKey.set(normalizeServiceKey(inc.category, inc.name), inc);
+      incomingByName.set(inc.name.trim().toLowerCase(), inc);
+    }
+
+    const matchedIncomingKeys = new Set<string>();
+
+    const mergedItems: ArchivedCaseReportItem[] = existingItems.map((existing) => {
+      const fullKey = normalizeServiceKey(existing.category, existing.name);
+      const nameKey = existing.name.trim().toLowerCase();
+      const matchedIncoming = incomingByFullKey.get(fullKey) || incomingByName.get(nameKey);
+
+      if (!matchedIncoming) {
+        return existing;
+      }
+
+      matchedIncomingKeys.add(normalizeServiceKey(matchedIncoming.category, matchedIncoming.name));
+
+      const nextDailyData: { [day: number]: DailyCaseCount } = { ...(existing.dailyData || {}) };
+      const nextManualDays: { [day: number]: ManualDayAudit } = { ...(existing.manualDays || {}) };
+
+      for (let d = minD; d <= maxD; d++) {
+        const isManualLocked = Boolean(nextManualDays[d]);
+        if (isManualLocked && !overwriteManualEdits) {
+          skippedManualDays += 1;
+          continue;
+        }
+
+        const existingVal = nextDailyData[d];
+        const hasExistingVal = hasRecordedDayValue(existingVal);
+        const incomingVal = matchedIncoming.dailyData?.[d];
+        const hasIncomingVal = hasRecordedDayValue(incomingVal);
+
+        if (!overwriteExistingSheetDays && hasExistingVal) {
+          continue;
+        }
+
+        if (hasIncomingVal && incomingVal) {
+          const changed =
+            !existingVal ||
+            String(existingVal.bh) !== String(incomingVal.bh) ||
+            String(existingVal.nd) !== String(incomingVal.nd);
+          nextDailyData[d] = { ...incomingVal };
+          if (isManualLocked && overwriteManualEdits) {
+            delete nextManualDays[d];
+          }
+          if (!hasExistingVal) newlyCapturedDays += 1;
+          else if (changed) updatedDaysCount += 1;
+        } else if (overwriteExistingSheetDays && hasExistingVal) {
+          // Google Sheet explicitly cleared/zeroed this day inside selected re-sync window
+          nextDailyData[d] = { bh: 0, nd: 0 };
+          if (isManualLocked && overwriteManualEdits) {
+            delete nextManualDays[d];
+          }
+          updatedDaysCount += 1;
+        }
+      }
+
+      return {
+        ...existing,
+        dailyData: nextDailyData,
+        manualDays: Object.keys(nextManualDays).length > 0 ? nextManualDays : undefined,
+        lastSyncedAt: nowIso
+      };
+    });
+
+    for (const inc of incomingItems) {
+      const fullKey = normalizeServiceKey(inc.category, inc.name);
+      if (!matchedIncomingKeys.has(fullKey)) {
+        const alreadyExistsByName = mergedItems.some(
+          (m) => m.name.trim().toLowerCase() === inc.name.trim().toLowerCase()
+        );
+        if (!alreadyExistsByName) {
+          const filteredDaily: { [day: number]: DailyCaseCount } = {};
+          for (let d = minD; d <= maxD; d++) {
+            const val = inc.dailyData?.[d];
+            if (hasRecordedDayValue(val) && val) {
+              filteredDaily[d] = { ...val };
+              newlyCapturedDays += 1;
+            }
+          }
+          mergedItems.push({ ...inc, dailyData: filteredDaily, lastSyncedAt: nowIso });
+          newlyAddedServices += 1;
+        }
+      }
+    }
+
+    this.persistMonthArchive(year, monthKey, mergedItems);
+    this.updateYearMeta(year, { lastSyncedAt: nowIso });
+
+    return {
+      mergedItems,
+      updatedDaysCount,
+      newlyCapturedDays,
+      newlyAddedServices,
+      skippedManualDays
+    };
+  },
+
+  /**
+   * Read-only comparison between Google Sheet data and the persisted system archive
+   * within [startDay..endDay]. Never mutates stored data.
+   */
+  auditMonthRangeAgainstSheet(options: {
+    year: number;
+    monthKey: string;
+    incomingItems: ArchivedCaseReportItem[];
+    startDay: number;
+    endDay: number;
+  }): RangeAuditResult {
+    const { year, monthKey, incomingItems, startDay, endDay } = options;
+    const minD = Math.max(1, Math.min(31, startDay));
+    const maxD = Math.max(minD, Math.min(31, endDay));
+    const existingStore = this.loadYearArchiveSync(year);
+    const existingItems = existingStore[monthKey] || [];
+    const monthNum = parseInt(monthKey.replace(/[^0-9]/g, ''), 10) || 1;
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+
+    const normPart = (v: number | string | undefined): string => {
+      if (v === undefined || v === null || v === '') return '0';
+      if (String(v).trim().toUpperCase() === 'LT') return 'LT';
+      const n =
+        typeof v === 'number'
+          ? v
+          : parseInt(String(v).replace(/[^0-9]/g, ''), 10) || 0;
+      return String(n);
+    };
+
+    const toCleanCount = (val?: DailyCaseCount): DailyCaseCount => {
+      if (!val) return { bh: 0, nd: 0 };
+      const bhStr = normPart(val.bh);
+      const ndStr = normPart(val.nd);
+      return {
+        bh: bhStr === 'LT' ? 'LT' : parseInt(bhStr, 10) || 0,
+        nd: ndStr === 'LT' ? 'LT' : parseInt(ndStr, 10) || 0
+      };
+    };
+
+    const isSameCell = (a?: DailyCaseCount, b?: DailyCaseCount): boolean =>
+      normPart(a?.bh) === normPart(b?.bh) && normPart(a?.nd) === normPart(b?.nd);
+
+    const discrepancies: RangeAuditDiscrepancy[] = [];
+    let checkedCellsCount = 0;
+
+    const incomingByFullKey = new Map<string, ArchivedCaseReportItem>();
+    const incomingByName = new Map<string, ArchivedCaseReportItem>();
+    for (const inc of incomingItems) {
+      incomingByFullKey.set(normalizeServiceKey(inc.category, inc.name), inc);
+      incomingByName.set(inc.name.trim().toLowerCase(), inc);
+    }
+
+    const matchedIncomingKeys = new Set<string>();
+
+    for (const existing of existingItems) {
+      const fullKey = normalizeServiceKey(existing.category, existing.name);
+      const nameKey = existing.name.trim().toLowerCase();
+      const matchedIncoming =
+        incomingByFullKey.get(fullKey) || incomingByName.get(nameKey);
+
+      if (matchedIncoming) {
+        matchedIncomingKeys.add(
+          normalizeServiceKey(matchedIncoming.category, matchedIncoming.name)
+        );
+      }
+
+      for (let d = minD; d <= maxD; d++) {
+        checkedCellsCount += 1;
+        const sysVal = existing.dailyData?.[d];
+        const shtVal = matchedIncoming?.dailyData?.[d];
+
+        if (isSameCell(sysVal, shtVal)) continue;
+
+        const hasSys = hasRecordedDayValue(sysVal);
+        const hasSht = hasRecordedDayValue(shtVal);
+        if (!hasSys && !hasSht) continue;
+
+        const manualInfo = existing.manualDays?.[d];
+        const type: AuditDiscrepancyType = !hasSys && hasSht
+          ? 'new_from_sheet'
+          : hasSys && !hasSht
+            ? 'cleared_on_sheet'
+            : 'value_changed';
+
+        discrepancies.push({
+          id: `${year}_${monthNum}_${d}_${fullKey}`,
+          year,
+          monthKey,
+          day: d,
+          dateLabel: `${pad2(d)}/${pad2(monthNum)}/${year}`,
+          category: existing.category,
+          serviceName: existing.name,
+          serviceId: existing.id,
+          type,
+          systemValue: toCleanCount(sysVal),
+          sheetValue: toCleanCount(shtVal),
+          isManualLocked: Boolean(manualInfo),
+          manualUpdatedBy: manualInfo?.updatedBy,
+          manualUpdatedAt: manualInfo?.updatedAt
+        });
+      }
+    }
+
+    for (const inc of incomingItems) {
+      const fullKey = normalizeServiceKey(inc.category, inc.name);
+      if (matchedIncomingKeys.has(fullKey)) continue;
+      const existsByName = existingItems.some(
+        (m) => m.name.trim().toLowerCase() === inc.name.trim().toLowerCase()
+      );
+      if (existsByName) continue;
+
+      for (let d = minD; d <= maxD; d++) {
+        checkedCellsCount += 1;
+        const shtVal = inc.dailyData?.[d];
+        if (!hasRecordedDayValue(shtVal) || !shtVal) continue;
+
+        discrepancies.push({
+          id: `${year}_${monthNum}_${d}_new_${fullKey}`,
+          year,
+          monthKey,
+          day: d,
+          dateLabel: `${pad2(d)}/${pad2(monthNum)}/${year}`,
+          category: inc.category,
+          serviceName: inc.name,
+          serviceId: inc.id,
+          type: 'new_service',
+          systemValue: { bh: 0, nd: 0 },
+          sheetValue: toCleanCount(shtVal),
+          isManualLocked: false
+        });
+      }
+    }
+
+    return { discrepancies, checkedCellsCount };
+  },
+
+  /**
+   * Applies ONLY the user-approved discrepancies from an audit into the month archive
+   * and saves immediately. Days and services not included remain untouched.
+   */
+  applyAuditDiscrepanciesForMonth(
+    year: number,
+    monthKey: string,
+    approvedDiscrepancies: RangeAuditDiscrepancy[]
+  ): ArchivedCaseReportItem[] {
+    const existingStore = this.loadYearArchiveSync(year);
+    const existingItems = existingStore[monthKey] || [];
+    const nowIso = new Date().toISOString();
+
+    const nextItems: ArchivedCaseReportItem[] = existingItems.map((item) => ({
+      ...item,
+      dailyData: { ...(item.dailyData || {}) },
+      manualDays: item.manualDays ? { ...item.manualDays } : undefined
+    }));
+
+    for (const disc of approvedDiscrepancies) {
+      if (disc.year !== year || disc.monthKey !== monthKey) continue;
+
+      const targetKey = normalizeServiceKey(disc.category, disc.serviceName);
+      const targetName = disc.serviceName.trim().toLowerCase();
+
+      let targetItem = nextItems.find(
+        (item) =>
+          normalizeServiceKey(item.category, item.name) === targetKey ||
+          item.name.trim().toLowerCase() === targetName
+      );
+
+      if (!targetItem) {
+        targetItem = {
+          id:
+            disc.serviceId ||
+            `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          category: disc.category,
+          name: disc.serviceName,
+          dailyData: {},
+          lastSyncedAt: nowIso
+        };
+        nextItems.push(targetItem);
+      }
+
+      targetItem.dailyData[disc.day] = {
+        bh: disc.sheetValue.bh,
+        nd: disc.sheetValue.nd
+      };
+
+      if (targetItem.manualDays && targetItem.manualDays[disc.day]) {
+        delete targetItem.manualDays[disc.day];
+        if (Object.keys(targetItem.manualDays).length === 0) {
+          targetItem.manualDays = undefined;
+        }
+      }
+
+      targetItem.lastSyncedAt = nowIso;
+    }
+
+    this.persistMonthArchive(year, monthKey, nextItems);
+    this.updateYearMeta(year, { lastSyncedAt: nowIso });
+    return nextItems;
   },
 
   /**

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Calendar, CheckSquare, FolderOpen, MessageSquare, Settings,
   Activity, ChevronRight, Wrench, Building2, BarChart3, FileCheck, UserCheck,
-  Sparkles, SlidersHorizontal
+  Sparkles, SlidersHorizontal, History
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { User } from '../../types/hospital';
@@ -23,9 +23,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
 
+  const [pendingSyncDiscrepancies, setPendingSyncDiscrepancies] = useState<number>(() => {
+    return storageService.getSyncHistory().reduce(
+      (sum, entry) =>
+        sum +
+        (entry.discrepancies || []).filter(
+          (d) => !d.resolutionStatus || d.resolutionStatus === 'pending'
+        ).length,
+      0
+    );
+  });
+
   useEffect(() => {
     const unsubscribe = storageService.subscribe(() => {
       setCurrentUser(storageService.getCurrentUser());
+      const count = storageService.getSyncHistory().reduce(
+        (sum, entry) =>
+          sum +
+          (entry.discrepancies || []).filter(
+            (d) => !d.resolutionStatus || d.resolutionStatus === 'pending'
+          ).length,
+        0
+      );
+      setPendingSyncDiscrepancies(count);
     });
     return () => unsubscribe();
   }, []);
@@ -37,6 +57,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard CLS', icon: LayoutDashboard, badge: null },
     { id: 'ai-ecosystem', label: 'Hệ Sinh Thái AI CLS', icon: Sparkles, badge: '4 Trụ Cột' },
     { id: 'reports', label: 'Báo Cáo & Thống Kê', icon: BarChart3, badge: 'Mới' },
+    {
+      id: 'sync-history',
+      label: 'Lịch Sử Đồng Bộ',
+      icon: History,
+      badge: pendingSyncDiscrepancies > 0 ? `${pendingSyncDiscrepancies} lệch` : null
+    },
     { id: 'equipment', label: 'Quản Lý Máy Móc', icon: Wrench, badge: 'Thiết bị' },
     { id: 'rooms', label: 'Quản Lý Phòng / Bộ Phận', icon: Building2, badge: 'Cơ cấu' },
     { id: 'tasks', label: 'Công Việc & Kế Hoạch', icon: CheckSquare, badge: 'Hôm nay' },

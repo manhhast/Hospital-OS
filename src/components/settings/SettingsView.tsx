@@ -9,9 +9,12 @@ import { AppSettings, UserRole } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
 import {
-  AVAILABLE_REPORT_YEARS,
   DEFAULT_REPORT_YEAR,
-  getReportSheetConfigForYear
+  getKnownReportYears,
+  getReportSheetConfigForYear,
+  isValidReportYear,
+  MAX_REPORT_YEAR,
+  MIN_REPORT_YEAR
 } from '../../services/reportArchiveService';
 
 interface SettingsViewProps {
@@ -51,6 +54,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const [selectedSheetYear, setSelectedSheetYear] = useState<number>(() => {
     return settings.reportSheetYear || DEFAULT_REPORT_YEAR;
+  });
+  const [yearInputText, setYearInputText] = useState<string>(() => {
+    return String(settings.reportSheetYear || DEFAULT_REPORT_YEAR);
   });
 
   // Firebase Cloud Firestore State
@@ -168,16 +174,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const currentYearConfig = getReportSheetConfigForYear(settings, selectedSheetYear);
+  const quickSelectableYears = getKnownReportYears(settings, [selectedSheetYear]);
 
   const handleSelectReportYear = (nextYear: number) => {
-    setSelectedSheetYear(nextYear);
-    const nextCfg = getReportSheetConfigForYear(settings, nextYear);
+    const clamped = Math.max(MIN_REPORT_YEAR, Math.min(MAX_REPORT_YEAR, Math.round(nextYear)));
+    setSelectedSheetYear(clamped);
+    setYearInputText(String(clamped));
+    const nextCfg = getReportSheetConfigForYear(settings, clamped);
     setSettings((prev) => ({
       ...prev,
-      reportSheetYear: nextYear,
+      reportSheetYear: clamped,
       googleSheetUrl: nextCfg.url,
       reportGoogleSheetId: nextCfg.sheetId
     }));
+  };
+
+  const handleYearInputChange = (rawVal: string) => {
+    const digitsOnly = rawVal.replace(/[^0-9]/g, '').slice(0, 4);
+    setYearInputText(digitsOnly);
+    if (digitsOnly.length === 4) {
+      const parsed = parseInt(digitsOnly, 10);
+      if (isValidReportYear(parsed)) {
+        handleSelectReportYear(parsed);
+      }
+    }
+  };
+
+  const commitYearInput = () => {
+    const parsed = parseInt(yearInputText, 10);
+    if (isValidReportYear(parsed)) {
+      handleSelectReportYear(parsed);
+    } else {
+      setYearInputText(String(selectedSheetYear));
+    }
   };
 
   const updateActiveYearSheetConfig = (newUrl: string, newSheetId: string) => {
@@ -648,35 +677,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             Trang tính Google Sheets này dùng riêng để <strong className="text-slate-700 dark:text-slate-200">đọc dữ liệu giao ban số ca thực tế theo từng năm</strong> cho menu <strong className="text-slate-700 dark:text-slate-200">"Báo cáo &amp; Thống kê"</strong>. Hệ thống hỗ trợ đồng bộ tất cả 12 tháng (tên tab dạng <strong>Tháng 1</strong>..<strong>Tháng 12</strong>, <strong>Tháng 11/{selectedSheetYear}</strong>, <strong>T11</strong>, <strong>11/{selectedSheetYear}</strong>).
           </p>
 
-          {/* Year Selector & Configured Years Summary */}
+          {/* Year Selector (Direct Numeric Entry + Dynamic Configured Chips) */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
-            <div className="md:col-span-4">
+            <div className="md:col-span-5">
               <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                Chọn Năm Áp Dụng Google Sheet:
+                Nhập Năm Áp Dụng Google Sheet (tùy ý):
               </label>
-              <select
-                value={selectedSheetYear}
-                onChange={(e) => handleSelectReportYear(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl font-bold text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500 tabular-nums cursor-pointer"
-              >
-                {AVAILABLE_REPORT_YEARS.map((y) => {
-                  const cfg = getReportSheetConfigForYear(settings, y);
-                  return (
-                    <option key={y} value={y}>
-                      Năm {y}{cfg.sheetId ? ' (Đã gắn ID)' : ''}
-                    </option>
-                  );
-                })}
-              </select>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSelectReportYear(selectedSheetYear - 1)}
+                  disabled={selectedSheetYear <= MIN_REPORT_YEAR}
+                  className="px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+                  title="Năm trước"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={MIN_REPORT_YEAR}
+                  max={MAX_REPORT_YEAR}
+                  step={1}
+                  value={yearInputText}
+                  onChange={(e) => handleYearInputChange(e.target.value)}
+                  onBlur={commitYearInput}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitYearInput();
+                    }
+                  }}
+                  placeholder="VD: 2026"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl font-black text-center text-sm text-emerald-700 dark:text-emerald-300 outline-none focus:ring-2 focus:ring-emerald-500 tabular-nums"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSelectReportYear(selectedSheetYear + 1)}
+                  disabled={selectedSheetYear >= MAX_REPORT_YEAR}
+                  className="px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+                  title="Năm sau"
+                >
+                  +
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Nhập trực tiếp bất kỳ năm nào (vd: 2022, 2026, 2035...) hoặc chọn nhanh bên cạnh.
+              </p>
             </div>
 
-            <div className="md:col-span-8 space-y-1.5">
+            <div className="md:col-span-7 space-y-1.5">
               <span className="block font-semibold text-slate-600 dark:text-slate-300">
                 Chọn nhanh năm đã cấu hình nguồn dữ liệu:
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
-                {AVAILABLE_REPORT_YEARS.map((y) => {
+                {quickSelectableYears.map((y) => {
                   const cfg = getReportSheetConfigForYear(settings, y);
                   const hasId = Boolean(cfg.sheetId);
                   const isActiveYear = y === selectedSheetYear;
@@ -741,7 +796,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs">
             <Lock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong className="text-slate-800 dark:text-slate-100">Cơ chế lưu bất biến hằng ngày:</strong> Khi kéo số liệu từ Google Sheet theo ngày/tháng, dữ liệu được chốt và lưu trực tiếp lên kho lưu trữ hệ thống theo năm (IndexedDB + LocalStorage). Nếu sau này xóa hoặc sửa dữ liệu trên file Google Sheet cũng <strong>không làm mất hoặc ghi đè</strong> số liệu đã lưu — mọi điều chỉnh sau đó chỉ thực hiện bằng thao tác <strong>chỉnh sửa thủ công</strong> trong phân hệ Báo cáo &amp; Thống kê.
+              <strong className="text-slate-800 dark:text-slate-100">Lưu cố định trên Firebase &amp; Rà soát theo khoảng thời gian:</strong> Mọi dữ liệu kéo từ Google Sheet sẽ được lưu trữ cố định lên <strong>Firebase Cloud Firestore</strong> (cùng bản dự phòng IndexedDB/LocalStorage). Nếu xóa hoặc sửa file Google Sheet, dữ liệu đã lưu vẫn được bảo toàn; khi cần đối chiếu, hãy nhấn <strong>Rà soát số liệu</strong> theo khoảng thời gian tùy chọn để kiểm tra sai lệch và tự quyết định có cập nhật lại hay không.
             </div>
           </div>
         </div>

@@ -2,7 +2,8 @@ import {
   TaskItem, DocumentItem, User, NotificationLog, AuditLogItem, AppSettings, UserRole, CLSTitle,
   ShiftDuty, WorkTaskRow, WeeklyMeeting, ChatChannelMessage, ChatGroupChannel, DepartmentAnnouncement, MessageType, ShareCardData,
   EquipmentItem, EquipmentDurationDefaults, DepartmentUnit, ParaclinicalRoom, RoomReservation, StaffProfile, LeaveRequest, TrainingCourse,
-  MeetingItem, MeetingMinutes, MeetingActionItem, IntegrationEndpoint, IntegrationPayloadSample, MaintenanceLog, RepairLog
+  MeetingItem, MeetingMinutes, MeetingActionItem, IntegrationEndpoint, IntegrationPayloadSample, MaintenanceLog, RepairLog,
+  SyncHistoryEntry
 } from '../types/hospital';
 import { 
   initialTasks, initialDocuments, initialUsers, initialNotifications, initialAuditLogs, initialSettings,
@@ -37,7 +38,8 @@ export const STORAGE_KEYS = {
   INTEGRATION_ENDPOINTS: 'cls_workhub_integration_endpoints',
   INTEGRATION_PAYLOADS: 'cls_workhub_integration_payloads',
   WORK_TASK_ROWS: 'cls_workhub_work_task_rows',
-  EQUIPMENT_DURATION_DEFAULTS: 'cls_workhub_equipment_duration_defaults'
+  EQUIPMENT_DURATION_DEFAULTS: 'cls_workhub_equipment_duration_defaults',
+  SYNC_HISTORY: 'cls_workhub_sync_history'
 };
 
 export const CLOUD_BUCKET_STORAGE_MAP = {
@@ -62,7 +64,8 @@ export const CLOUD_BUCKET_STORAGE_MAP = {
   training_courses: STORAGE_KEYS.TRAINING_COURSES,
   integration_endpoints: STORAGE_KEYS.INTEGRATION_ENDPOINTS,
   integration_payloads: STORAGE_KEYS.INTEGRATION_PAYLOADS,
-  equipment_duration_defaults: STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS
+  equipment_duration_defaults: STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS,
+  sync_history: STORAGE_KEYS.SYNC_HISTORY
 } as const;
 
 export type CloudBucketKey = keyof typeof CLOUD_BUCKET_STORAGE_MAP;
@@ -2294,6 +2297,68 @@ class HospitalStorageService {
   // Khôi phục mặc định (tương đương dọn sạch sang chế độ thực tế)
   public resetToDefault() {
     this.purgeAllTrialData();
+  }
+
+  // --- Data Sync History (Google Sheet <-> Firebase) ---
+  public getSyncHistory(): SyncHistoryEntry[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SYNC_HISTORY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as SyncHistoryEntry[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public addSyncHistoryEntry(entry: SyncHistoryEntry): SyncHistoryEntry[] {
+    const current = this.getSyncHistory();
+    const trimmedEntry: SyncHistoryEntry = {
+      ...entry,
+      autoWrittenSamples: entry.autoWrittenSamples?.slice(0, 40),
+      discrepancies: entry.discrepancies?.slice(0, 80)
+    };
+    const next = [trimmedEntry, ...current.filter((e) => e.id !== entry.id)].slice(0, 80);
+    this.safeSetItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify(next));
+    this.notify();
+    return next;
+  }
+
+  public updateSyncHistoryDiscrepancyStatus(
+    entryId: string,
+    discrepancyId: string,
+    resolution: 'updated_from_sheet' | 'kept_system'
+  ): SyncHistoryEntry[] {
+    const nowDisplay = new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16);
+    const actor = this.getCurrentUser()?.name || 'Cán bộ CLS';
+    const current = this.getSyncHistory();
+    const next = current.map((entry) => {
+      if (entry.id !== entryId || !Array.isArray(entry.discrepancies)) return entry;
+      const updatedDiscs = entry.discrepancies.map((d) =>
+        d.id === discrepancyId
+          ? {
+              ...d,
+              resolutionStatus: resolution,
+              resolvedAt: nowDisplay,
+              resolvedBy: actor
+            }
+          : d
+      );
+      const pendingLeft = updatedDiscs.filter(
+        (d) => !d.resolutionStatus || d.resolutionStatus === 'pending'
+      ).length;
+      return {
+        ...entry,
+        discrepancies: updatedDiscs,
+        status:
+          pendingLeft === 0 && entry.status === 'discrepancy_alert'
+            ? 'success'
+            : entry.status
+      };
+    });
+    this.safeSetItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify(next));
+    this.notify();
+    return next;
   }
 }
 

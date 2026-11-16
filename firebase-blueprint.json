@@ -255,7 +255,7 @@
         },
         "year": {
           "type": "number",
-          "description": "Calendar year of the report archive."
+          "description": "Calendar year of the report archive (1900-2100)."
         },
         "monthKey": {
           "type": "string",
@@ -320,7 +320,7 @@
       "schema": {
         "$ref": "#/entities/DataBucket"
       },
-      "description": "Operational data buckets (tasks, equipment, staff, schedule, rooms, settings, Drive document index)."
+      "description": "Operational data buckets (tasks, equipment, staff, schedule, rooms, settings, Drive document index, data sync history)."
     },
     "/workspaces/{workspaceId}/report_archives/{archiveKey}": {
       "schema": {

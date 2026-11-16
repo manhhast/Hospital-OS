@@ -635,6 +635,7 @@ export interface AppSettings {
   googleDriveFolderId: string;
   // 1. Google Sheet Báo Cáo Số Ca (Case Reports Data)
   reportSheetYear?: number;
+  archivedReportYears?: number[];
   reportGoogleSheetsByYear?: Record<string, ReportSheetYearConfig>;
   googleSheetUrl?: string;
   reportGoogleSheetId?: string;
@@ -678,5 +679,56 @@ export interface GASFileCode {
   language: 'javascript' | 'html' | 'css';
   description: string;
   code: string;
+}
+
+export type SyncHistoryTrigger = 'startup_3d_auto' | 'manual_3d' | 'manual_range_audit';
+export type SyncHistoryStatus = 'success' | 'discrepancy_alert' | 'no_change' | 'error';
+
+export interface SyncHistoryDiscrepancyItem {
+  id: string;
+  year: number;
+  monthKey: string;
+  day: number;
+  dateLabel: string;
+  category: string;
+  serviceName: string;
+  type: 'value_changed' | 'cleared_on_sheet' | 'new_from_sheet' | 'new_service';
+  systemBh: number | string;
+  systemNd: number | string;
+  sheetBh: number | string;
+  sheetNd: number | string;
+  isManualLocked?: boolean;
+  resolutionStatus?: 'pending' | 'updated_from_sheet' | 'kept_system';
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
+export interface SyncHistoryAutoWrittenItem {
+  dateLabel: string;
+  category: string;
+  serviceName: string;
+  bh: number | string;
+  nd: number | string;
+}
+
+export interface SyncHistoryEntry {
+  id: string;
+  timestamp: string;
+  displayTime: string;
+  trigger: SyncHistoryTrigger;
+  dateRangeLabel: string;
+  startDate: string;
+  endDate: string;
+  status: SyncHistoryStatus;
+  checkedCellsCount: number;
+  autoWrittenCount: number;
+  discrepancyCount: number;
+  updatedFromSheetCount: number;
+  savedOnFirebase: boolean;
+  firebaseNote?: string;
+  performedBy: string;
+  summary: string;
+  autoWrittenSamples?: SyncHistoryAutoWrittenItem[];
+  discrepancies?: SyncHistoryDiscrepancyItem[];
 }
 

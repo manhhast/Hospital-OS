@@ -172,6 +172,7 @@ export const Header: React.FC<HeaderProps> = ({
       case 'schedule': return 'Lịch trực & Ca công tác';
       case 'meetings': return 'Cuộc họp & Hội chẩn';
       case 'reports': return 'Báo cáo & Thống kê';
+      case 'sync-history': return 'Lịch sử Đồng bộ Dữ liệu';
       case 'integration': return 'Cấu hình · Cổng API HIS/LIS/PACS';
       case 'discussion': return 'Kênh Trao đổi Nội bộ';
       case 'notifications': return 'Cấu hình · Thông báo Nội bộ';

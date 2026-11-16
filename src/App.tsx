@@ -20,11 +20,13 @@ import { RoomManagementView } from './components/rooms/RoomManagementView';
 import { StaffManagementView } from './components/hr/StaffManagementView';
 import { MeetingManagementView } from './components/meetings/MeetingManagementView';
 import { ReportsAnalyticsView } from './components/reports/ReportsAnalyticsView';
+import { SyncHistoryView } from './components/reports/SyncHistoryView';
 import { AIEcosystemView } from './components/ai/AIEcosystemView';
 import { AuthModal } from './components/auth/AuthModal';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { storageService } from './services/storageService';
 import { firebaseSyncService } from './services/firebaseSyncService';
+import { runThreeDaySmartSync } from './services/googleSheetReportService';
 import { ToastMessage, TaskItem, DocumentItem, NotificationLog, User } from './types/hospital';
 
 const ADMIN_ONLY_MODULES: string[] = CONFIG_MODULE_IDS;
@@ -110,6 +112,13 @@ export default function App() {
   // Modal Triggers
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [isUploadDocOpen, setIsUploadDocOpen] = useState(false);
+  const [pendingAuditRequest, setPendingAuditRequest] = useState<{
+    startDate?: string;
+    endDate?: string;
+    year?: number;
+    nonce: number;
+  } | null>(null);
+  const startupThreeDayDoneRef = useRef<boolean>(false);
 
   // Data States
   const [tasks, setTasks] = useState<TaskItem[]>(storageService.getTasks());
@@ -131,6 +140,67 @@ export default function App() {
       firebaseSyncService.destroy();
     };
   }, []);
+
+  // Automatic 3-day smart sync on app startup (after Firebase initial hydration settles)
+  useEffect(() => {
+    if (!isAuthenticated || startupThreeDayDoneRef.current) return;
+
+    let cancelled = false;
+    let fallbackTimer: number | undefined;
+
+    const executeStartupThreeDaySync = async () => {
+      if (cancelled || startupThreeDayDoneRef.current) return;
+      startupThreeDayDoneRef.current = true;
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+
+      const outcome = await runThreeDaySmartSync('startup_3d_auto');
+      if (cancelled || !outcome.ran) return;
+
+      if (outcome.alertDiscrepancies.length > 0) {
+        showToast(
+          'Cảnh báo sai lệch 3 ngày gần nhất',
+          `Phát hiện ${outcome.alertDiscrepancies.length} mục sai lệch giữa Firebase và Google Sheet (đã giữ nguyên dữ liệu & lưu vào Lịch sử đồng bộ).`,
+          'warning'
+        );
+      } else if (outcome.autoWrittenCount > 0) {
+        showToast(
+          'Đồng bộ tự động 3 ngày gần nhất',
+          `Đã rà soát và tự động ghi mới ${outcome.autoWrittenCount} ô từ Google Sheet lên Firebase.`,
+          'success'
+        );
+      }
+    };
+
+    const currentCloud = firebaseSyncService.getState();
+    if (currentCloud.status !== 'connecting' && currentCloud.status !== 'syncing') {
+      const quickTimer = window.setTimeout(() => {
+        void executeStartupThreeDaySync();
+      }, 900);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(quickTimer);
+      };
+    }
+
+    const unsubCloud = firebaseSyncService.subscribe(() => {
+      const nextCloud = firebaseSyncService.getState();
+      if (nextCloud.status !== 'connecting' && nextCloud.status !== 'syncing') {
+        unsubCloud();
+        void executeStartupThreeDaySync();
+      }
+    });
+
+    fallbackTimer = window.setTimeout(() => {
+      unsubCloud();
+      void executeStartupThreeDaySync();
+    }, 5500);
+
+    return () => {
+      cancelled = true;
+      unsubCloud();
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+    };
+  }, [isAuthenticated]);
 
   // Admin access guard: If non-admin attempts to view admin-only modules, redirect to dashboard
   useEffect(() => {
@@ -318,7 +388,26 @@ export default function App() {
           )}
 
           {activeModule === 'reports' && (
-            <ReportsAnalyticsView />
+            <ReportsAnalyticsView
+              pendingAuditRequest={pendingAuditRequest}
+              onClearPendingAuditRequest={() => setPendingAuditRequest(null)}
+              onShowToast={showToast}
+            />
+          )}
+
+          {activeModule === 'sync-history' && (
+            <SyncHistoryView
+              onShowToast={showToast}
+              onOpenRangeAudit={(startDate, endDate, year) => {
+                setPendingAuditRequest({
+                  startDate,
+                  endDate,
+                  year,
+                  nonce: Date.now()
+                });
+                setActiveModule('reports');
+              }}
+            />
           )}
 
           {activeModule === 'equipment' && (

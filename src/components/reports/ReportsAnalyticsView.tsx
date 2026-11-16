@@ -3,7 +3,8 @@ import {
   BarChart3, TrendingUp, PieChart, Calendar, FileSpreadsheet, Download, 
   CheckCircle2, Wrench, Activity, Users, FileText, ArrowUpRight, ArrowDownRight, Search,
   RefreshCw, Link, Edit3, Table, Layers, Sparkles, Filter, Check, Save, Upload, Plus, ChevronLeft, ChevronRight,
-  Pin, Star, Bookmark, AlertTriangle, AlertCircle, Eye, EyeOff, SlidersHorizontal, Copy, Send, Printer, X, Lock, Database
+  Pin, Star, Bookmark, AlertTriangle, AlertCircle, Eye, EyeOff, SlidersHorizontal, Copy, Send, Printer, X, Lock, Database,
+  Cloud, CloudOff, RotateCcw, History
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -14,20 +15,51 @@ import * as XLSX from 'xlsx';
 import { PinnedIndicatorsPanel } from './PinnedIndicatorsPanel';
 import { ContextualBenchmarkingModal } from './ContextualBenchmarkingModal';
 import { FastPinManagerModal } from './FastPinManagerModal';
+import { SyncHistoryView } from './SyncHistoryView';
 import { 
   getPinnedServiceNames, savePinnedServiceNames, calculateClinicalTriage, 
   ClinicalTriageResult, DEFAULT_PINNED_SERVICE_NAMES 
 } from '../../utils/clinicalAnalytics';
 import { scanEquipmentExpirations, scanTaskReminders } from '../../utils/operationalAlerts';
 import {
-  AVAILABLE_REPORT_YEARS,
   DEFAULT_REPORT_YEAR,
+  getKnownReportYears,
   getReportSheetConfigForYear,
+  isValidReportYear,
+  MAX_REPORT_YEAR,
+  MIN_REPORT_YEAR,
+  RangeAuditDiscrepancy,
   REPORT_ARCHIVE_UPDATED_EVENT,
   reportArchiveService,
   REPORT_MONTHS
 } from '../../services/reportArchiveService';
-import { firebaseSyncService } from '../../services/firebaseSyncService';
+import {
+  fetchRawTabCsv,
+  fetchSingleSheetTab,
+  getDaysInMonth,
+  getMonthNumber,
+  getRecentThreeDaysWindow,
+  isValidServiceName,
+  resolveSpreadsheetId,
+  runThreeDaySmartSync
+} from '../../services/googleSheetReportService';
+import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
+import type { SyncHistoryDiscrepancyItem, SyncHistoryEntry } from '../../types/hospital';
+
+interface ReportsAnalyticsViewProps {
+  pendingAuditRequest?: {
+    startDate?: string;
+    endDate?: string;
+    year?: number;
+    nonce: number;
+  } | null;
+  onClearPendingAuditRequest?: () => void;
+  onShowToast?: (
+    title: string,
+    message: string,
+    type?: 'success' | 'error' | 'warning' | 'info'
+  ) => void;
+}
 
 // Data model for daily case report row matching the Google Sheet screenshot
 export interface CaseReportItem {
@@ -121,84 +153,6 @@ const findLatestDayInItems = (items: CaseReportItem[], maxDay: number = 31): num
 
 const ALL_MONTHS = REPORT_MONTHS;
 
-const getMonthNumber = (monthStr: string): number => {
-  const match = String(monthStr || '').match(/(\d{1,2})/);
-  const num = match ? parseInt(match[1], 10) : 0;
-  return num >= 1 && num <= 12 ? num : 1;
-};
-
-const getDaysInMonth = (monthStr: string, year: number = 2026): number => {
-  const mNum = getMonthNumber(monthStr);
-  if (mNum === 2) {
-    const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-    return isLeap ? 29 : 28;
-  }
-  if (mNum === 4 || mNum === 6 || mNum === 9 || mNum === 11) {
-    return 30;
-  }
-  return 31;
-};
-
-const getCandidateTabNames = (monthKey: string, year: number = 2026): string[] => {
-  const mNum = getMonthNumber(monthKey);
-  const pad2 = String(mNum).padStart(2, '0');
-  const rawCandidates = [
-    monthKey,
-    `Tháng ${mNum}/${year}`,
-    `Tháng ${mNum}-${year}`,
-    `Tháng ${mNum} ${year}`,
-    `Tháng ${mNum} năm ${year}`,
-    `T${mNum}`,
-    `T${mNum}/${year}`,
-    `T${mNum}-${year}`,
-    `${mNum}/${year}`,
-    `${mNum}-${year}`,
-    `Thang ${mNum}`,
-    `Thang ${mNum}/${year}`,
-    ...(mNum < 10
-      ? [
-          `Tháng ${pad2}`,
-          `Tháng ${pad2}/${year}`,
-          `Tháng ${pad2}-${year}`,
-          `T${pad2}`,
-          `T${pad2}/${year}`,
-          `${pad2}/${year}`,
-          `${pad2}-${year}`
-        ]
-      : [])
-  ];
-  return Array.from(new Set(rawCandidates));
-};
-
-const detectMonthInSheetCsv = (csvText: string): number | null => {
-  const headerSample = csvText.split(/\r?\n/).slice(0, 12).join(' ');
-  const thangMatch = headerSample.match(/\b(?:tháng|thang)\s*0?(\d{1,2})\b/i);
-  if (thangMatch) {
-    const num = parseInt(thangMatch[1], 10);
-    if (num >= 1 && num <= 12) return num;
-  }
-  const monthYearMatch = headerSample.match(/\b0?(\d{1,2})\s*[\/\-]\s*202\d\b/);
-  if (monthYearMatch) {
-    const num = parseInt(monthYearMatch[1], 10);
-    if (num >= 1 && num <= 12) return num;
-  }
-  const shortTMatch = headerSample.match(/\bT0?(\d{1,2})\b/);
-  if (shortTMatch) {
-    const num = parseInt(shortTMatch[1], 10);
-    if (num >= 1 && num <= 12) return num;
-  }
-  return null;
-};
-
-const resolveSpreadsheetId = (urlOrId?: string): string | null => {
-  const raw = String(urlOrId || '').trim();
-  if (!raw) return null;
-  const urlMatch = raw.match(/\/d\/([a-zA-Z0-9-_]+)/);
-  if (urlMatch && urlMatch[1]) return urlMatch[1];
-  if (/^[a-zA-Z0-9-_]{20,}$/.test(raw)) return raw;
-  return null;
-};
-
 // Helper to find the latest month and day that has valid data across all stored months
 const findLatestDataDate = (
   store: { [monthKey: string]: CaseReportItem[] },
@@ -261,14 +215,20 @@ const monthToFirstWeekMap: { [m: string]: number } = {
   'Tháng 12': 49
 };
 
-export const ReportsAnalyticsView: React.FC = () => {
+export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
+  pendingAuditRequest,
+  onClearPendingAuditRequest,
+  onShowToast
+}) => {
   const initialSettings = storageService.getSettings();
   const initialYear = initialSettings.reportSheetYear || DEFAULT_REPORT_YEAR;
   const initialStore = reportArchiveService.loadYearArchiveSync(initialYear);
   const initialLatest = findLatestDataDate(initialStore, undefined, initialYear);
 
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'google_sheet'>('google_sheet');
+  const [yearInputStr, setYearInputStr] = useState<string>(() => String(initialYear));
+  const [cloudState, setCloudState] = useState<FirebaseCloudState>(() => firebaseSyncService.getState());
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'google_sheet' | 'sync_history'>('google_sheet');
   const [timePeriod, setTimePeriod] = useState<string>(`${initialLatest.month}/${initialYear}`);
   const [sheetTab, setSheetTab] = useState<string>('Báo cáo ngày');
 
@@ -277,30 +237,6 @@ export const ReportsAnalyticsView: React.FC = () => {
   const [selectedReportDay, setSelectedReportDay] = useState<number>(initialLatest.day);
   const [selectedReportWeek, setSelectedReportWeek] = useState<number>(initialLatest.week);
   const [annualViewMode, setAnnualViewMode] = useState<'full' | 'actual_only'>('full');
-
-  // Helper to check if a parsed name is a valid service name (filters out dummy header rows like "THÁNG 3", "STT", etc.)
-  const isValidServiceName = (rawName: string): boolean => {
-    if (!rawName || typeof rawName !== 'string') return false;
-    const clean = rawName.trim();
-    if (clean.length < 2) return false;
-    if (/^\d+$/.test(clean)) return false;
-    const u = clean.toUpperCase();
-    if (
-      u.startsWith('THÁNG') ||
-      u.startsWith('THANG') ||
-      u.startsWith('TÊN KỸ') ||
-      u.startsWith('KỸ THUẬT') ||
-      u.startsWith('DỊCH VỤ') ||
-      u.startsWith('STT') ||
-      u.startsWith('TỔNG') ||
-      u.startsWith('CỘNG') ||
-      u.startsWith('BÁO CÁO') ||
-      u.startsWith('GHI CHÚ') ||
-      u.startsWith('NGÀY')
-    ) return false;
-    if (u === 'BH' || u === 'ND' || u === 'TỔNG CỘNG' || u === 'BÁO CÁO TỔNG HỢP' || u === 'MÃ DỊCH VỤ' || u === 'LOẠI') return false;
-    return true;
-  };
 
   // Multi-month data cache store (scoped to selectedYear and backed by System Archive)
   const [monthlyDataStore, setMonthlyDataStore] = useState<{ [monthKey: string]: CaseReportItem[] }>(initialStore);
@@ -336,6 +272,28 @@ export const ReportsAnalyticsView: React.FC = () => {
   const [isDailyEntryOpen, setIsDailyEntryOpen] = useState<boolean>(false);
   const [dailyDraftValues, setDailyDraftValues] = useState<Record<string, { bh: string; nd: string }>>({});
   const [copiedHandover, setCopiedHandover] = useState<boolean>(false);
+
+  // Selective Range Audit & Discrepancy Confirmation Modal State
+  const [isResyncModalOpen, setIsResyncModalOpen] = useState<boolean>(false);
+  const [resyncYear, setResyncYear] = useState<number>(initialYear);
+  const [resyncYearInput, setResyncYearInput] = useState<string>(String(initialYear));
+  const [resyncStartDate, setResyncStartDate] = useState<string>(`${initialYear}-01-01`);
+  const [resyncEndDate, setResyncEndDate] = useState<string>(`${initialYear}-01-31`);
+  const [auditStep, setAuditStep] = useState<'select' | 'checking' | 'result'>('select');
+  const [auditDiscrepancies, setAuditDiscrepancies] = useState<RangeAuditDiscrepancy[]>([]);
+  const [selectedDiscrepancyIds, setSelectedDiscrepancyIds] = useState<Record<string, boolean>>({});
+  const [auditCheckedCells, setAuditCheckedCells] = useState<number>(0);
+  const [auditCheckedMonths, setAuditCheckedMonths] = useState<number>(0);
+  const [auditMissingTabs, setAuditMissingTabs] = useState<string[]>([]);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [isApplyingAudit, setIsApplyingAudit] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = firebaseSyncService.subscribe(() => {
+      setCloudState(firebaseSyncService.getState());
+    });
+    return () => unsub();
+  }, []);
 
   // Toggle Pin for a service
   const handleTogglePinService = (serviceName: string) => {
@@ -612,379 +570,74 @@ export const ReportsAnalyticsView: React.FC = () => {
     ];
   });
 
-  // Helper parser for Google Sheet CSV rows
-  const parseGoogleSheetRowsToCaseReports = (rows: any[][]): CaseReportItem[] => {
-    const items: CaseReportItem[] = [];
-    let currentCategory = 'Siêu Âm';
+  // Helper to record manual Range Audit entries into Sync History
+  const mapDiscrepanciesForHistory = (
+    discs: RangeAuditDiscrepancy[],
+    statusResolver: (d: RangeAuditDiscrepancy) => 'pending' | 'updated_from_sheet' | 'kept_system'
+  ): SyncHistoryDiscrepancyItem[] => {
+    return discs.slice(0, 80).map((d) => ({
+      id: d.id,
+      year: d.year,
+      monthKey: d.monthKey,
+      day: d.day,
+      dateLabel: d.dateLabel,
+      category: d.category,
+      serviceName: d.serviceName,
+      type: d.type,
+      systemBh: d.systemValue.bh,
+      systemNd: d.systemValue.nd,
+      sheetBh: d.sheetValue.bh,
+      sheetNd: d.sheetValue.nd,
+      isManualLocked: d.isManualLocked,
+      resolutionStatus: statusResolver(d)
+    }));
+  };
 
-    // Build explicit day-to-column map by scanning top header rows
-    const dayMap: { [day: number]: { bhCol: number; ndCol: number } } = {};
-    let foundHeaderRow = false;
-
-    const extractDayNumber = (rawCell: string): number | null => {
-      const val = rawCell.trim();
-      if (!val) return null;
-      // Match "1", "01", "Ngày 1", "Ngày 01", "Ng 1", "N1"
-      const simpleMatch = val.match(/^(?:ngày|ngay|ng|n)?\s*0?(\d{1,2})$/i);
-      if (simpleMatch) {
-        const d = parseInt(simpleMatch[1], 10);
-        if (d >= 1 && d <= 31) return d;
-      }
-      // Match "1/11", "01/11/2026", "01-11-2026"
-      const dateMatch = val.match(/^0?(\d{1,2})\s*[\/\-]\s*0?\d{1,2}(?:\s*[\/\-]\s*\d{2,4})?$/);
-      if (dateMatch) {
-        const d = parseInt(dateMatch[1], 10);
-        if (d >= 1 && d <= 31) return d;
-      }
-      return null;
+  const logRangeAuditToHistory = (params: {
+    status: SyncHistoryEntry['status'];
+    checkedCellsCount: number;
+    discrepancyCount: number;
+    updatedFromSheetCount: number;
+    savedOnFirebase: boolean;
+    firebaseNote?: string;
+    summary: string;
+    discrepancies?: SyncHistoryDiscrepancyItem[];
+  }) => {
+    const now = new Date();
+    const currentUser = storageService.getCurrentUser();
+    const startLabel = resyncStartDate.split('-').reverse().join('/');
+    const endLabel = resyncEndDate.split('-').reverse().join('/');
+    const entry: SyncHistoryEntry = {
+      id: `AUDIT-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: now.toISOString(),
+      displayTime: now.toLocaleString('sv-SE').replace('T', ' ').slice(0, 16),
+      trigger: 'manual_range_audit',
+      dateRangeLabel: `${startLabel} – ${endLabel}`,
+      startDate: resyncStartDate,
+      endDate: resyncEndDate,
+      status: params.status,
+      checkedCellsCount: params.checkedCellsCount,
+      autoWrittenCount: 0,
+      discrepancyCount: params.discrepancyCount,
+      updatedFromSheetCount: params.updatedFromSheetCount,
+      savedOnFirebase: params.savedOnFirebase,
+      firebaseNote:
+        params.firebaseNote ||
+        (params.savedOnFirebase
+          ? 'Đã lưu cố định trên Firebase Cloud Firestore'
+          : 'Lưu cục bộ (chưa kết nối Firebase)'),
+      performedBy: currentUser?.name || currentUser?.email || 'Quản trị viên',
+      summary: params.summary,
+      discrepancies: params.discrepancies
     };
-
-    for (let r = 0; r < Math.min(rows.length, 15); r++) {
-      const row = rows[r];
-      if (!row) continue;
-
-      const daysInRow: { day: number; col: number }[] = [];
-      for (let c = 0; c < row.length; c++) {
-        const val = String(row[c] || '').trim();
-        const dayNum = extractDayNumber(val);
-        if (dayNum !== null) {
-          const contextStr = row.slice(Math.max(0, c - 1), c + 2).join(' ').toLowerCase();
-          if (!contextStr.includes('tổng') && !contextStr.includes('total') && !contextStr.includes('tb') && !contextStr.includes('tháng')) {
-            daysInRow.push({ day: dayNum, col: c });
-          }
-        }
-      }
-
-      if (daysInRow.length >= 3) {
-        foundHeaderRow = true;
-        const subHeaderRow = rows[r + 1] || [];
-        for (let idx = 0; idx < daysInRow.length; idx++) {
-          const item = daysInRow[idx];
-          const nextItem = daysInRow[idx + 1];
-          const isSingleColPerDay = nextItem && nextItem.col === item.col + 1;
-          const nextSubCell = String(subHeaderRow[item.col + 1] || '').trim().toUpperCase();
-          const hasExplicitNdCol = !isSingleColPerDay && (nextSubCell === 'ND' || !nextItem || nextItem.col >= item.col + 2);
-          dayMap[item.day] = {
-            bhCol: item.col,
-            ndCol: hasExplicitNdCol ? item.col + 1 : -1
-          };
-        }
-        break;
-      }
-    }
-
-    // Fallback if day header row wasn't explicitly detected: assume day 1 starts at col 2
-    if (!foundHeaderRow || Object.keys(dayMap).length === 0) {
-      for (let d = 1; d <= 31; d++) {
-        dayMap[d] = { bhCol: 2 + (d - 1) * 2, ndCol: 3 + (d - 1) * 2 };
-      }
-    }
-
-    for (let r = 0; r < rows.length; r++) {
-      const row = rows[r];
-      if (!row || row.length === 0) continue;
-
-      const col0 = String(row[0] || '').trim();
-      const col1 = String(row[1] || '').trim();
-      const col2 = String(row[2] || '').trim();
-      const combinedText = `${col0} ${col1} ${col2}`.toLowerCase();
-
-      if (combinedText.includes('siêu âm') && !combinedText.includes('tổng số')) currentCategory = 'Siêu Âm';
-      else if (combinedText.includes('nội soi') && !combinedText.includes('tổng số')) currentCategory = 'Nội Soi';
-      else if ((combinedText.includes('điện tim') || combinedText.includes('lhn') || combinedText.includes('lưu huyết não')) && !combinedText.includes('tổng số')) currentCategory = 'Điện tim & LHN';
-      else if (combinedText.includes('x quang') && !combinedText.includes('tổng số')) currentCategory = 'X quang';
-      else if (combinedText.includes('msct') || combinedText.includes('ct scanner')) currentCategory = 'MSCT';
-      else if (combinedText.includes('mri') || combinedText.includes('cộng hưởng từ')) currentCategory = 'MRI';
-      else if (combinedText.includes('xét nghiệm') && !combinedText.includes('tổng số')) currentCategory = 'Xét nghiệm';
-
-      const rawName = col1 || (col0 && !col0.includes('BÁO CÁO') && !col0.includes('Ngày') && !col0.includes('Tổng số') ? col0 : '');
-      const name = rawName.trim();
-
-      if (!isValidServiceName(name)) {
-        continue;
-      }
-
-      let itemCategory = currentCategory;
-      const lowerName = name.toLowerCase();
-      if (lowerName.includes('điện tim') || lowerName.includes('lưu huyết não')) {
-        itemCategory = 'Điện tim & LHN';
-      }
-
-      const dailyData: { [day: number]: { bh: number | string; nd: number | string } } = {};
-      const sortedDays = Object.keys(dayMap).map(Number).sort((a, b) => a - b);
-
-      for (const day of sortedDays) {
-        const { bhCol, ndCol } = dayMap[day];
-        if (bhCol >= row.length && (ndCol < 0 || ndCol >= row.length)) continue;
-
-        const rawBh = bhCol >= 0 && bhCol < row.length ? String(row[bhCol] || '').trim() : '';
-        const rawNd = ndCol >= 0 && ndCol < row.length ? String(row[ndCol] || '').trim() : '';
-
-        let bhVal: number | string = 0;
-        let ndVal: number | string = 0;
-
-        if (rawBh.toUpperCase() === 'LT') bhVal = 'LT';
-        else bhVal = parseInt(rawBh.replace(/[^0-9]/g, ''), 10) || 0;
-
-        if (rawNd.toUpperCase() === 'LT') ndVal = 'LT';
-        else ndVal = parseInt(rawNd.replace(/[^0-9]/g, ''), 10) || 0;
-
-        if (bhVal || ndVal) {
-          dailyData[day] = { bh: bhVal, nd: ndVal };
-        }
-      }
-
-      items.push({
-        id: `item-${r}-${items.length}-${Math.random().toString(36).substr(2, 5)}`,
-        category: itemCategory,
-        name,
-        dailyData
-      });
-    }
-
-    return items;
+    storageService.addSyncHistoryEntry(entry);
   };
 
-  // Fetch raw CSV text of a Google Sheet tab (no browser cache)
-  const fetchRawTabCsv = async (spreadsheetId: string, tabName: string): Promise<string | null> => {
-    try {
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-      const response = await fetch(csvUrl, { cache: 'no-store' });
-      if (!response.ok) return null;
-      const csvText = await response.text();
-      if (!csvText || csvText.includes('<!DOCTYPE html>')) return null;
-      return csvText;
-    } catch {
-      return null;
-    }
-  };
-
-  // Parse a raw CSV text into CaseReportItem[]
-  const parseCsvTextToItems = (csvText: string): CaseReportItem[] => {
-    const workbook = XLSX.read(csvText, { type: 'string' });
-    const firstSheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[firstSheetName];
-    const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-    if (rows && rows.length > 0) {
-      return parseGoogleSheetRowsToCaseReports(rows);
-    }
-    return [];
-  };
-
-  // Fetch a single month/tab from Google Sheet, avoiding gviz's silent Tab-1 fallback when tabName is missing
-  const fetchSingleTab = async (
-    targetUrl: string,
-    targetTab: string,
-    probeCsv?: string | null,
-    targetYear: number = selectedYear
-  ): Promise<CaseReportItem[] | null> => {
-    try {
-      const spreadsheetId = resolveSpreadsheetId(targetUrl);
-      if (!spreadsheetId) return null;
-
-      const resolvedProbeCsv = probeCsv !== undefined
-        ? probeCsv
-        : await fetchRawTabCsv(spreadsheetId, '__cls_probe_nonexistent__');
-      const normalizedProbe = resolvedProbeCsv ? resolvedProbeCsv.trim() : '';
-      const probeDetectedMonth = resolvedProbeCsv ? detectMonthInSheetCsv(resolvedProbeCsv) : null;
-
-      const targetMonthNum = targetTab.startsWith('Tháng') ? getMonthNumber(targetTab) : null;
-      const candidates = targetTab.startsWith('Tháng') ? getCandidateTabNames(targetTab, targetYear) : [targetTab];
-
-      for (const candidateTab of candidates) {
-        const csvText = await fetchRawTabCsv(spreadsheetId, candidateTab);
-        if (!csvText) continue;
-
-        const isSameAsProbe = normalizedProbe !== '' && csvText.trim() === normalizedProbe;
-
-        // If gviz returned the exact first tab as a fallback, verify that the first tab actually matches this month
-        if (isSameAsProbe && targetMonthNum !== null) {
-          if (probeDetectedMonth !== targetMonthNum) {
-            continue;
-          }
-        }
-
-        const parsed = parseCsvTextToItems(csvText);
-        if (parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.warn(`Error fetching tab ${targetTab}:`, e);
-    }
-    return null;
-  };
-
-  // Sync all 12 months (Tháng 1 .. Tháng 12) concurrently using immutable non-destructive merge
-  const syncAllMonths = async (showToast = true, autoSelectLatest = true, targetYear: number = selectedYear) => {
-    const effectiveUrl = getEffectiveSheetTarget(targetYear) || sheetUrl;
-    const spreadsheetId = resolveSpreadsheetId(effectiveUrl);
-
-    if (!spreadsheetId) {
-      if (showToast) {
-        setSyncToast(`⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo cho Năm ${targetYear}. Vào "Menu Cấu Hình → Cấu Hình Hệ Thống" để dán URL hoặc ID trang tính.`);
-        setTimeout(() => setSyncToast(null), 5000);
-      }
-      return;
-    }
-
-    if (effectiveUrl !== sheetUrl && targetYear === selectedYear) {
-      setSheetUrl(effectiveUrl);
-    }
-
-    setIsSyncing(true);
-    if (showToast) setSyncToast(`Đang đồng bộ dữ liệu năm ${targetYear} (T1 - T12) và lưu bảo vệ lên hệ thống...`);
-
-    try {
-      const probeCsv = await fetchRawTabCsv(spreadsheetId, '__cls_probe_nonexistent__');
-      const updatedStore: { [key: string]: CaseReportItem[] } = {};
-      let totalNewlyCaptured = 0;
-      let totalProtected = 0;
-
-      await Promise.all(
-        ALL_MONTHS.map(async (tab) => {
-          const items = await fetchSingleTab(effectiveUrl, tab, probeCsv, targetYear);
-          if (items && items.length > 0) {
-            const mergeRes = reportArchiveService.mergeSyncedMonthIntoArchive(targetYear, tab, items);
-            updatedStore[tab] = mergeRes.mergedItems;
-            totalNewlyCaptured += mergeRes.newlyCapturedDays;
-            totalProtected += mergeRes.protectedExistingDays;
-          }
-        })
-      );
-
-      const syncedMonthsList = ALL_MONTHS.filter(m => updatedStore[m] && updatedStore[m].length > 0);
-
-      if (syncedMonthsList.length > 0) {
-        setMonthlyDataStore(prev => {
-          const merged = { ...prev, ...updatedStore };
-          if (autoSelectLatest) {
-            const latest = findLatestDataDate(merged, undefined, targetYear);
-            setSelectedReportMonth(latest.month);
-            setSelectedReportDay(latest.day);
-            setSelectedReportWeek(latest.week);
-            setTimePeriod(`${latest.month}/${targetYear}`);
-            if (merged[latest.month]) {
-              setCaseReports(merged[latest.month]);
-            }
-          } else if (merged[selectedReportMonth]) {
-            setCaseReports(merged[selectedReportMonth]);
-          }
-          return merged;
-        });
-
-        if (sheetTab.startsWith('Tháng') && updatedStore[sheetTab]) {
-          setCaseReports(updatedStore[sheetTab]);
-        }
-
-        if (showToast) {
-          setSyncToast(
-            `✅ Đã đồng bộ Năm ${targetYear} (${syncedMonthsList.length} tháng): nạp mới ${totalNewlyCaptured} ô số liệu, giữ nguyên bảo vệ ${totalProtected} ô đã lưu trên hệ thống.`
-          );
-        }
-      } else {
-        if (autoSelectLatest) {
-          setMonthlyDataStore(prev => {
-            const latest = findLatestDataDate(prev, caseReports, targetYear);
-            setSelectedReportMonth(latest.month);
-            setSelectedReportDay(latest.day);
-            setSelectedReportWeek(latest.week);
-            setTimePeriod(`${latest.month}/${targetYear}`);
-            if (prev[latest.month]) {
-              setCaseReports(prev[latest.month]);
-            }
-            return prev;
-          });
-        }
-        if (showToast) {
-          setSyncToast(
-            `⚠️ Không đọc được tab mới từ Google Sheet năm ${targetYear}. Toàn bộ dữ liệu đã lưu trên hệ thống vẫn được bảo toàn nguyên vẹn.`
-          );
-        }
-      }
-    } catch (error: any) {
-      console.warn('Sync all months error:', error);
-      if (autoSelectLatest) {
-        setMonthlyDataStore(prev => {
-          const latest = findLatestDataDate(prev, caseReports, targetYear);
-          setSelectedReportMonth(latest.month);
-          setSelectedReportDay(latest.day);
-          setSelectedReportWeek(latest.week);
-          setTimePeriod(`${latest.month}/${targetYear}`);
-          return prev;
-        });
-      }
-      if (showToast) setSyncToast('⚠️ Không thể kết nối Google Sheet. Dữ liệu đã lưu trên hệ thống vẫn được bảo vệ an toàn.');
-    } finally {
-      setIsSyncing(false);
-      if (showToast) setTimeout(() => setSyncToast(null), 5500);
-    }
-  };
-
-  // Real Google Sheets sync fetcher for single tab (non-destructive)
-  const fetchGoogleSheetData = async (
-    targetUrl: string,
-    targetTab: string,
-    showToast = true,
-    autoSelectLatest = false,
-    targetYear: number = selectedYear
-  ) => {
-    const effectiveUrl = targetUrl || getEffectiveSheetTarget(targetYear);
-    const spreadsheetId = resolveSpreadsheetId(effectiveUrl);
-
-    if (!spreadsheetId) {
-      if (showToast) {
-        setSyncToast(`⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo cho Năm ${targetYear} trong "Cấu hình hệ thống".`);
-        setTimeout(() => setSyncToast(null), 4500);
-      }
-      return;
-    }
-
-    setIsSyncing(true);
-    if (showToast) setSyncToast(`Đang tải dữ liệu ${targetTab}/${targetYear} từ Google Sheet...`);
-
-    try {
-      const parsedItems = await fetchSingleTab(effectiveUrl, targetTab, undefined, targetYear);
-      if (parsedItems && parsedItems.length > 0) {
-        const mergeRes = reportArchiveService.mergeSyncedMonthIntoArchive(targetYear, targetTab, parsedItems);
-        setCaseReports(mergeRes.mergedItems);
-        setMonthlyDataStore(prev => {
-          const merged = { ...prev, [targetTab]: mergeRes.mergedItems };
-          if (autoSelectLatest) {
-            const latest = findLatestDataDate(merged, undefined, targetYear);
-            setSelectedReportMonth(latest.month);
-            setSelectedReportDay(latest.day);
-            setSelectedReportWeek(latest.week);
-            setTimePeriod(`${latest.month}/${targetYear}`);
-          }
-          return merged;
-        });
-        if (showToast) {
-          setSyncToast(
-            `✅ Đã đồng bộ ${targetTab}/${targetYear}: nạp mới ${mergeRes.newlyCapturedDays} ô, bảo vệ ${mergeRes.protectedExistingDays} ô đã lưu.`
-          );
-        }
-      } else {
-        if (showToast) {
-          setSyncToast(`⚠️ Không tìm thấy dữ liệu mới trong tab "${targetTab}" (hỗ trợ: ${targetTab}, ${targetTab}/${targetYear}, T${getMonthNumber(targetTab)}, ${getMonthNumber(targetTab)}/${targetYear}). Dữ liệu hệ thống đã lưu vẫn giữ nguyên.`);
-        }
-      }
-    } catch (error: any) {
-      console.warn('Google Sheet fetch info:', error);
-      if (showToast) {
-        setSyncToast(`⚠️ Lỗi đồng bộ ${targetTab}/${targetYear}: ${error.message || 'Không thể truy cập trang tính'}`);
-      }
-    } finally {
-      setIsSyncing(false);
-      if (showToast) {
-        setTimeout(() => setSyncToast(null), 5000);
-      }
-    }
-  };
-
-  // Switch active reporting year cleanly
-  const handleChangeReportYear = (nextYear: number) => {
+  // Switch active reporting year cleanly (reads stored Firebase/IDB archive only; multi-day sync requires manual Range Audit)
+  const handleChangeReportYear = (rawYear: number) => {
+    const nextYear = Math.max(MIN_REPORT_YEAR, Math.min(MAX_REPORT_YEAR, Math.round(rawYear)));
     setSelectedYear(nextYear);
+    setYearInputStr(String(nextYear));
     setEditingCell(null);
     const nextStore = reportArchiveService.loadYearArchiveSync(nextYear);
     const latest = findLatestDataDate(nextStore, undefined, nextYear);
@@ -1008,13 +661,357 @@ export const ReportsAnalyticsView: React.FC = () => {
       }
     });
 
-    if (resolveSpreadsheetId(getEffectiveSheetTarget(nextYear))) {
-      void syncAllMonths(false, true, nextYear);
-    }
     void firebaseSyncService.subscribeReportYear(nextYear);
   };
 
-  // Hydrate durable IndexedDB backup & auto-sync new data on mount
+  const toIsoDateInput = (y: number, mNum: number, dNum: number): string => {
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    return `${y}-${pad2(mNum)}-${pad2(dNum)}`;
+  };
+
+  const applyResyncPreset = (
+    preset: 'day' | 'week' | 'month' | 'year',
+    targetYear: number = resyncYear
+  ) => {
+    const mNum = getMonthNumber(selectedReportMonth);
+    const maxD = getDaysInMonth(selectedReportMonth, targetYear);
+    const clampedDay = Math.min(maxD, Math.max(1, selectedReportDay));
+
+    if (preset === 'day') {
+      const iso = toIsoDateInput(targetYear, mNum, clampedDay);
+      setResyncStartDate(iso);
+      setResyncEndDate(iso);
+    } else if (preset === 'week') {
+      const wInfo = getWeekDateRange(selectedReportWeek, targetYear);
+      setResyncStartDate(toIsoDateInput(targetYear, wInfo.startMonthNum, wInfo.startDayNum));
+      setResyncEndDate(toIsoDateInput(targetYear, wInfo.endMonthNum, wInfo.endDayNum));
+    } else if (preset === 'month') {
+      setResyncStartDate(toIsoDateInput(targetYear, mNum, 1));
+      setResyncEndDate(toIsoDateInput(targetYear, mNum, maxD));
+    } else {
+      setResyncStartDate(toIsoDateInput(targetYear, 1, 1));
+      setResyncEndDate(toIsoDateInput(targetYear, 12, 31));
+    }
+  };
+
+  const openResyncModalWithOptions = (options?: {
+    year?: number;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    const targetYear =
+      options?.year && isValidReportYear(options.year) ? options.year : selectedYear;
+    setResyncYear(targetYear);
+    setResyncYearInput(String(targetYear));
+    setAuditStep('select');
+    setAuditDiscrepancies([]);
+    setSelectedDiscrepancyIds({});
+    setAuditCheckedCells(0);
+    setAuditCheckedMonths(0);
+    setAuditMissingTabs([]);
+    setAuditError(null);
+    setIsApplyingAudit(false);
+
+    if (options?.startDate && options?.endDate) {
+      setResyncStartDate(options.startDate);
+      setResyncEndDate(options.endDate);
+    } else if (sheetTab === 'Báo cáo ngày') {
+      applyResyncPreset('day', targetYear);
+    } else if (sheetTab === 'Báo cáo tuần') {
+      applyResyncPreset('week', targetYear);
+    } else if (sheetTab === 'Báo cáo năm') {
+      applyResyncPreset('year', targetYear);
+    } else {
+      const mNum = getMonthNumber(sheetTab.startsWith('Tháng') ? sheetTab : selectedReportMonth);
+      const maxD = getDaysInMonth(`Tháng ${mNum}`, targetYear);
+      setResyncStartDate(toIsoDateInput(targetYear, mNum, 1));
+      setResyncEndDate(toIsoDateInput(targetYear, mNum, maxD));
+    }
+    setIsResyncModalOpen(true);
+  };
+
+  const openResyncModal = () => {
+    openResyncModalWithOptions();
+  };
+
+  useEffect(() => {
+    if (!pendingAuditRequest) return;
+    setActiveTab('google_sheet');
+    openResyncModalWithOptions({
+      year: pendingAuditRequest.year,
+      startDate: pendingAuditRequest.startDate,
+      endDate: pendingAuditRequest.endDate
+    });
+    onClearPendingAuditRequest?.();
+  }, [pendingAuditRequest?.nonce]);
+
+  const buildYearMonthSlices = (
+    startDateStr: string,
+    endDateStr: string
+  ): Map<number, Array<{ monthKey: string; startDay: number; endDay: number }>> | null => {
+    const startParts = startDateStr.split('-').map(Number);
+    const endParts = endDateStr.split('-').map(Number);
+    const startObj = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+    const endObj = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+    if (Number.isNaN(startObj.getTime()) || Number.isNaN(endObj.getTime()) || startObj > endObj) {
+      return null;
+    }
+
+    const slicesByYear = new Map<number, Array<{ monthKey: string; startDay: number; endDay: number }>>();
+    const cursor = new Date(startObj.getFullYear(), startObj.getMonth(), 1);
+    const endMonthStart = new Date(endObj.getFullYear(), endObj.getMonth(), 1);
+
+    while (cursor <= endMonthStart) {
+      const y = cursor.getFullYear();
+      const m = cursor.getMonth() + 1;
+      const monthKey = `Tháng ${m}`;
+      const maxD = getDaysInMonth(monthKey, y);
+      const sDay = y === startObj.getFullYear() && m === startObj.getMonth() + 1 ? startObj.getDate() : 1;
+      const eDay = y === endObj.getFullYear() && m === endObj.getMonth() + 1 ? endObj.getDate() : maxD;
+      const list = slicesByYear.get(y) || [];
+      list.push({ monthKey, startDay: sDay, endDay: Math.min(maxD, eDay) });
+      slicesByYear.set(y, list);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    return slicesByYear;
+  };
+
+  const handleRunRangeAudit = async () => {
+    const parsedYear = parseInt(resyncYearInput, 10);
+    const targetYear = isValidReportYear(parsedYear) ? parsedYear : resyncYear;
+
+    if (!resyncStartDate || !resyncEndDate) {
+      setAuditError('Vui lòng chọn đầy đủ Từ ngày và Đến ngày để rà soát.');
+      return;
+    }
+
+    const yearMonthSlices = buildYearMonthSlices(resyncStartDate, resyncEndDate);
+    if (!yearMonthSlices) {
+      setAuditError('Khoảng thời gian không hợp lệ (Từ ngày phải nhỏ hơn hoặc bằng Đến ngày).');
+      return;
+    }
+
+    const effectiveUrl = getEffectiveSheetTarget(targetYear);
+    const spreadsheetId = resolveSpreadsheetId(effectiveUrl);
+    if (!spreadsheetId) {
+      setAuditError(
+        `Chưa gắn liên kết Google Sheets cho Năm ${targetYear}. Vui lòng vào "Menu Cấu Hình → Cấu Hình Hệ Thống" để nhập năm ${targetYear} và dán URL/ID Sheet.`
+      );
+      return;
+    }
+
+    setAuditError(null);
+    setAuditStep('checking');
+
+    try {
+      const allDiscrepancies: RangeAuditDiscrepancy[] = [];
+      let totalCheckedCells = 0;
+      let totalCheckedMonths = 0;
+      const missingTabs: string[] = [];
+
+      for (const [sliceYear, slices] of yearMonthSlices.entries()) {
+        await reportArchiveService.hydrateYearArchiveFromIDB(sliceYear);
+        const sliceSheetUrl = getEffectiveSheetTarget(sliceYear) || effectiveUrl;
+        const sliceSheetId = resolveSpreadsheetId(sliceSheetUrl);
+        if (!sliceSheetId) {
+          slices.forEach((s) => missingTabs.push(`${s.monthKey}/${sliceYear} (chưa có link)`));
+          continue;
+        }
+
+        const probeCsv = await fetchRawTabCsv(sliceSheetId, '__cls_probe_nonexistent__');
+
+        for (const slice of slices) {
+          const parsedItems = await fetchSingleSheetTab(
+            sliceSheetUrl,
+            slice.monthKey,
+            probeCsv,
+            sliceYear
+          );
+          if (!parsedItems || parsedItems.length === 0) {
+            missingTabs.push(`${slice.monthKey}/${sliceYear}`);
+            continue;
+          }
+
+          totalCheckedMonths += 1;
+          const res = reportArchiveService.auditMonthRangeAgainstSheet({
+            year: sliceYear,
+            monthKey: slice.monthKey,
+            incomingItems: parsedItems,
+            startDay: slice.startDay,
+            endDay: slice.endDay
+          });
+          totalCheckedCells += res.checkedCellsCount;
+          allDiscrepancies.push(...res.discrepancies);
+        }
+      }
+
+      if (totalCheckedMonths === 0) {
+        setAuditStep('select');
+        const msg = `Không đọc được dữ liệu Google Sheet phù hợp cho khoảng thời gian ${resyncStartDate.split('-').reverse().join('/')} – ${resyncEndDate.split('-').reverse().join('/')}. Vui lòng kiểm tra lại link Sheet hoặc tên tab tháng.`;
+        setAuditError(msg);
+        logRangeAuditToHistory({
+          status: 'error',
+          checkedCellsCount: 0,
+          discrepancyCount: 0,
+          updatedFromSheetCount: 0,
+          savedOnFirebase: false,
+          firebaseNote: 'Không đọc được tab Google Sheet',
+          summary: msg
+        });
+        return;
+      }
+
+      const defaultSelections: Record<string, boolean> = {};
+      for (const disc of allDiscrepancies) {
+        defaultSelections[disc.id] = !disc.isManualLocked && disc.type !== 'cleared_on_sheet';
+      }
+
+      setAuditDiscrepancies(allDiscrepancies);
+      setSelectedDiscrepancyIds(defaultSelections);
+      setAuditCheckedCells(totalCheckedCells);
+      setAuditCheckedMonths(totalCheckedMonths);
+      setAuditMissingTabs(missingTabs);
+      setAuditStep('result');
+
+      if (allDiscrepancies.length === 0) {
+        const startLabel = resyncStartDate.split('-').reverse().join('/');
+        const endLabel = resyncEndDate.split('-').reverse().join('/');
+        logRangeAuditToHistory({
+          status: 'no_change',
+          checkedCellsCount: totalCheckedCells,
+          discrepancyCount: 0,
+          updatedFromSheetCount: 0,
+          savedOnFirebase: firebaseSyncService.getState().status === 'synced',
+          summary: `Rà soát thủ công (${startLabel} – ${endLabel}): kiểm tra ${totalCheckedCells.toLocaleString('vi-VN')} ô trên ${totalCheckedMonths} tháng, dữ liệu Firebase và Google Sheet hoàn toàn khớp.`
+        });
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setAuditStep('select');
+      setAuditError(`Lỗi khi rà soát từ Google Sheet: ${errMsg}`);
+      logRangeAuditToHistory({
+        status: 'error',
+        checkedCellsCount: 0,
+        discrepancyCount: 0,
+        updatedFromSheetCount: 0,
+        savedOnFirebase: false,
+        firebaseNote: errMsg,
+        summary: `Lỗi khi rà soát thủ công: ${errMsg}`
+      });
+    }
+  };
+
+  const handleKeepFirebaseAfterAudit = () => {
+    if (auditDiscrepancies.length > 0) {
+      const startLabel = resyncStartDate.split('-').reverse().join('/');
+      const endLabel = resyncEndDate.split('-').reverse().join('/');
+      logRangeAuditToHistory({
+        status: 'discrepancy_alert',
+        checkedCellsCount: auditCheckedCells,
+        discrepancyCount: auditDiscrepancies.length,
+        updatedFromSheetCount: 0,
+        savedOnFirebase: firebaseSyncService.getState().status === 'synced',
+        summary: `Rà soát thủ công (${startLabel} – ${endLabel}): phát hiện ${auditDiscrepancies.length} sai lệch và đã chọn giữ nguyên số liệu Firebase.`,
+        discrepancies: mapDiscrepanciesForHistory(auditDiscrepancies, () => 'kept_system')
+      });
+    }
+    setIsResyncModalOpen(false);
+  };
+
+  const handleApplySelectedAuditUpdates = async () => {
+    const approved = auditDiscrepancies.filter((d) => selectedDiscrepancyIds[d.id]);
+    if (approved.length === 0) {
+      setAuditError('Vui lòng chọn ít nhất 1 mục sai lệch để cập nhật, hoặc nhấn "Không cập nhật" để giữ nguyên.');
+      return;
+    }
+
+    setIsApplyingAudit(true);
+    setAuditError(null);
+
+    try {
+      const grouped = new Map<string, { year: number; monthKey: string; items: RangeAuditDiscrepancy[] }>();
+      for (const disc of approved) {
+        const key = `${disc.year}__${disc.monthKey}`;
+        const existingGroup = grouped.get(key) || { year: disc.year, monthKey: disc.monthKey, items: [] };
+        existingGroup.items.push(disc);
+        grouped.set(key, existingGroup);
+      }
+
+      let firebaseSavedMonths = 0;
+      let firebaseReason: string | undefined;
+      const touchedYears = new Set<number>();
+
+      for (const group of grouped.values()) {
+        const updatedItems = reportArchiveService.applyAuditDiscrepanciesForMonth(
+          group.year,
+          group.monthKey,
+          group.items
+        );
+        touchedYears.add(group.year);
+        const fbRes = await firebaseSyncService.forceSaveReportMonthToCloud(
+          group.year,
+          group.monthKey,
+          updatedItems
+        );
+        if (fbRes.savedOnFirebase) firebaseSavedMonths += 1;
+        else if (!firebaseReason && fbRes.reason) firebaseReason = fbRes.reason;
+      }
+
+      const parsedYear = parseInt(resyncYearInput, 10);
+      const preferredYear = isValidReportYear(parsedYear) ? parsedYear : resyncYear;
+      const displayYear = touchedYears.has(preferredYear) ? preferredYear : Array.from(touchedYears)[0];
+
+      if (displayYear && displayYear !== selectedYear) {
+        handleChangeReportYear(displayYear);
+      } else {
+        const refreshed = reportArchiveService.loadYearArchiveSync(selectedYear);
+        setMonthlyDataStore(refreshed);
+        if (refreshed[selectedReportMonth]) {
+          setCaseReports(refreshed[selectedReportMonth]);
+        }
+      }
+
+      const startLabel = resyncStartDate.split('-').reverse().join('/');
+      const endLabel = resyncEndDate.split('-').reverse().join('/');
+      const skippedCount = auditDiscrepancies.length - approved.length;
+
+      logRangeAuditToHistory({
+        status: skippedCount > 0 ? 'discrepancy_alert' : 'success',
+        checkedCellsCount: auditCheckedCells,
+        discrepancyCount: auditDiscrepancies.length,
+        updatedFromSheetCount: approved.length,
+        savedOnFirebase: firebaseSavedMonths > 0,
+        firebaseNote:
+          firebaseReason ||
+          (firebaseSavedMonths > 0
+            ? `Đã lưu cố định ${firebaseSavedMonths} tháng trên Firebase Cloud Firestore`
+            : 'Lưu cục bộ (chưa kết nối Firebase)'),
+        summary: `Rà soát thủ công (${startLabel} – ${endLabel}): đã cập nhật ${approved.length}/${auditDiscrepancies.length} sai lệch theo Google Sheet${skippedCount > 0 ? `, giữ nguyên ${skippedCount} mục trên Firebase` : ''}.`,
+        discrepancies: mapDiscrepanciesForHistory(auditDiscrepancies, (d) =>
+          selectedDiscrepancyIds[d.id] ? 'updated_from_sheet' : 'kept_system'
+        )
+      });
+
+      setIsResyncModalOpen(false);
+      const fbSummary =
+        firebaseSavedMonths > 0
+          ? `Đã lưu cố định ${firebaseSavedMonths} tháng lên Firebase Cloud.`
+          : `Đã lưu tại máy (${firebaseReason || 'hãy đăng nhập Firebase để đồng bộ lên Cloud'}).`;
+      const toastMsg = `✅ Đã cập nhật ${approved.length} sai lệch sau rà soát (${startLabel} → ${endLabel}). ${fbSummary}`;
+      setSyncToast(toastMsg);
+      onShowToast?.('Cập nhật sau rà soát thành công', toastMsg, 'success');
+      setTimeout(() => setSyncToast(null), 6500);
+    } catch (err) {
+      setAuditError(
+        `Lỗi khi áp dụng cập nhật: ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      setIsApplyingAudit(false);
+    }
+  };
+
+  // Hydrate durable IndexedDB backup ONLY (no multi-day auto-sync on mount; startup 3-day smart sync runs in App.tsx)
   useEffect(() => {
     let active = true;
     void reportArchiveService.hydrateYearArchiveFromIDB(initialYear).then((hydrated) => {
@@ -1029,11 +1026,10 @@ export const ReportsAnalyticsView: React.FC = () => {
         setCaseReports(hydrated[latest.month] || []);
       }
     });
-    syncAllMonths(false, true, initialYear);
     return () => { active = false; };
   }, []);
 
-  // Refresh UI immediately when Firebase Cloud pushes updated archive data for active year
+  // Refresh UI immediately when Firebase Cloud or 3-day smart sync pushes updated archive data
   useEffect(() => {
     const handleCloudArchiveUpdated = (ev: Event) => {
       const detail = (ev as CustomEvent<{ year?: number; monthKey?: string }>).detail;
@@ -1046,23 +1042,53 @@ export const ReportsAnalyticsView: React.FC = () => {
     return () => window.removeEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleCloudArchiveUpdated);
   }, [selectedYear, selectedReportMonth]);
 
-  // When sheetTab changes for monthly tabs, ensure caseReports matches that month
+  // When sheetTab changes for monthly tabs, load saved data from archive store (multi-day fetch requires manual Range Audit)
   useEffect(() => {
     if (sheetTab.startsWith('Tháng')) {
       if (monthlyDataStore[sheetTab] && monthlyDataStore[sheetTab].length > 0) {
         setCaseReports(monthlyDataStore[sheetTab]);
       } else {
         setCaseReports([]);
-        const effectiveUrl = sheetUrl || getEffectiveSheetTarget(selectedYear);
-        if (resolveSpreadsheetId(effectiveUrl)) {
-          fetchGoogleSheetData(effectiveUrl, sheetTab, false, false, selectedYear);
-        }
       }
     }
-  }, [sheetTab]);
+  }, [sheetTab, monthlyDataStore]);
 
-  const handleSyncGoogleSheet = () => {
-    syncAllMonths(true, true, selectedYear);
+  // Manual 3-day recent smart sync button (any wider range > 3 days MUST go through "Rà soát số liệu")
+  const handleRunManualThreeDaySync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    const w3 = getRecentThreeDaysWindow();
+    setSyncToast(`Đang kiểm tra & đồng bộ 3 ngày gần nhất (${w3.dateRangeLabel})...`);
+    try {
+      const outcome = await runThreeDaySmartSync('manual_3d');
+      if (!outcome.ran && outcome.reason === 'no_sheet_configured') {
+        const msg = 'Chưa cấu hình liên kết Google Sheets Báo cáo cho năm hiện tại trong "Menu Cấu Hình → Cấu Hình Hệ Thống".';
+        setSyncToast(`⚠️ ${msg}`);
+        onShowToast?.('Chưa cấu hình Google Sheet', msg, 'warning');
+        return;
+      }
+
+      const refreshed = reportArchiveService.loadYearArchiveSync(selectedYear);
+      setMonthlyDataStore(refreshed);
+      if (refreshed[selectedReportMonth]) {
+        setCaseReports(refreshed[selectedReportMonth]);
+      }
+
+      if (outcome.entry) {
+        const hasAlert = outcome.alertDiscrepancies.length > 0;
+        setSyncToast(hasAlert ? `⚠️ ${outcome.entry.summary}` : `✅ ${outcome.entry.summary}`);
+        onShowToast?.(
+          hasAlert
+            ? `Phát hiện ${outcome.alertDiscrepancies.length} sai lệch (3 ngày gần nhất)`
+            : 'Đồng bộ 3 ngày gần nhất hoàn tất',
+          outcome.entry.summary,
+          hasAlert ? 'warning' : 'success'
+        );
+      }
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncToast(null), 6500);
+    }
   };
 
   // Dynamic days array for month (uses numeric month parsing so Tháng 12 is 31 days, not 28)
@@ -1432,24 +1458,31 @@ export const ReportsAnalyticsView: React.FC = () => {
               <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h4 className="text-sm font-extrabold text-amber-900 dark:text-amber-200">
-                  Chưa có dữ liệu đồng bộ cho {selectedReportMonth}/{selectedYear}
+                  Chưa có dữ liệu lưu cho {selectedReportMonth}/{selectedYear}
                 </h4>
                 <p className="text-xs text-amber-800/90 dark:text-amber-300/90">
-                  Vui lòng kiểm tra trang tính Google Sheets năm <strong>{selectedYear}</strong> đã có tab tên{' '}
-                  <strong>{selectedReportMonth}</strong>, <strong>{selectedReportMonth}/{selectedYear}</strong>,{' '}
-                  <strong>T{getMonthNumber(selectedReportMonth)}</strong> hoặc{' '}
-                  <strong>{getMonthNumber(selectedReportMonth)}/{selectedYear}</strong> và bấm nút Đồng bộ ngay.
+                  Hệ thống chỉ tự động đồng bộ <strong>3 ngày gần nhất</strong> khi khởi động. Để tải hoặc đối chiếu dữ liệu của cả{' '}
+                  <strong>{selectedReportMonth}/{selectedYear}</strong> từ Google Sheet, vui lòng dùng nút{' '}
+                  <strong>Rà soát số liệu</strong>.
                 </p>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => syncAllMonths(true, false, selectedYear)}
+              onClick={() => {
+                const mNum = getMonthNumber(selectedReportMonth);
+                const maxD = getDaysInMonth(selectedReportMonth, selectedYear);
+                openResyncModalWithOptions({
+                  year: selectedYear,
+                  startDate: toIsoDateInput(selectedYear, mNum, 1),
+                  endDate: toIsoDateInput(selectedYear, mNum, maxD)
+                });
+              }}
               disabled={isSyncing}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Đang đồng bộ...' : `Đồng bộ ${selectedReportMonth} ngay`}</span>
+              <Search className="w-3.5 h-3.5" />
+              <span>Rà soát số liệu {selectedReportMonth}</span>
             </button>
           </div>
         )}
@@ -2278,11 +2311,19 @@ export const ReportsAnalyticsView: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => syncAllMonths(true, true, selectedYear)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold border border-blue-200 dark:border-blue-800 transition-all cursor-pointer shadow-2xs"
+              type="button"
+              onClick={() =>
+                openResyncModalWithOptions({
+                  year: selectedYear,
+                  startDate: `${selectedYear}-01-01`,
+                  endDate: `${selectedYear}-12-31`
+                })
+              }
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-200 rounded-xl text-xs font-bold border border-amber-200 dark:border-amber-800 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Đang đồng bộ...' : `Đồng bộ 12 Tháng (${selectedYear})`}
+              <Search className="w-3.5 h-3.5" />
+              <span>Rà soát số liệu ({selectedYear})</span>
             </button>
 
             <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
@@ -3563,7 +3604,11 @@ export const ReportsAnalyticsView: React.FC = () => {
             <BarChart3 className="w-4 h-4" /> BÁO CÁO & THỐNG KÊ KHOA CẬN LÂM SÀNG
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {activeTab === 'google_sheet' ? 'Báo Cáo Giao Ban & Số Ca Chụp / Xét Nghiệm (Google Sheet)' : 'Dashboard Biểu Đồ & Thống Kê Tổng Hợp'}
+            {activeTab === 'google_sheet'
+              ? 'Báo Cáo Giao Ban & Số Ca Chụp / Xét Nghiệm (Google Sheet)'
+              : activeTab === 'sync_history'
+                ? 'Lịch Sử Đồng Bộ & Rà Soát Số Liệu'
+                : 'Dashboard Biểu Đồ & Thống Kê Tổng Hợp'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
             Theo dõi chi tiết lượt khám, Siêu âm, Nội soi, X-quang, Điện tim & LHN, Xét nghiệm theo từng ngày & bảo hiểm / nhân dân.
@@ -3572,10 +3617,10 @@ export const ReportsAnalyticsView: React.FC = () => {
 
         {/* Top Actions & Navigation Switch */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center border border-slate-200 dark:border-slate-700">
+          <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex flex-wrap items-center border border-slate-200 dark:border-slate-700 gap-1">
             <button
               onClick={() => setActiveTab('google_sheet')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'google_sheet'
                   ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -3586,7 +3631,7 @@ export const ReportsAnalyticsView: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'dashboard'
                   ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -3594,6 +3639,17 @@ export const ReportsAnalyticsView: React.FC = () => {
             >
               <BarChart3 className="w-4 h-4 text-indigo-600" />
               <span>Biểu Đồ & KPI</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('sync_history')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'sync_history'
+                  ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <History className="w-4 h-4 text-amber-600" />
+              <span>Lịch Sử Đồng Bộ</span>
             </button>
           </div>
         </div>
@@ -3636,7 +3692,8 @@ export const ReportsAnalyticsView: React.FC = () => {
                     Liên kết Google Sheets Báo Cáo Giao Ban Khoa CLS · Năm {selectedYear}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Đồng bộ 12 tháng (T1 - T12/{selectedYear}) &middot; Đã lưu hệ thống:{' '}
+                    Tự động rà soát &amp; đồng bộ <strong>3 ngày gần nhất</strong> · Nhiều ngày hơn dùng{' '}
+                    <strong>Rà soát số liệu</strong> · Đã lưu:{' '}
                     <strong className="text-emerald-600 dark:text-emerald-400">{syncedLabel}</strong>
                     {archiveStats.totalRecordedCells > 0 && (
                       <span className="ml-1.5 tabular-nums text-slate-500">
@@ -3647,13 +3704,29 @@ export const ReportsAnalyticsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
                 <span
-                  className="px-2.5 py-1.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 shrink-0 inline-flex items-center gap-1"
-                  title="Dữ liệu đã kéo về hệ thống sẽ không bị mất khi xóa Google Sheet, chỉ có thể chỉnh sửa thủ công"
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border shrink-0 inline-flex items-center gap-1 ${
+                    cloudState.status === 'synced'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                      : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'
+                  }`}
+                  title={
+                    cloudState.status === 'synced'
+                      ? `Mọi dữ liệu Google Sheet sau đồng bộ được lưu cố định trên Firebase Cloud Firestore (${cloudState.userEmail || ''})`
+                      : 'Kết nối Firebase ở thanh trên để tự động lưu cố định mọi dữ liệu lên Cloud Firestore'
+                  }
                 >
-                  <Lock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Lưu hệ thống · Chỉ sửa thủ công</span>
+                  {cloudState.status === 'synced' ? (
+                    <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  )}
+                  <span>
+                    {cloudState.status === 'synced'
+                      ? 'Lưu cố định Firebase Cloud'
+                      : 'Lưu máy · Chờ kết nối Firebase'}
+                  </span>
                 </span>
                 {resolveSpreadsheetId(effectiveSheetUrl) ? (
                   <a
@@ -3670,19 +3743,31 @@ export const ReportsAnalyticsView: React.FC = () => {
                 ) : (
                   <span
                     className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 shrink-0"
-                    title={`Vào mục 'Menu Cấu Hình → Cấu Hình Hệ Thống' để dán URL hoặc ID Google Sheets cho năm ${selectedYear}`}
+                    title={`Vào mục 'Menu Cấu Hình → Cấu Hình Hệ Thống' để nhập Năm ${selectedYear} và dán URL hoặc ID Google Sheets`}
                   >
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                     <span>Chưa gắn link ({selectedYear})</span>
                   </span>
                 )}
                 <button
-                  onClick={handleSyncGoogleSheet}
+                  type="button"
+                  onClick={openResyncModal}
+                  disabled={isSyncing}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0"
+                  title="Rà soát & đồng bộ thủ công theo khoảng thời gian nhiều ngày hơn (> 3 ngày)"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>Rà soát số liệu</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRunManualThreeDaySync()}
                   disabled={isSyncing}
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0"
+                  title="Rà soát và đồng bộ 3 ngày gần nhất (tự điền ô trống trên Firebase; cảnh báo & ghi Lịch sử nếu có sai lệch)"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ ngay'}</span>
+                  <span>{isSyncing ? 'Đang kiểm tra 3 ngày...' : 'Đồng bộ 3 ngày gần nhất'}</span>
                 </button>
               </div>
             </div>
@@ -3857,21 +3942,69 @@ export const ReportsAnalyticsView: React.FC = () => {
 
               {/* Contextual Sub-controls (Dynamic based on selected mode) */}
               <div className="flex flex-wrap items-center gap-2">
-                {/* 0. Year Picker */}
-                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+                {/* 0. Direct Numeric Year Picker (Supports any year 1900-2100) */}
+                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
                   <span className="text-slate-500 pl-2 text-[11px]">Năm:</span>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => handleChangeReportYear(Number(e.target.value))}
-                    className="bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 font-black px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none cursor-pointer text-xs tabular-nums"
-                    title="Chọn năm dữ liệu báo cáo & nguồn Google Sheet tương ứng"
+                  <button
+                    type="button"
+                    onClick={() => handleChangeReportYear(selectedYear - 1)}
+                    disabled={selectedYear <= MIN_REPORT_YEAR}
+                    className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                    title="Năm trước"
                   >
-                    {AVAILABLE_REPORT_YEARS.map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={MIN_REPORT_YEAR}
+                    max={MAX_REPORT_YEAR}
+                    list="cls-known-report-years"
+                    value={yearInputStr}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                      setYearInputStr(clean);
+                      if (clean.length === 4) {
+                        const y = parseInt(clean, 10);
+                        if (isValidReportYear(y)) {
+                          handleChangeReportYear(y);
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      const y = parseInt(yearInputStr, 10);
+                      if (isValidReportYear(y)) {
+                        if (y !== selectedYear) handleChangeReportYear(y);
+                      } else {
+                        setYearInputStr(String(selectedYear));
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const y = parseInt(yearInputStr, 10);
+                        if (isValidReportYear(y)) {
+                          handleChangeReportYear(y);
+                        } else {
+                          setYearInputStr(String(selectedYear));
+                        }
+                      }
+                    }}
+                    className="w-20 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 font-black px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none text-center text-xs tabular-nums"
+                    title="Nhập trực tiếp bất kỳ năm nào (vd: 2022, 2026, 2035)"
+                  />
+                  <datalist id="cls-known-report-years">
+                    {getKnownReportYears(storageService.getSettings(), [selectedYear]).map((y) => (
+                      <option key={y} value={y} />
                     ))}
-                  </select>
+                  </datalist>
+                  <button
+                    type="button"
+                    onClick={() => handleChangeReportYear(selectedYear + 1)}
+                    disabled={selectedYear >= MAX_REPORT_YEAR}
+                    className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                    title="Năm sau"
+                  >
+                    +
+                  </button>
                 </div>
 
                 {/* 1. Month Picker (All 12 Months for Day, Week, Month) */}
@@ -3900,9 +4033,6 @@ export const ReportsAnalyticsView: React.FC = () => {
                               setCaseReports(targetItems);
                             } else {
                               setCaseReports([]);
-                              if (resolveSpreadsheetId(effectiveSheetUrl) && !sheetTab.startsWith('Tháng')) {
-                                fetchGoogleSheetData(effectiveSheetUrl, m, true, false, selectedYear);
-                              }
                             }
                             if (sheetTab.startsWith('Tháng')) {
                               setSheetTab(m);
@@ -4702,6 +4832,485 @@ export const ReportsAnalyticsView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Selective Time-Range Audit & Discrepancy Confirmation Modal */}
+      {isResyncModalOpen && (() => {
+        const selectedAuditCount = auditDiscrepancies.filter((d) => selectedDiscrepancyIds[d.id]).length;
+        const manualConflictCount = auditDiscrepancies.filter((d) => d.isManualLocked).length;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div
+              className={`bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full overflow-hidden transition-all ${
+                auditStep === 'result' && auditDiscrepancies.length > 0 ? 'max-w-3xl' : 'max-w-lg'
+              }`}
+            >
+              {/* Header */}
+              <div className="px-5 py-4 bg-amber-50/70 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                    <Search className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                      Rà Soát &amp; Đối Chiếu Số Liệu Google Sheet
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Kiểm tra sai lệch theo khoảng thời gian tùy chọn · Chỉ cập nhật khi bạn xác nhận
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsResyncModalOpen(false)}
+                  disabled={auditStep === 'checking' || isApplyingAudit}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer disabled:opacity-40"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-4 text-xs">
+                {auditError && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                    <span className="leading-relaxed font-medium">{auditError}</span>
+                  </div>
+                )}
+
+                {auditStep === 'select' && (
+                  <>
+                    {/* Target Year Input */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                      <label className="sm:col-span-4 font-bold text-slate-700 dark:text-slate-200">
+                        Năm nguồn Sheet:
+                      </label>
+                      <div className="sm:col-span-8 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={MIN_REPORT_YEAR}
+                          max={MAX_REPORT_YEAR}
+                          value={resyncYearInput}
+                          onChange={(e) => {
+                            const clean = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                            setResyncYearInput(clean);
+                            if (clean.length === 4) {
+                              const y = parseInt(clean, 10);
+                              if (isValidReportYear(y)) {
+                                setResyncYear(y);
+                                applyResyncPreset('month', y);
+                              }
+                            }
+                          }}
+                          className="w-28 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-center text-emerald-700 dark:text-emerald-300 tabular-nums outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {resolveSpreadsheetId(getEffectiveSheetTarget(resyncYear))
+                            ? 'Đã gắn ID Sheet'
+                            : `Chưa gắn link năm ${resyncYear}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Quick Time Range Presets */}
+                    <div className="space-y-1.5">
+                      <span className="block font-bold text-slate-700 dark:text-slate-200">
+                        Chọn nhanh khoảng thời gian rà soát:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => applyResyncPreset('day', resyncYear)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-blue-950/60 border border-slate-200 dark:border-slate-700 font-semibold cursor-pointer"
+                        >
+                          Ngày {selectedReportDay}/{getMonthNumber(selectedReportMonth)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyResyncPreset('week', resyncYear)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-blue-950/60 border border-slate-200 dark:border-slate-700 font-semibold cursor-pointer"
+                        >
+                          Tuần {selectedReportWeek}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyResyncPreset('month', resyncYear)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-blue-950/60 border border-slate-200 dark:border-slate-700 font-semibold cursor-pointer"
+                        >
+                          Cả {selectedReportMonth}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyResyncPreset('year', resyncYear)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-blue-950/60 border border-slate-200 dark:border-slate-700 font-semibold cursor-pointer"
+                        >
+                          Cả Năm {resyncYear}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Exact Start/End Date Range */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                          Từ ngày:
+                        </label>
+                        <input
+                          type="date"
+                          value={resyncStartDate}
+                          onChange={(e) => setResyncStartDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 tabular-nums outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+                          Đến ngày:
+                        </label>
+                        <input
+                          type="date"
+                          value={resyncEndDate}
+                          onChange={(e) => setResyncEndDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 tabular-nums outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 leading-relaxed">
+                      Hệ thống sẽ đọc trực tiếp Google Sheet và <strong>đối chiếu với dữ liệu đã lưu trên Firebase</strong> trong khoảng thời gian trên. Bước này <strong>không tự động ghi đè</strong>; nếu phát hiện sai lệch, bạn sẽ xem chi tiết từng ô lệch và tự quyết định có cập nhật hay không.
+                    </div>
+                  </>
+                )}
+
+                {auditStep === 'checking' && (
+                  <div className="py-10 flex flex-col items-center justify-center text-center gap-3">
+                    <RefreshCw className="w-8 h-8 text-amber-500 animate-spin" />
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                        Đang tải và rà soát đối chiếu số liệu...
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                        Khoảng thời gian: {resyncStartDate.split('-').reverse().join('/')} → {resyncEndDate.split('-').reverse().join('/')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {auditStep === 'result' && auditDiscrepancies.length === 0 && (
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-start gap-3">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-sm font-extrabold text-emerald-800 dark:text-emerald-200">
+                          Không phát hiện sai lệch nào!
+                        </h4>
+                        <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 leading-relaxed">
+                          Đã rà soát <strong>{auditCheckedCells.toLocaleString('vi-VN')}</strong> ô dữ liệu thuộc{' '}
+                          <strong>{auditCheckedMonths}</strong> tháng ({resyncStartDate.split('-').reverse().join('/')} →{' '}
+                          {resyncEndDate.split('-').reverse().join('/')}). Toàn bộ số liệu đang lưu trên hệ thống và Firebase hoàn toàn khớp với Google Sheet.
+                        </p>
+                      </div>
+                    </div>
+                    {auditMissingTabs.length > 0 && (
+                      <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200">
+                        Lưu ý: Không tìm thấy tab Google Sheet cho: <strong>{auditMissingTabs.join(', ')}</strong>.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {auditStep === 'result' && auditDiscrepancies.length > 0 && (
+                  <div className="space-y-3">
+                    {/* Discrepancy Question Prompt Banner */}
+                    <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-start gap-2.5">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs font-extrabold text-amber-900 dark:text-amber-100">
+                          Phát hiện {auditDiscrepancies.length} sai lệch so với Google Sheet ({resyncStartDate.split('-').reverse().join('/')} → {resyncEndDate.split('-').reverse().join('/')}) — Bạn có muốn cập nhật lại dữ liệu không?
+                        </div>
+                        <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                          Đã kiểm tra {auditCheckedCells.toLocaleString('vi-VN')} ô trên {auditCheckedMonths} tháng.
+                          {manualConflictCount > 0 && (
+                            <> Có <strong>{manualConflictCount}</strong> ô từng chỉnh sửa thủ công (đang bỏ chọn mặc định để bảo vệ).</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {auditMissingTabs.length > 0 && (
+                      <div className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
+                        Tab chưa có trên Google Sheet: <strong>{auditMissingTabs.join(', ')}</strong>
+                      </div>
+                    )}
+
+                    {/* Quick Select Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next: Record<string, boolean> = {};
+                            auditDiscrepancies.forEach((d) => { next[d.id] = true; });
+                            setSelectedDiscrepancyIds(next);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer"
+                        >
+                          Chọn tất cả
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next: Record<string, boolean> = {};
+                            auditDiscrepancies.forEach((d) => {
+                              next[d.id] = !d.isManualLocked && d.type !== 'cleared_on_sheet';
+                            });
+                            setSelectedDiscrepancyIds(next);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-200 font-semibold cursor-pointer"
+                        >
+                          Chỉ chọn lệch số &amp; bổ sung
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDiscrepancyIds({})}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
+                        >
+                          Bỏ chọn tất cả
+                        </button>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                        Đang chọn cập nhật: <span className="text-amber-600 dark:text-amber-400">{selectedAuditCount}</span> / {auditDiscrepancies.length} mục
+                      </span>
+                    </div>
+
+                    {/* Discrepancy Comparison Table */}
+                    <div className="max-h-72 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl">
+                      <table className="w-full text-left border-collapse text-[11px]">
+                        <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
+                          <tr>
+                            <th className="p-2.5 w-8 text-center">Chọn</th>
+                            <th className="p-2.5">Ngày</th>
+                            <th className="p-2.5">Kỹ thuật / Bộ phận</th>
+                            <th className="p-2.5">Hệ thống (hiện tại)</th>
+                            <th className="p-2.5">Google Sheet</th>
+                            <th className="p-2.5">Phân loại</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {auditDiscrepancies.map((disc) => {
+                            const isChecked = Boolean(selectedDiscrepancyIds[disc.id]);
+                            const typeBadge =
+                              disc.type === 'value_changed'
+                                ? { label: 'Lệch số liệu', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' }
+                                : disc.type === 'new_from_sheet'
+                                  ? { label: 'Sheet bổ sung', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' }
+                                  : disc.type === 'new_service'
+                                    ? { label: 'Dịch vụ mới', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200' }
+                                    : { label: 'Sheet trống / đã xóa', cls: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200' };
+
+                            return (
+                              <tr
+                                key={disc.id}
+                                onClick={() =>
+                                  setSelectedDiscrepancyIds((prev) => ({
+                                    ...prev,
+                                    [disc.id]: !prev[disc.id]
+                                  }))
+                                }
+                                className={`cursor-pointer transition-colors ${
+                                  isChecked
+                                    ? 'bg-amber-50/40 dark:bg-amber-950/20'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                                }`}
+                              >
+                                <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) =>
+                                      setSelectedDiscrepancyIds((prev) => ({
+                                        ...prev,
+                                        [disc.id]: e.target.checked
+                                      }))
+                                    }
+                                    className="rounded cursor-pointer"
+                                  />
+                                </td>
+                                <td className="p-2.5 font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap tabular-nums">
+                                  {disc.dateLabel}
+                                </td>
+                                <td className="p-2.5">
+                                  <div className="font-semibold text-slate-800 dark:text-slate-100">
+                                    {disc.serviceName}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                    {disc.category}
+                                  </div>
+                                </td>
+                                <td className="p-2.5 tabular-nums whitespace-nowrap">
+                                  <div className="font-semibold text-slate-700 dark:text-slate-200">
+                                    BH: {disc.systemValue.bh} · ND: {disc.systemValue.nd}
+                                  </div>
+                                  {disc.isManualLocked && (
+                                    <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
+                                      <Lock className="w-2.5 h-2.5" />
+                                      Sửa tay{disc.manualUpdatedBy ? ` (${disc.manualUpdatedBy})` : ''}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2.5 tabular-nums whitespace-nowrap font-bold text-blue-700 dark:text-blue-300">
+                                  BH: {disc.sheetValue.bh} · ND: {disc.sheetValue.nd}
+                                </td>
+                                <td className="p-2.5 whitespace-nowrap">
+                                  <span className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] ${typeBadge.cls}`}>
+                                    {typeBadge.label}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Firebase Persistence Status Notice */}
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-200">
+                      {cloudState.status === 'synced' ? (
+                        <Cloud className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <CloudOff className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                      )}
+                      <div className="leading-relaxed">
+                        {cloudState.status === 'synced' ? (
+                          <>
+                            Đang kết nối Firebase (<strong>{cloudState.userEmail}</strong>). Nếu bạn chọn cập nhật, các mục được đánh dấu sẽ được <strong>lưu cố định lên Firebase Cloud Firestore</strong>.
+                          </>
+                        ) : (
+                          <>
+                            Chưa đăng nhập Firebase trên phiên này. Nếu cập nhật, số liệu được lưu cục bộ trước và sẽ đồng bộ lên Cloud ngay khi bạn kết nối Firebase.
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                {auditStep === 'select' && (
+                  <>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Bước 1/2: Chọn khoảng thời gian đối chiếu
+                    </span>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => setIsResyncModalOpen(false)}
+                        className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleRunRangeAudit()}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Bắt đầu Rà soát &amp; Đối chiếu</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {auditStep === 'checking' && (
+                  <div className="w-full flex justify-end">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      Vui lòng chờ hệ thống đối chiếu dữ liệu...
+                    </span>
+                  </div>
+                )}
+
+                {auditStep === 'result' && auditDiscrepancies.length === 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditError(null);
+                        setAuditStep('select');
+                      }}
+                      className="px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
+                    >
+                      Rà soát khoảng khác
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsResyncModalOpen(false)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
+                    >
+                      Đóng
+                    </button>
+                  </>
+                )}
+
+                {auditStep === 'result' && auditDiscrepancies.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isApplyingAudit}
+                      onClick={() => {
+                        setAuditError(null);
+                        setAuditStep('select');
+                      }}
+                      className="px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer disabled:opacity-50"
+                    >
+                      Chọn lại thời gian
+                    </button>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <button
+                        type="button"
+                        disabled={isApplyingAudit}
+                        onClick={handleKeepFirebaseAfterAudit}
+                        className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer disabled:opacity-50"
+                      >
+                        Không cập nhật (Giữ nguyên)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isApplyingAudit || selectedAuditCount === 0}
+                        onClick={() => void handleApplySelectedAuditUpdates()}
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      >
+                        {isApplyingAudit ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        )}
+                        <span>
+                          {isApplyingAudit
+                            ? 'Đang cập nhật...'
+                            : `Có, cập nhật & Lưu Firebase (${selectedAuditCount} mục)`}
+                        </span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* TAB 3: SYNC HISTORY VIEW (INSIDE REPORTS & ANALYTICS) */}
+      {activeTab === 'sync_history' && (
+        <SyncHistoryView
+          compact
+          onShowToast={onShowToast}
+          onOpenRangeAudit={(startDate, endDate, year) => {
+            setActiveTab('google_sheet');
+            openResyncModalWithOptions({ year, startDate, endDate });
+          }}
+        />
       )}
     </div>
   );
