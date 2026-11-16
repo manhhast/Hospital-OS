@@ -1396,15 +1396,15 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     return (
       <div className="space-y-6">
         {/* Controls Header */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center justify-center font-bold shadow-2xs">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2 flex-wrap">
                 <span>BÁO CÁO SỐ LIỆU THỐNG KÊ HẰNG NGÀY</span>
-                <span className="px-2.5 py-0.5 text-xs font-black bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 tabular-nums">
+                <span className="px-2.5 py-0.5 text-xs font-black bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-700 tabular-nums">
                   Ngày {selectedReportDay} - {selectedReportMonth}
                 </span>
               </h3>
@@ -1418,7 +1418,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleOpenDailyEntryModal}
-                  className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>Nhập / Sửa số liệu ngày {selectedReportDay}</span>
@@ -1426,7 +1426,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyHandover}
-                  className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   {copiedHandover ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedHandover ? 'Đã sao chép' : 'Sao chép Giao ban'}</span>
@@ -1434,7 +1434,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleDispatchHandoverNotification}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Gửi Giao Ban</span>
@@ -1443,7 +1443,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             )}
             <button
               onClick={() => setIsPinManagerOpen(true)}
-              className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <Pin className="w-3.5 h-3.5 fill-current text-amber-500" />
               <span>Ghim ({pinnedServiceNames.length})</span>
@@ -1498,7 +1498,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         {/* Daily Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Ca Trong Ngày</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-blue-900 dark:text-blue-200">{totalDayAll.toLocaleString()} ca</h4>
@@ -1513,7 +1513,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             </p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lượt Bảo Hiểm (BHYT)</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-indigo-700 dark:text-indigo-400">{totalDayBH.toLocaleString()} ca</h4>
@@ -1524,7 +1524,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">Tỷ lệ bệnh nhân BHYT trong ngày</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lượt Viện Phí / Nhân Dân</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{totalDayND.toLocaleString()} ca</h4>
@@ -1535,7 +1535,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">Tỷ lệ bệnh nhân thu phí trực tiếp</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">So Với Trung Bình Ngày</span>
             <div className="flex items-baseline justify-between">
               <h4 className={`text-2xl font-black ${totalDiffVsAvg >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -1551,8 +1551,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         {/* Cơ Cấu Theo Bộ Phận Trong Ngày (Single-Elevation Executive Summary Strip) */}
         {allCatDaily.length > 0 && (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                 Cơ Cấu Thực Hiện Theo Bộ Phận &mdash; Ngày {selectedReportDay}/{getMonthNumber(selectedReportMonth)}
               </h4>
@@ -1564,7 +1564,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               {allCatDaily.map((c) => {
                 const share = totalDayAll > 0 ? (c.total / totalDayAll) * 100 : 0;
                 return (
-                  <div key={c.category} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                  <div key={c.category} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
                     <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 truncate" title={c.category}>
                       {c.category}
                     </div>
@@ -1583,8 +1583,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         )}
 
         {/* Detailed Daily Table with Fast Pinning & Visual Triage Filter Toolbar */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden space-y-0">
-          <div className="bg-slate-50 dark:bg-slate-800/90 px-5 py-4 border-b border-slate-300 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden space-y-0">
+          <div className="bg-slate-100/80 dark:bg-slate-800/90 px-5 py-4 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div>
               <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
                 <span>CHI TIẾT CÁC KỸ THUẬT THỰC HIỆN TRONG NGÀY {selectedReportDay} - {selectedReportMonth.toUpperCase()}</span>
@@ -1646,23 +1646,23 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse min-w-[820px]">
               <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-300 dark:border-slate-600">
-                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-700">Ghim</th>
-                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-700">STT</th>
-                  <th className="px-2.5 py-2.5 w-[92px] border-r border-slate-300 dark:border-slate-700">Bộ<br />Phận</th>
-                  <th className="px-3 py-2.5 min-w-[175px] border-r border-slate-300 dark:border-slate-700">Kỹ Thuật /<br />Dịch Vụ</th>
-                  <th className="px-2 py-2.5 w-[114px] text-center border-r border-slate-300 dark:border-slate-700">Cảnh Báo<br />Lâm Sàng</th>
-                  <th className="px-2.5 py-2.5 w-[78px] text-right border-r border-slate-300 dark:border-slate-700">Bảo Hiểm<br />(BH)</th>
-                  <th className="px-2.5 py-2.5 w-[78px] text-right border-r border-slate-300 dark:border-slate-700">Nhân Dân<br />(ND)</th>
-                  <th className="px-2.5 py-2.5 w-[68px] text-right bg-blue-100/80 dark:bg-blue-950 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-800">Tổng<br />Ngày</th>
-                  <th className="px-2 py-2.5 w-[62px] text-right border-r border-slate-300 dark:border-slate-700">Tỷ<br />Trọng</th>
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-400 dark:border-slate-500">
+                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-600">Ghim</th>
+                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-600">STT</th>
+                  <th className="px-2.5 py-2.5 w-[92px] border-r border-slate-300 dark:border-slate-600">Bộ<br />Phận</th>
+                  <th className="px-3 py-2.5 min-w-[175px] border-r border-slate-300 dark:border-slate-600">Kỹ Thuật /<br />Dịch Vụ</th>
+                  <th className="px-2 py-2.5 w-[114px] text-center border-r border-slate-300 dark:border-slate-600">Cảnh Báo<br />Lâm Sàng</th>
+                  <th className="px-2.5 py-2.5 w-[78px] text-right border-r border-slate-300 dark:border-slate-600">Bảo Hiểm<br />(BH)</th>
+                  <th className="px-2.5 py-2.5 w-[78px] text-right border-r border-slate-300 dark:border-slate-600">Nhân Dân<br />(ND)</th>
+                  <th className="px-2.5 py-2.5 w-[68px] text-right bg-blue-100/80 dark:bg-blue-950 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-700">Tổng<br />Ngày</th>
+                  <th className="px-2 py-2.5 w-[62px] text-right border-r border-slate-300 dark:border-slate-600">Tỷ<br />Trọng</th>
                   <th className="px-2.5 py-2.5 w-[116px] text-right">So TB 30 Ngày<br />(Z-Score)</th>
                 </tr>
               </thead>
               <tbody>
                 {catGrouped.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-300 dark:border-slate-600 text-sm">
+                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-400/80 dark:border-slate-600 text-sm">
                       <td colSpan={5} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
                         📌 {group.category} <span className="font-semibold text-xs text-indigo-700 dark:text-indigo-300 ml-1">({group.items.length} kỹ thuật)</span>
                       </td>
@@ -1672,7 +1672,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
                         {group.catND.toLocaleString()}
                       </td>
-                      <td className="px-2.5 py-2.5 text-right font-black tabular-nums text-[15px] text-blue-950 dark:text-blue-100 bg-blue-100/80 dark:bg-blue-950/70 border-r border-blue-300 dark:border-blue-800">
+                      <td className="px-2.5 py-2.5 text-right font-black tabular-nums text-[15px] text-blue-950 dark:text-blue-100 bg-blue-100/80 dark:bg-blue-950/70 border-r border-blue-300 dark:border-blue-700">
                         {group.catTotal.toLocaleString()}
                       </td>
                       <td className="px-2 py-2.5 text-right font-extrabold tabular-nums border-r border-slate-300 dark:border-slate-600">
@@ -1687,10 +1687,10 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       return (
                         <tr
                           key={`${item.id}-${itemIdx}`}
-                          className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors"
+                          className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300 dark:border-slate-700 transition-colors"
                         >
                           {/* Pin Toggle Button */}
-                          <td className="px-1.5 py-2.5 text-center border-r border-slate-200 dark:border-slate-700/80">
+                          <td className="px-1.5 py-2.5 text-center border-r border-slate-300 dark:border-slate-700">
                             <button
                               type="button"
                               onClick={() => handleTogglePinService(item.name)}
@@ -1706,17 +1706,17 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                           </td>
 
                           {/* STT */}
-                          <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">
+                          <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-300 dark:border-slate-700">
                             {itemIdx + 1}
                           </td>
 
                           {/* Bộ phận */}
-                          <td className="px-2.5 py-2.5 font-medium text-slate-600 dark:text-slate-300 leading-snug border-r border-slate-200 dark:border-slate-700/80">
+                          <td className="px-2.5 py-2.5 font-medium text-slate-600 dark:text-slate-300 leading-snug border-r border-slate-300 dark:border-slate-700">
                             {item.category}
                           </td>
 
                           {/* Service Name */}
-                          <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700/80">
+                          <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700">
                             <div className="flex items-center justify-between gap-2">
                               <span className="leading-snug">{item.name}</span>
                               {isPinned && (
@@ -1728,7 +1728,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                           </td>
 
                           {/* Visual Triage Alert Pill */}
-                          <td className="px-2 py-2.5 text-center border-r border-slate-200 dark:border-slate-700/80 whitespace-nowrap">
+                          <td className="px-2 py-2.5 text-center border-r border-slate-300 dark:border-slate-700 whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => setSelectedBenchmarkingItem(triage)}
@@ -1743,22 +1743,22 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                           </td>
 
                           {/* Bảo hiểm (BH) */}
-                          <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-indigo-700 dark:text-indigo-300 border-r border-slate-200 dark:border-slate-700/80">
+                          <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-indigo-700 dark:text-indigo-300 border-r border-slate-300 dark:border-slate-700">
                             {item.bhVal ? item.bhVal.toLocaleString() : <span className="text-slate-300 dark:text-slate-600 font-normal">-</span>}
                           </td>
 
                           {/* Nhân dân (ND) */}
-                          <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700/80">
+                          <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-slate-800 dark:text-slate-200 border-r border-slate-300 dark:border-slate-700">
                             {item.ndVal ? item.ndVal.toLocaleString() : <span className="text-slate-300 dark:text-slate-600 font-normal">-</span>}
                           </td>
 
                           {/* Tổng Ngày */}
-                          <td className="px-2.5 py-2.5 text-right font-black text-[15px] tabular-nums text-blue-950 dark:text-blue-100 bg-blue-50/70 dark:bg-blue-950/35 border-r border-blue-200 dark:border-blue-800/80">
+                          <td className="px-2.5 py-2.5 text-right font-black text-[15px] tabular-nums text-blue-950 dark:text-blue-100 bg-blue-50/70 dark:bg-blue-950/35 border-r border-blue-300 dark:border-blue-700">
                             {item.totalDay.toLocaleString()}
                           </td>
 
                           {/* Tỷ Trọng */}
-                          <td className="px-2 py-2.5 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700/80">
+                          <td className="px-2.5 py-2.5 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-300 dark:border-slate-700">
                             {totalDayAll > 0 ? ((item.totalDay / totalDayAll) * 100).toFixed(1) : '0.0'}%
                           </td>
 
@@ -1818,7 +1818,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         {/* Chart: Top Performed Services on this Selected Day */}
         {topServices.length > 0 && (
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-3">
             <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <Activity className="w-4 h-4 text-indigo-600" /> TOP KỸ THUẬT THỰC HIỆN NHIỀU NHẤT TRONG NGÀY {selectedReportDay}
             </h4>
@@ -1972,15 +1972,15 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     return (
       <div className="space-y-6">
         {/* Controls Header */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center font-bold shadow-2xs">
               <Layers className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 BÁO CÁO CÔNG TÁC TUẦN
-                <span className="px-2.5 py-0.5 text-xs font-black bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 rounded-full border border-indigo-200 dark:border-indigo-800">
+                <span className="px-2.5 py-0.5 text-xs font-black bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 rounded-full border border-indigo-300 dark:border-indigo-700">
                   Tuần {selectedReportWeek} ({currWeekInfo.dateRangeLabel}) - Năm {selectedYear}
                 </span>
               </h3>
@@ -1991,7 +1991,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         {/* Weekly Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Ca Cả Tuần</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-indigo-900 dark:text-indigo-200">{totalWeekAll.toLocaleString()} ca</h4>
@@ -2000,7 +2000,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">Tổng số lượt thực hiện trong 7 ngày</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Trung Bình / Ngày Tuần</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-blue-700 dark:text-blue-400">{overallWeekAvgPerDay.toFixed(1)} ca/ngày</h4>
@@ -2009,7 +2009,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">Công suất trung bình mỗi ngày trong tuần</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tỷ Lệ BHYT Tuần</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{totalWeekBH.toLocaleString()} ca</h4>
@@ -2020,7 +2020,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">So với {totalWeekND.toLocaleString()} ca Nhân dân</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">So Với Tuần Trước</span>
             <div className="flex items-baseline justify-between">
               <h4 className={`text-2xl font-black ${overallWeekGrowthPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -2033,7 +2033,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         </div>
 
         {/* Daily Breakdown Chart for selected week */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-3">
           <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-indigo-600" /> DIỄN BIẾN SỐ CA THEO TỪNG NGÀY TRONG {currWeekInfo.name.toUpperCase()}
           </h4>
@@ -2053,8 +2053,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         </div>
 
         {/* Detailed Weekly Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden">
-          <div className="bg-slate-50 dark:bg-slate-800/90 px-5 py-4 border-b border-slate-300 dark:border-slate-700 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div className="bg-slate-100/80 dark:bg-slate-800/90 px-5 py-4 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex items-center justify-between">
             <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
               BẢNG TỔNG HỢP SỐ CA CÔNG TÁC {currWeekInfo.name.toUpperCase()}
             </h4>
@@ -2063,21 +2063,21 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-300 dark:border-slate-600">
-                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-700">STT</th>
-                  <th className="px-2.5 py-2.5 w-[92px] border-r border-slate-300 dark:border-slate-700">Bộ<br />Phận</th>
-                  <th className="px-3 py-2.5 min-w-[180px] border-r border-slate-300 dark:border-slate-700">Kỹ Thuật /<br />Dịch Vụ</th>
-                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-700">BH<br />Tuần</th>
-                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-700">ND<br />Tuần</th>
-                  <th className="px-2.5 py-2.5 w-[80px] text-right bg-indigo-100/80 dark:bg-indigo-950 text-indigo-950 dark:text-indigo-100 border-r border-indigo-300 dark:border-indigo-800">Tổng<br />Tuần</th>
-                  <th className="px-2.5 py-2.5 w-[80px] text-right border-r border-slate-300 dark:border-slate-700">TB/Ngày<br />Tuần</th>
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-400 dark:border-slate-500">
+                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-600">STT</th>
+                  <th className="px-2.5 py-2.5 w-[92px] border-r border-slate-300 dark:border-slate-600">Bộ<br />Phận</th>
+                  <th className="px-3 py-2.5 min-w-[180px] border-r border-slate-300 dark:border-slate-600">Kỹ Thuật /<br />Dịch Vụ</th>
+                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-600">BH<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-600">ND<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[80px] text-right bg-indigo-100/80 dark:bg-indigo-950 text-indigo-950 dark:text-indigo-100 border-r border-indigo-300 dark:border-indigo-700">Tổng<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[80px] text-right border-r border-slate-300 dark:border-slate-600">TB/Ngày<br />Tuần</th>
                   <th className="px-2.5 py-2.5 w-[86px] text-right">So Tuần<br />Trước</th>
                 </tr>
               </thead>
               <tbody>
                 {catGroupedWeek.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-300 dark:border-slate-600 text-sm">
+                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-400/80 dark:border-slate-600 text-sm">
                       <td colSpan={3} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
                         📌 {group.category}
                       </td>
@@ -2087,7 +2087,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
                         {group.catND.toLocaleString()}
                       </td>
-                      <td className="px-2.5 py-2.5 text-right font-black tabular-nums text-[15px] text-indigo-950 dark:text-indigo-100 bg-indigo-100/80 dark:bg-indigo-950/70 border-r border-indigo-300 dark:border-indigo-800">
+                      <td className="px-2.5 py-2.5 text-right font-black tabular-nums text-[15px] text-indigo-950 dark:text-indigo-100 bg-indigo-100/80 dark:bg-indigo-950/70 border-r border-indigo-300 dark:border-indigo-700">
                         {group.catTotal.toLocaleString()}
                       </td>
                       <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums border-r border-slate-300 dark:border-slate-600">
@@ -2096,14 +2096,14 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       <td className="px-2.5 py-2.5 text-right text-slate-400 font-semibold">-</td>
                     </tr>
                     {group.items.map((item, itemIdx) => (
-                      <tr key={`${item.id}-${itemIdx}`} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-indigo-50/60 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
-                        <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">{itemIdx + 1}</td>
-                        <td className="px-2.5 py-2.5 font-medium text-slate-600 dark:text-slate-300 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.category}</td>
-                        <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.name}</td>
-                        <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-indigo-700 dark:text-indigo-300 border-r border-slate-200 dark:border-slate-700/80">{item.itemWeekBH ? item.itemWeekBH.toLocaleString() : '-'}</td>
-                        <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-700/80">{item.itemWeekND ? item.itemWeekND.toLocaleString() : '-'}</td>
-                        <td className="px-2.5 py-2.5 text-right font-black text-[15px] tabular-nums text-indigo-950 dark:text-indigo-100 bg-indigo-50/70 dark:bg-indigo-950/35 border-r border-indigo-200 dark:border-indigo-800/80">{item.itemWeekTotal.toLocaleString()}</td>
-                        <td className="px-2.5 py-2.5 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700/80">{item.avgPerDayInWeek.toFixed(1)}</td>
+                      <tr key={`${item.id}-${itemIdx}`} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-indigo-50/60 dark:hover:bg-slate-800/75 border-b border-slate-300 dark:border-slate-700 transition-colors">
+                        <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-300 dark:border-slate-700">{itemIdx + 1}</td>
+                        <td className="px-2.5 py-2.5 font-medium text-slate-600 dark:text-slate-300 leading-snug border-r border-slate-300 dark:border-slate-700">{item.category}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-300 dark:border-slate-700">{item.name}</td>
+                        <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-indigo-700 dark:text-indigo-300 border-r border-slate-300 dark:border-slate-700">{item.itemWeekBH ? item.itemWeekBH.toLocaleString() : '-'}</td>
+                        <td className="px-2.5 py-2.5 text-right font-bold text-[15px] tabular-nums text-slate-800 dark:text-slate-200 border-r border-slate-300 dark:border-slate-700">{item.itemWeekND ? item.itemWeekND.toLocaleString() : '-'}</td>
+                        <td className="px-2.5 py-2.5 text-right font-black text-[15px] tabular-nums text-indigo-950 dark:text-indigo-100 bg-indigo-50/70 dark:bg-indigo-950/35 border-r border-indigo-300 dark:border-indigo-700">{item.itemWeekTotal.toLocaleString()}</td>
+                        <td className="px-2.5 py-2.5 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-300 dark:border-slate-700">{item.avgPerDayInWeek.toFixed(1)}</td>
                         <td className={`px-2.5 py-2.5 text-right font-extrabold tabular-nums ${item.weekDiffPct >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                           {item.itemPrevWeekTotal > 0 ? `${item.weekDiffPct >= 0 ? '+' : ''}${item.weekDiffPct.toFixed(0)}%` : '-'}
                         </td>
@@ -2291,15 +2291,15 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     return (
       <div className="space-y-6">
         {/* Controls Header */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center justify-center font-bold shadow-2xs">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 BÁO CÁO NĂM CÔNG TÁC CHẨN ĐOÁN HÌNH ẢNH {selectedYear}
-                <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-black bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 rounded-full border border-purple-200 dark:border-purple-800">
+                <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-black bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 rounded-full border border-purple-300 dark:border-purple-700">
                   Chuẩn hóa 12 tháng
                 </span>
               </h3>
@@ -2320,22 +2320,22 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 })
               }
               disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-200 rounded-xl text-xs font-bold border border-amber-200 dark:border-amber-800 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-200 rounded-xl text-xs font-bold border border-amber-300 dark:border-amber-700 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
             >
               <Search className="w-3.5 h-3.5" />
               <span>Rà soát số liệu ({selectedYear})</span>
             </button>
 
-            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold">
               <button
                 onClick={() => setAnnualViewMode('full')}
-                className={`px-3 py-1 rounded-lg transition-all ${annualViewMode === 'full' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${annualViewMode === 'full' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
               >
                 Cả Năm (Thực Tế + Dự Báo)
               </button>
               <button
                 onClick={() => setAnnualViewMode('actual_only')}
-                className={`px-3 py-1 rounded-lg transition-all ${annualViewMode === 'actual_only' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${annualViewMode === 'actual_only' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
               >
                 Chỉ {actualMonths.length} Tháng Thực Tế ({actualLabelRange})
               </button>
@@ -2345,7 +2345,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         {/* Annual KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Lượt Ca Thực Tế ({actualLabelRange})</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-blue-900 dark:text-blue-200">{grandActualTotal.toLocaleString()} ca</h4>
@@ -2354,7 +2354,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">Số ca thực tế trích xuất từ Google Sheet</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Hợp Cả Năm {selectedYear}</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-purple-900 dark:text-purple-200">{grandFullYearTotal.toLocaleString()} ca</h4>
@@ -2363,7 +2363,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">Gồm {actualMonths.length} tháng thực tế & {12 - actualMonths.length} tháng dự báo</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tháng Cao Điểm Nhất (Thực Tế)</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{peakActualMonth}</h4>
@@ -2372,7 +2372,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             <p className="text-xs text-slate-500">Tháng có khối lượng công việc lớn nhất</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Công Suất TB / Tháng Thực Tế</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-indigo-700 dark:text-indigo-400">{Math.round(actualMonthlyAverage).toLocaleString()} ca/tháng</h4>
@@ -2382,7 +2382,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         </div>
 
         {/* Annual Month-by-Month Trend Chart */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-purple-600" /> BIỂU ĐỒ DIỄN BIẾN SỐ CA 12 THÁNG TRONG NĂM {selectedYear}
@@ -2418,8 +2418,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         </div>
 
         {/* Annual Matrix Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden">
-          <div className="bg-slate-50 dark:bg-slate-800/90 px-5 py-4 border-b border-slate-300 dark:border-slate-700 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden">
+          <div className="bg-slate-100/80 dark:bg-slate-800/90 px-5 py-4 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex items-center justify-between">
             <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
               MA TRẬN SỐ LIỆU TỔNG HỢP CÔNG TÁC {annualViewMode === 'full' ? `12 THÁNG NĂM ${selectedYear}` : `${actualMonths.length} THÁNG THỰC TẾ (${actualLabelRange})`}
             </h4>
@@ -2431,9 +2431,9 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse min-w-[920px]">
               <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-300 dark:border-slate-600">
-                  <th className="px-1.5 py-2.5 w-10 text-center border-r border-slate-300 dark:border-slate-700">STT</th>
-                  <th className="px-3 py-2.5 min-w-[180px] border-r border-slate-300 dark:border-slate-700">Kỹ Thuật /<br />Dịch Vụ</th>
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-400 dark:border-slate-500">
+                  <th className="px-1.5 py-2.5 w-10 text-center border-r border-slate-300 dark:border-slate-600">STT</th>
+                  <th className="px-3 py-2.5 min-w-[180px] border-r border-slate-300 dark:border-slate-600">Kỹ Thuật /<br />Dịch Vụ</th>
 
                   {displayedColumns.map(m => {
                     const isAct = actualMonthsSet.has(m);
@@ -2442,8 +2442,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                         key={m}
                         className={
                           isAct
-                            ? 'px-1.5 py-2.5 text-right bg-blue-100/80 dark:bg-blue-950/70 text-blue-950 dark:text-blue-200 border-r border-blue-300 dark:border-blue-800 font-black min-w-[56px]'
-                            : 'px-1.5 py-2.5 text-right text-slate-700 dark:text-slate-300 border-r border-slate-300 dark:border-slate-700 min-w-[52px] font-bold'
+                            ? 'px-1.5 py-2.5 text-right bg-blue-100/80 dark:bg-blue-950/70 text-blue-950 dark:text-blue-200 border-r border-blue-300 dark:border-blue-700 font-black min-w-[56px]'
+                            : 'px-1.5 py-2.5 text-right text-slate-700 dark:text-slate-300 border-r border-slate-300 dark:border-slate-600 min-w-[52px] font-bold'
                         }
                       >
                         {m.replace('Tháng ', 'T')}<br/>
@@ -2454,12 +2454,12 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     );
                   })}
 
-                  <th className="px-2 py-2.5 text-right bg-blue-100 dark:bg-blue-950 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-800 font-black w-[82px]">
+                  <th className="px-2 py-2.5 text-right bg-blue-100 dark:bg-blue-950 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-700 font-black w-[82px]">
                     Tổng {actualMonths.length}T<br />Thực Tế
                   </th>
 
                   {annualViewMode === 'full' && (
-                    <th className="px-2 py-2.5 text-right bg-purple-100 dark:bg-purple-950 text-purple-950 dark:text-purple-100 border-r border-purple-300 dark:border-purple-800 font-black w-[78px]">
+                    <th className="px-2 py-2.5 text-right bg-purple-100 dark:bg-purple-950 text-purple-950 dark:text-purple-100 border-r border-purple-300 dark:border-purple-700 font-black w-[78px]">
                       Dự Báo<br />Cả Năm
                     </th>
                   )}
@@ -2472,7 +2472,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               <tbody>
                 {catGroupedAnnual.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-purple-950 dark:text-purple-200 border-y border-slate-300 dark:border-slate-600 text-sm">
+                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-purple-950 dark:text-purple-200 border-y border-slate-400/80 dark:border-slate-600 text-sm">
                       <td colSpan={2} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
                         📌 {group.category} ({group.items.length} kỹ thuật)
                       </td>
@@ -2483,7 +2483,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                             key={m}
                             className={
                               isAct
-                                ? 'px-1.5 text-right py-2.5 font-black tabular-nums bg-blue-100/50 dark:bg-blue-950/40 text-blue-950 dark:text-blue-200 border-r border-blue-300/80 dark:border-blue-800'
+                                ? 'px-1.5 text-right py-2.5 font-black tabular-nums bg-blue-100/50 dark:bg-blue-950/40 text-blue-950 dark:text-blue-200 border-r border-blue-300 dark:border-blue-700'
                                 : 'px-1.5 text-right py-2.5 font-bold tabular-nums text-slate-700 dark:text-slate-300 border-r border-slate-300 dark:border-slate-600'
                             }
                           >
@@ -2491,11 +2491,11 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                           </td>
                         );
                       })}
-                      <td className="px-2 text-right py-2.5 font-black tabular-nums bg-blue-100/80 dark:bg-blue-950/70 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-800">
+                      <td className="px-2 text-right py-2.5 font-black tabular-nums bg-blue-100/80 dark:bg-blue-950/70 text-blue-950 dark:text-blue-100 border-r border-blue-300 dark:border-blue-700">
                         {group.catActualTotal.toLocaleString()}
                       </td>
                       {annualViewMode === 'full' && (
-                        <td className="px-2 text-right py-2.5 font-black tabular-nums bg-purple-100/80 dark:bg-purple-950/70 text-purple-950 dark:text-purple-100 border-r border-purple-300 dark:border-purple-800">
+                        <td className="px-2 text-right py-2.5 font-black tabular-nums bg-purple-100/80 dark:bg-purple-950/70 text-purple-950 dark:text-purple-100 border-r border-purple-300 dark:border-purple-700">
                           {group.catYearTotal.toLocaleString()}
                         </td>
                       )}
@@ -2505,9 +2505,9 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     </tr>
 
                     {group.items.map((item, itemIdx) => (
-                      <tr key={`${item.id}-${itemIdx}`} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300/85 dark:border-slate-700/90 transition-colors">
-                        <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-200 dark:border-slate-700/80">{itemIdx + 1}</td>
-                        <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-200 dark:border-slate-700/80">{item.name}</td>
+                      <tr key={`${item.id}-${itemIdx}`} className="odd:bg-white even:bg-slate-50/70 dark:odd:bg-slate-900 dark:even:bg-slate-800/35 hover:bg-blue-50/70 dark:hover:bg-slate-800/75 border-b border-slate-300 dark:border-slate-700 transition-colors">
+                        <td className="px-1.5 py-2.5 text-center text-slate-500 dark:text-slate-400 font-bold tabular-nums border-r border-slate-300 dark:border-slate-700">{itemIdx + 1}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-slate-100 leading-snug border-r border-slate-300 dark:border-slate-700">{item.name}</td>
 
                         {displayedColumns.map(m => {
                           const isAct = actualMonthsSet.has(m);
@@ -2517,8 +2517,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                               key={m}
                               className={
                                 isAct
-                                  ? 'px-1.5 py-2.5 text-right font-extrabold tabular-nums text-blue-900 dark:text-blue-300 bg-blue-50/40 dark:bg-blue-950/20 border-r border-blue-200/80 dark:border-blue-900/50'
-                                  : 'px-1.5 py-2.5 text-right font-medium tabular-nums text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-700/80'
+                                  ? 'px-1.5 py-2.5 text-right font-extrabold tabular-nums text-blue-900 dark:text-blue-300 bg-blue-50/40 dark:bg-blue-950/20 border-r border-blue-300/80 dark:border-blue-800'
+                                  : 'px-1.5 py-2.5 text-right font-medium tabular-nums text-slate-600 dark:text-slate-400 border-r border-slate-300 dark:border-slate-700'
                               }
                             >
                               {val > 0 ? val.toLocaleString() : '-'}
@@ -2526,12 +2526,12 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                           );
                         })}
 
-                        <td className="px-2 py-2.5 text-right font-black tabular-nums text-blue-950 dark:text-blue-100 bg-blue-50/70 dark:bg-blue-950/40 border-r border-blue-200 dark:border-blue-800">
+                        <td className="px-2 py-2.5 text-right font-black tabular-nums text-blue-950 dark:text-blue-100 bg-blue-50/70 dark:bg-blue-950/40 border-r border-blue-300 dark:border-blue-700">
                           {item.actualSum.toLocaleString()}
                         </td>
 
                         {annualViewMode === 'full' && (
-                          <td className="px-2 py-2.5 text-right font-black tabular-nums text-purple-950 dark:text-purple-100 bg-purple-50/70 dark:bg-purple-950/40 border-r border-purple-200 dark:border-purple-800">
+                          <td className="px-2 py-2.5 text-right font-black tabular-nums text-purple-950 dark:text-purple-100 bg-purple-50/70 dark:bg-purple-950/40 border-r border-purple-300 dark:border-purple-700">
                             {item.fullYearTotal.toLocaleString()}
                           </td>
                         )}
@@ -2545,7 +2545,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 ))}
 
                 {/* Grand Total Row */}
-                <tr className="bg-slate-200/95 dark:bg-slate-800 font-black text-slate-950 dark:text-slate-100 border-t-2 border-slate-300 dark:border-slate-600 text-[15px] uppercase">
+                <tr className="bg-slate-200/95 dark:bg-slate-800 font-black text-slate-950 dark:text-slate-100 border-t-2 border-slate-400 dark:border-slate-500 text-[15px] uppercase">
                   <td colSpan={2} className="px-3 py-3 font-black text-indigo-950 dark:text-indigo-200 border-r border-slate-300 dark:border-slate-600">
                     🏆 TỔNG CỘNG TOÀN KHOA
                   </td>
@@ -3598,10 +3598,10 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
       {/* Banner & Tab Switcher */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-xs font-extrabold tracking-wider uppercase mb-1">
-            <BarChart3 className="w-4 h-4" /> BÁO CÁO & THỐNG KÊ KHOA CẬN LÂM SÀNG
+            <BarChart3 className="w-4 h-4" /> BÁO CÁO &amp; THỐNG KÊ KHOA CẬN LÂM SÀNG
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
             {activeTab === 'google_sheet'
@@ -3610,48 +3610,55 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 ? 'Lịch Sử Đồng Bộ & Rà Soát Số Liệu'
                 : 'Dashboard Biểu Đồ & Thống Kê Tổng Hợp'}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Theo dõi chi tiết lượt khám, Siêu âm, Nội soi, X-quang, Điện tim & LHN, Xét nghiệm theo từng ngày & bảo hiểm / nhân dân.
-          </p>
+
+          {/* 3 Tab Switcher Buttons in a Single Horizontal Row Below Title */}
+          <div className="mt-3">
+            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex flex-wrap sm:flex-nowrap items-center border border-slate-300 dark:border-slate-600 gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab('google_sheet')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTab === 'google_sheet'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs border border-slate-300/80 dark:border-slate-500'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Báo Cáo Số Ca (Google Sheet)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTab === 'dashboard'
+                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs border border-slate-300/80 dark:border-slate-500'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Biểu Đồ &amp; KPI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('sync_history')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTab === 'sync_history'
+                    ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-xs border border-slate-300/80 dark:border-slate-500'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <History className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Lịch Sử Đồng Bộ</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Top Actions & Navigation Switch */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex flex-wrap items-center border border-slate-200 dark:border-slate-700 gap-1">
-            <button
-              onClick={() => setActiveTab('google_sheet')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'google_sheet'
-                  ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              <span>Báo Cáo Số Ca (Google Sheet)</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4 text-indigo-600" />
-              <span>Biểu Đồ & KPI</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('sync_history')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'sync_history'
-                  ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              <History className="w-4 h-4 text-amber-600" />
-              <span>Lịch Sử Đồng Bộ</span>
-            </button>
-          </div>
+        {/* Multi-line Description Block on the Right */}
+        <div className="lg:w-80 xl:w-96 shrink-0 lg:border-l-[1.5px] lg:border-slate-300 dark:lg:border-slate-700 lg:pl-5">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            Theo dõi chi tiết lượt khám, Siêu âm, Nội soi, X-quang, Điện tim &amp; LHN, Xét nghiệm theo từng ngày &amp; bảo hiểm / nhân dân.
+          </p>
         </div>
       </div>
 
@@ -3680,336 +3687,294 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         return (
         <div className="space-y-4">
-          {/* Google Sheet Link & Sync Integration Card */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                  <Link className="w-5 h-5" />
+          {/* UNIFIED CONTROL HUB: SOURCE & SYNC + TIME SCOPE & EXPORT + FILTER & SEARCH */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden divide-y-[1.5px] divide-slate-300 dark:divide-slate-700">
+            {/* Band 1: Data Source Status & Sync Actions */}
+            <div className="p-4 bg-emerald-50/35 dark:bg-emerald-950/15 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
+                  <Link className="w-4 h-4" />
                 </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                    Liên kết Google Sheets Báo Cáo Giao Ban Khoa CLS · Năm {selectedYear}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Tự động rà soát &amp; đồng bộ <strong>3 ngày gần nhất</strong> · Nhiều ngày hơn dùng{' '}
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      Google Sheets Giao Ban CLS · Năm {selectedYear}
+                    </h3>
+                    <span
+                      className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border inline-flex items-center gap-1 whitespace-nowrap ${
+                        cloudState.status === 'synced'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700'
+                          : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600'
+                      }`}
+                      title={
+                        cloudState.status === 'synced'
+                          ? `Mọi dữ liệu Google Sheet sau đồng bộ được lưu cố định trên Firebase Cloud Firestore (${cloudState.userEmail || ''})`
+                          : 'Kết nối Firebase ở thanh trên để tự động lưu cố định mọi dữ liệu lên Cloud Firestore'
+                      }
+                    >
+                      {cloudState.status === 'synced' ? (
+                        <Cloud className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      ) : (
+                        <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                      )}
+                      <span>
+                        {cloudState.status === 'synced' ? 'Firebase Cloud' : 'Lưu máy'}
+                      </span>
+                    </span>
+
+                    {resolveSpreadsheetId(effectiveSheetUrl) ? (
+                      <a
+                        href={effectiveSheetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-700 rounded-lg text-[11px] font-bold text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1 cursor-pointer transition-all group whitespace-nowrap"
+                        title={`Mở trang tính Google Sheets Năm ${selectedYear} (Chỉnh sửa link trong Menu Cấu Hình)`}
+                      >
+                        <Database className="w-3 h-3 shrink-0" />
+                        <span>Đã kết nối ({selectedYear})</span>
+                        <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0" />
+                      </a>
+                    ) : (
+                      <span
+                        className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 rounded-lg text-[11px] font-bold text-amber-700 dark:text-amber-300 inline-flex items-center gap-1 whitespace-nowrap"
+                        title={`Vào Menu Cấu Hình → Cấu Hình Hệ Thống để gắn link Google Sheets Năm ${selectedYear}`}
+                      >
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        <span>Chưa gắn link ({selectedYear})</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Khởi động chỉ đồng bộ <strong>3 ngày gần nhất</strong> · Phạm vi rộng hơn dùng{' '}
                     <strong>Rà soát số liệu</strong> · Đã lưu:{' '}
                     <strong className="text-emerald-600 dark:text-emerald-400">{syncedLabel}</strong>
                     {archiveStats.totalRecordedCells > 0 && (
                       <span className="ml-1.5 tabular-nums text-slate-500">
-                        ({archiveStats.totalRecordedCells.toLocaleString('vi-VN')} ô đã khóa bảo vệ)
+                        ({archiveStats.totalRecordedCells.toLocaleString('vi-VN')} ô đã khóa)
                       </span>
                     )}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                <span
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border shrink-0 inline-flex items-center gap-1 ${
-                    cloudState.status === 'synced'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
-                      : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'
-                  }`}
-                  title={
-                    cloudState.status === 'synced'
-                      ? `Mọi dữ liệu Google Sheet sau đồng bộ được lưu cố định trên Firebase Cloud Firestore (${cloudState.userEmail || ''})`
-                      : 'Kết nối Firebase ở thanh trên để tự động lưu cố định mọi dữ liệu lên Cloud Firestore'
-                  }
-                >
-                  {cloudState.status === 'synced' ? (
-                    <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                  )}
-                  <span>
-                    {cloudState.status === 'synced'
-                      ? 'Lưu cố định Firebase Cloud'
-                      : 'Lưu máy · Chờ kết nối Firebase'}
-                  </span>
-                </span>
-                {resolveSpreadsheetId(effectiveSheetUrl) ? (
-                  <a
-                    href={effectiveSheetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs group shrink-0"
-                    title={`Bấm để mở trang tính Google Sheets Năm ${selectedYear} (Chỉnh sửa liên kết trong 'Menu Cấu Hình → Cấu Hình Hệ Thống')`}
-                  >
-                    <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>Đã kết nối ({selectedYear})</span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                  </a>
-                ) : (
-                  <span
-                    className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 shrink-0"
-                    title={`Vào mục 'Menu Cấu Hình → Cấu Hình Hệ Thống' để nhập Năm ${selectedYear} và dán URL hoặc ID Google Sheets`}
-                  >
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>Chưa gắn link ({selectedYear})</span>
-                  </span>
-                )}
+              <div className="flex flex-wrap items-center gap-2 shrink-0 sm:pl-12 xl:pl-0">
                 <button
                   type="button"
                   onClick={openResyncModal}
                   disabled={isSyncing}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0"
+                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
                   title="Rà soát & đồng bộ thủ công theo khoảng thời gian nhiều ngày hơn (> 3 ngày)"
                 >
-                  <Search className="w-3.5 h-3.5" />
+                  <Search className="w-3.5 h-3.5 shrink-0" />
                   <span>Rà soát số liệu</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleRunManualThreeDaySync()}
                   disabled={isSyncing}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
                   title="Rà soát và đồng bộ 3 ngày gần nhất (tự điền ô trống trên Firebase; cảnh báo & ghi Lịch sử nếu có sai lệch)"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
                   <span>{isSyncing ? 'Đang kiểm tra 3 ngày...' : 'Đồng bộ 3 ngày gần nhất'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Sub Filter & Category Bar */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
-                  <Filter className="w-3.5 h-3.5" /> Bộ phận:
-                </span>
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                      selectedCategory === cat
-                        ? 'bg-indigo-600 text-white shadow-2xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
+            {/* Band 2: Time Period Navigation & Report Export */}
+            <div className="p-4 space-y-2.5 bg-white dark:bg-slate-900">
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                {/* Left: Time Granularity + Numeric Year + Annual Scope */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-300 dark:border-slate-600">
+                    <button
+                      type="button"
+                      onClick={() => setSheetTab('Báo cáo ngày')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                        sheetTab === 'Báo cáo ngày'
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Calendar className="w-3.5 h-3.5 shrink-0" />
+                      <span>Theo Ngày</span>
+                    </button>
 
-              <div className="flex items-center space-x-2 shrink-0 flex-wrap gap-y-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPinnedOnly(prev => !prev)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                    showPinnedOnly
-                      ? 'bg-amber-500 text-slate-950 font-black shadow-2xs'
-                      : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100'
-                  }`}
-                  title="Chỉ hiển thị các kỹ thuật đã ghim"
-                >
-                  <Star className={`w-3.5 h-3.5 ${showPinnedOnly ? 'fill-current' : ''}`} />
-                  <span>Chỉ xem mục ghim ({pinnedServiceNames.length})</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setSheetTab('Báo cáo tuần')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                        sheetTab === 'Báo cáo tuần'
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5 shrink-0" />
+                      <span>Theo Tuần</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsPinManagerOpen(true)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer border border-slate-200 dark:border-slate-700"
-                  title="Cấu hình danh sách các chỉ số trọng điểm đã ghim"
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>Quản lý ghim</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setSheetTab(selectedReportMonth || 'Tháng 2')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                        sheetTab.startsWith('Tháng')
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                      <span>Theo Tháng</span>
+                    </button>
 
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    placeholder="Tìm tên kỹ thuật..."
-                    className="pl-8 pr-3 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-800 dark:text-slate-200 w-40 sm:w-52"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+                    <button
+                      type="button"
+                      onClick={() => setSheetTab('Báo cáo năm')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                        sheetTab === 'Báo cáo năm'
+                          ? 'bg-purple-600 text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Theo Năm</span>
+                    </button>
+                  </div>
 
-          {/* THANH BỘ LỌC THỜI GIAN BÁO CÁO TINH GỌN & THÔNG MINH */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs p-3.5 space-y-3">
-            {/* Header + Active Selection Summary & Export Excel Button */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                  <Filter className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                    BỘ LỌC THỜI GIAN BÁO CÁO
-                  </span>
-                  <span className="hidden sm:inline text-[11px] text-slate-400 ml-2 font-medium">
-                    (Tự động đồng bộ số liệu chi tiết theo lựa chọn)
-                  </span>
-                </div>
-              </div>
-
-              {/* Active Selection Badge + Excel Export Button */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-slate-400">Đang xem:</span>
-                  <span className="px-3 py-1 bg-blue-600 text-white rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 tabular-nums">
-                    <Calendar className="w-3.5 h-3.5" />
-                    {sheetTab === 'Báo cáo ngày' && `Ngày ${selectedReportDay} - ${selectedReportMonth}/${selectedYear}`}
-                    {sheetTab === 'Báo cáo tuần' && `Tuần ${selectedReportWeek} (${getWeekDateRange(selectedReportWeek, selectedYear).dateRangeLabel}) - Năm ${selectedYear}`}
-                    {sheetTab.startsWith('Tháng') && `Báo cáo Tổng hợp ${sheetTab}/${selectedYear}`}
-                    {sheetTab === 'Báo cáo năm' && `Toàn bộ Năm ${selectedYear} (${annualViewMode === 'full' ? '12 Tháng' : `${syncedMonthKeys.length || 1} Tháng thực tế`})`}
-                  </span>
-                </div>
-
-                <button
-                  onClick={handleExportExcel}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs transition-all shadow-2xs cursor-pointer active:scale-95"
-                  title="Xuất báo cáo Excel theo khoảng thời gian đang chọn"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
-                  <span>Xuất Excel ({sheetTab === 'Báo cáo ngày' ? `Ngày ${selectedReportDay}` : sheetTab === 'Báo cáo tuần' ? `Tuần ${selectedReportWeek}` : sheetTab === 'Báo cáo năm' ? `Năm ${selectedYear}` : sheetTab})</span>
-                </button>
-
-                <button
-                  onClick={handleExportWord}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-extrabold text-xs transition-all shadow-2xs cursor-pointer active:scale-95"
-                  title="Xuất báo cáo Word (.doc) chuyên nghiệp theo khoảng thời gian đang chọn"
-                >
-                  <FileText className="w-3.5 h-3.5 text-white" />
-                  <span>Xuất Word (.doc)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Main Filter Controls Row */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Mode Segmented Tab Pills */}
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-                <button
-                  type="button"
-                  onClick={() => setSheetTab('Báo cáo ngày')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                    sheetTab === 'Báo cáo ngày'
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  Theo Ngày
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSheetTab('Báo cáo tuần')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                    sheetTab === 'Báo cáo tuần'
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  Theo Tuần
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSheetTab(selectedReportMonth || 'Tháng 2')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                    sheetTab.startsWith('Tháng')
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  Theo Tháng
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSheetTab('Báo cáo năm')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                    sheetTab === 'Báo cáo năm'
-                      ? 'bg-purple-600 text-white shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <BarChart3 className="w-3.5 h-3.5" />
-                  Theo Năm
-                </button>
-              </div>
-
-              {/* Contextual Sub-controls (Dynamic based on selected mode) */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* 0. Direct Numeric Year Picker (Supports any year 1900-2100) */}
-                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                  <span className="text-slate-500 pl-2 text-[11px]">Năm:</span>
-                  <button
-                    type="button"
-                    onClick={() => handleChangeReportYear(selectedYear - 1)}
-                    disabled={selectedYear <= MIN_REPORT_YEAR}
-                    className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
-                    title="Năm trước"
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min={MIN_REPORT_YEAR}
-                    max={MAX_REPORT_YEAR}
-                    list="cls-known-report-years"
-                    value={yearInputStr}
-                    onChange={(e) => {
-                      const clean = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
-                      setYearInputStr(clean);
-                      if (clean.length === 4) {
-                        const y = parseInt(clean, 10);
-                        if (isValidReportYear(y)) {
-                          handleChangeReportYear(y);
+                  {/* Direct Numeric Year Picker */}
+                  <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold">
+                    <span className="text-slate-500 pl-2 text-[11px]">Năm:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleChangeReportYear(selectedYear - 1)}
+                      disabled={selectedYear <= MIN_REPORT_YEAR}
+                      className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                      title="Năm trước"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      list="cls-known-report-years"
+                      value={yearInputStr}
+                      onChange={(e) => {
+                        const clean = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                        setYearInputStr(clean);
+                        if (clean.length === 4) {
+                          const y = parseInt(clean, 10);
+                          if (isValidReportYear(y)) {
+                            handleChangeReportYear(y);
+                          }
                         }
-                      }
-                    }}
-                    onBlur={() => {
-                      const y = parseInt(yearInputStr, 10);
-                      if (isValidReportYear(y)) {
-                        if (y !== selectedYear) handleChangeReportYear(y);
-                      } else {
-                        setYearInputStr(String(selectedYear));
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      }}
+                      onBlur={() => {
                         const y = parseInt(yearInputStr, 10);
                         if (isValidReportYear(y)) {
-                          handleChangeReportYear(y);
+                          if (y !== selectedYear) handleChangeReportYear(y);
                         } else {
                           setYearInputStr(String(selectedYear));
                         }
-                      }
-                    }}
-                    className="w-20 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 font-black px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none text-center text-xs tabular-nums"
-                    title="Nhập trực tiếp bất kỳ năm nào (vd: 2022, 2026, 2035)"
-                  />
-                  <datalist id="cls-known-report-years">
-                    {getKnownReportYears(storageService.getSettings(), [selectedYear]).map((y) => (
-                      <option key={y} value={y} />
-                    ))}
-                  </datalist>
-                  <button
-                    type="button"
-                    onClick={() => handleChangeReportYear(selectedYear + 1)}
-                    disabled={selectedYear >= MAX_REPORT_YEAR}
-                    className="px-1.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
-                    title="Năm sau"
-                  >
-                    +
-                  </button>
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const y = parseInt(yearInputStr, 10);
+                          if (isValidReportYear(y)) {
+                            handleChangeReportYear(y);
+                          } else {
+                            setYearInputStr(String(selectedYear));
+                          }
+                        }
+                      }}
+                      className="w-16 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 font-black px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 outline-none text-center text-xs tabular-nums focus:ring-2 focus:ring-emerald-500"
+                      title="Nhập trực tiếp bất kỳ năm nào (vd: 2022, 2026, 2035)"
+                    />
+                    <datalist id="cls-known-report-years">
+                      {getKnownReportYears(storageService.getSettings(), [selectedYear]).map((y) => (
+                        <option key={y} value={y} />
+                      ))}
+                    </datalist>
+                    <button
+                      type="button"
+                      onClick={() => handleChangeReportYear(selectedYear + 1)}
+                      disabled={selectedYear >= MAX_REPORT_YEAR}
+                      className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                      title="Năm sau"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Annual Scope Toggle inline when "Theo Năm" is active */}
+                  {sheetTab === 'Báo cáo năm' && (
+                    <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold">
+                      <span className="text-slate-500 pl-2 text-[11px]">Phạm vi:</span>
+                      <button
+                        type="button"
+                        onClick={() => setAnnualViewMode('full')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                          annualViewMode === 'full'
+                            ? 'bg-purple-600 text-white font-black shadow-2xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        12 Tháng
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAnnualViewMode('actual_only')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                          annualViewMode === 'actual_only'
+                            ? 'bg-purple-600 text-white font-black shadow-2xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {syncedMonthKeys.length || 1} Tháng Thực Tế
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* 1. Month Picker (All 12 Months for Day, Week, Month) */}
-                {(sheetTab === 'Báo cáo ngày' || sheetTab === 'Báo cáo tuần' || sheetTab.startsWith('Tháng')) && (
-                  <div className="flex flex-wrap items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+                {/* Right: Active Scope Summary + Compact Export Buttons */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <span className="px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 tabular-nums whitespace-nowrap">
+                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {sheetTab === 'Báo cáo ngày' && `Ngày ${selectedReportDay} · ${selectedReportMonth}/${selectedYear}`}
+                      {sheetTab === 'Báo cáo tuần' && `Tuần ${selectedReportWeek} (${getWeekDateRange(selectedReportWeek, selectedYear).dateRangeLabel})`}
+                      {sheetTab.startsWith('Tháng') && `Tổng hợp ${sheetTab}/${selectedYear}`}
+                      {sheetTab === 'Báo cáo năm' && `Năm ${selectedYear} (${annualViewMode === 'full' ? '12 Tháng' : `${syncedMonthKeys.length || 1} Tháng thực tế`})`}
+                    </span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap"
+                    title="Xuất báo cáo Excel theo khoảng thời gian đang chọn"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                    <span>Xuất Excel</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportWord}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap"
+                    title="Xuất báo cáo Word (.doc) chuyên nghiệp theo khoảng thời gian đang chọn"
+                  >
+                    <FileText className="w-3.5 h-3.5 shrink-0" />
+                    <span>Xuất Word</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Contextual Row 2: Month Picker + Day/Week Fine Controls (Hidden in Annual Mode) */}
+              {(sheetTab === 'Báo cáo ngày' || sheetTab === 'Báo cáo tuần' || sheetTab.startsWith('Tháng')) && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  {/* 12 Months Bar */}
+                  <div className="flex flex-wrap items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold">
                     <span className="text-slate-500 pl-2 pr-1 text-[11px] tabular-nums">Tháng ({selectedYear}):</span>
                     {ALL_MONTHS.map(m => {
                       const mNum = getMonthNumber(m);
@@ -4040,7 +4005,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                           }}
                           className={`px-2 py-1 rounded-lg transition-all cursor-pointer inline-flex items-center gap-1 ${
                             isSelected
-                              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black shadow-2xs border border-slate-200 dark:border-slate-700'
+                              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black shadow-2xs border border-slate-300 dark:border-slate-600'
                               : hasSynced
                               ? 'text-emerald-700 dark:text-emerald-300 hover:bg-white/70 dark:hover:bg-slate-700/70'
                               : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -4054,133 +4019,181 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       );
                     })}
                   </div>
-                )}
 
-                {/* 2. Specific controls for "Theo Ngày" */}
-                {sheetTab === 'Báo cáo ngày' && (
-                  <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                    <span className="text-slate-500 pl-2 text-[11px]">Ngày:</span>
-                    
-                    <button
-                      type="button"
-                      onClick={() => setSelectedReportDay(prev => Math.max(1, prev - 1))}
-                      disabled={selectedReportDay <= 1}
-                      className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      title="Ngày trước"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
+                  {/* Day Picker */}
+                  {sheetTab === 'Báo cáo ngày' && (
+                    <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold">
+                      <span className="text-slate-500 pl-2 text-[11px]">Ngày:</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReportDay(prev => Math.max(1, prev - 1))}
+                        disabled={selectedReportDay <= 1}
+                        className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        title="Ngày trước"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
 
-                    <select
-                      value={selectedReportDay}
-                      onChange={e => setSelectedReportDay(Number(e.target.value))}
-                      className="bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 font-black px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none cursor-pointer text-xs"
-                    >
-                      {Array.from({ length: getDaysInMonth(selectedReportMonth, selectedYear) }, (_, i) => i + 1).map(d => (
-                        <option key={d} value={d} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
-                          Ngày {d}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const maxD = getDaysInMonth(selectedReportMonth, selectedYear);
-                        setSelectedReportDay(prev => Math.min(maxD, prev + 1));
-                      }}
-                      disabled={selectedReportDay >= getDaysInMonth(selectedReportMonth, selectedYear)}
-                      className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      title="Ngày sau"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* 3. Specific controls for "Theo Tuần" */}
-                {sheetTab === 'Báo cáo tuần' && (
-                  <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                    <span className="text-slate-500 pl-2 text-[11px]">Tuần (1-52):</span>
-                    
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextW = Math.max(1, selectedReportWeek - 1);
-                        setSelectedReportWeek(nextW);
-                        setSelectedReportMonth(getWeekDateRange(nextW, selectedYear).startMonthStr);
-                      }}
-                      disabled={selectedReportWeek <= 1}
-                      className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      title="Tuần trước"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-
-                    <select
-                      value={selectedReportWeek}
-                      onChange={e => {
-                        const w = Number(e.target.value);
-                        setSelectedReportWeek(w);
-                        const info = getWeekDateRange(w, selectedYear);
-                        setSelectedReportMonth(info.startMonthStr);
-                      }}
-                      className="bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 font-black px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none cursor-pointer text-xs"
-                    >
-                      {Array.from({ length: 52 }, (_, i) => i + 1).map(w => {
-                        const info = getWeekDateRange(w, selectedYear);
-                        return (
-                          <option key={w} value={w} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
-                            Tuần {w} ({info.dateRangeLabel})
+                      <select
+                        value={selectedReportDay}
+                        onChange={e => setSelectedReportDay(Number(e.target.value))}
+                        className="bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 font-black px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-600 outline-none cursor-pointer text-xs"
+                      >
+                        {Array.from({ length: getDaysInMonth(selectedReportMonth, selectedYear) }, (_, i) => i + 1).map(d => (
+                          <option key={d} value={d} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                            Ngày {d}
                           </option>
-                        );
-                      })}
-                    </select>
+                        ))}
+                      </select>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextW = Math.min(52, selectedReportWeek + 1);
-                        setSelectedReportWeek(nextW);
-                        setSelectedReportMonth(getWeekDateRange(nextW, selectedYear).startMonthStr);
-                      }}
-                      disabled={selectedReportWeek >= 52}
-                      className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                      title="Tuần sau"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const maxD = getDaysInMonth(selectedReportMonth, selectedYear);
+                          setSelectedReportDay(prev => Math.min(maxD, prev + 1));
+                        }}
+                        disabled={selectedReportDay >= getDaysInMonth(selectedReportMonth, selectedYear)}
+                        className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        title="Ngày sau"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
-                {/* 4. Specific controls for "Theo Năm" */}
-                {sheetTab === 'Báo cáo năm' && (
-                  <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                    <span className="text-slate-500 pl-2 text-[11px]">Phạm vi:</span>
-                    <button
-                      type="button"
-                      onClick={() => setAnnualViewMode('full')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                        annualViewMode === 'full'
-                          ? 'bg-purple-600 text-white font-black shadow-2xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                      }`}
-                    >
-                      12 Tháng
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAnnualViewMode('actual_only')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                        annualViewMode === 'actual_only'
-                          ? 'bg-purple-600 text-white font-black shadow-2xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                      }`}
-                    >
-                      {syncedMonthKeys.length || 1} Tháng Thực Tế
-                    </button>
-                  </div>
+                  {/* Week Picker */}
+                  {sheetTab === 'Báo cáo tuần' && (
+                    <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold">
+                      <span className="text-slate-500 pl-2 text-[11px]">Tuần (1-52):</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextW = Math.max(1, selectedReportWeek - 1);
+                          setSelectedReportWeek(nextW);
+                          setSelectedReportMonth(getWeekDateRange(nextW, selectedYear).startMonthStr);
+                        }}
+                        disabled={selectedReportWeek <= 1}
+                        className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        title="Tuần trước"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+
+                      <select
+                        value={selectedReportWeek}
+                        onChange={e => {
+                          const w = Number(e.target.value);
+                          setSelectedReportWeek(w);
+                          const info = getWeekDateRange(w, selectedYear);
+                          setSelectedReportMonth(info.startMonthStr);
+                        }}
+                        className="bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 font-black px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-600 outline-none cursor-pointer text-xs"
+                      >
+                        {Array.from({ length: 52 }, (_, i) => i + 1).map(w => {
+                          const info = getWeekDateRange(w, selectedYear);
+                          return (
+                            <option key={w} value={w} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                              Tuần {w} ({info.dateRangeLabel})
+                            </option>
+                          );
+                        })}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextW = Math.min(52, selectedReportWeek + 1);
+                          setSelectedReportWeek(nextW);
+                          setSelectedReportMonth(getWeekDateRange(nextW, selectedYear).startMonthStr);
+                        }}
+                        disabled={selectedReportWeek >= 52}
+                        className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        title="Tuần sau"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Band 3: Service Department Filter, Pinning & Search */}
+            <div className="px-4 py-3 bg-slate-100/80 dark:bg-slate-800/45 flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="cls-report-category-select"
+                    className="text-xs font-bold text-slate-600 dark:text-slate-300 inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <Filter className="w-3.5 h-3.5 shrink-0" />
+                    <span>Bộ phận:</span>
+                  </label>
+                  <select
+                    id="cls-report-category-select"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="px-3 py-1.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl outline-none text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[165px]"
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat === 'Tất cả' ? 'Tất cả bộ phận' : cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPinnedOnly(prev => !prev)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    showPinnedOnly
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-2xs border border-amber-600'
+                      : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-100'
+                  }`}
+                  title="Chỉ hiển thị các kỹ thuật đã ghim"
+                >
+                  <Star className={`w-3.5 h-3.5 shrink-0 ${showPinnedOnly ? 'fill-current' : ''}`} />
+                  <span>Chỉ xem mục ghim ({pinnedServiceNames.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPinManagerOpen(true)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer border border-slate-300 dark:border-slate-600 whitespace-nowrap"
+                  title="Cấu hình danh sách các chỉ số trọng điểm đã ghim"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+                  <span>Quản lý ghim</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                {(selectedCategory !== 'Tất cả' || showPinnedOnly || searchTerm.trim() !== '') && (
+                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 tabular-nums whitespace-nowrap">
+                    {filteredItems.length}/{caseReports.length} kỹ thuật
+                  </span>
                 )}
+                <div className="relative flex-1 sm:flex-initial">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Tìm tên kỹ thuật..."
+                    className="pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-200 w-full sm:w-56"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      title="Xóa từ khóa tìm kiếm"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -4191,9 +4204,9 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           {sheetTab === 'Báo cáo năm' && renderAnnualReport()}
 
           {sheetTab.startsWith('Tháng') && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden">
               {/* Sheet Title Bar Header */}
-            <div className="bg-slate-50 dark:bg-slate-800/80 px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="bg-slate-100/80 dark:bg-slate-800/80 px-5 py-3 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h2 className="text-base font-extrabold text-slate-900 dark:text-slate-100 tracking-wide uppercase">
                   BÁO CÁO GIAO BAN KHOA CẬN LÂM SÀNG
@@ -4204,19 +4217,19 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               </div>
 
               <div className="flex items-center space-x-3 text-xs font-bold text-slate-600 dark:text-slate-300">
-                <div className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300">
+                <div className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700 rounded-xl text-emerald-800 dark:text-emerald-300">
                   TỔNG CỘNG THÁNG: <strong className="text-emerald-700 dark:text-emerald-200 text-sm ml-1">{calculateGrandTotal().toLocaleString()} Ca</strong>
                 </div>
               </div>
             </div>
 
             {/* Scrollable Spreadsheet Table Container */}
-            <div className="overflow-auto scrollbar-thin max-h-[680px] relative border-t border-slate-300 dark:border-slate-700">
+            <div className="overflow-auto scrollbar-thin max-h-[680px] relative">
               <table className="w-full text-[13px] text-left border-separate border-spacing-0 min-w-[1750px] tabular-nums">
                 <thead>
                   {/* Header Row 1: Day Numbers (1 to 28 / 31) */}
                   <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 select-none">
-                    <th colSpan={2} className="px-4 py-2.5 font-extrabold text-slate-900 dark:text-slate-100 border-b border-r border-slate-300 dark:border-slate-600 sticky top-0 left-0 z-30 bg-slate-100 dark:bg-slate-800 w-[308px] min-w-[308px] h-[38px]">
+                    <th colSpan={2} className="px-4 py-2.5 font-extrabold text-slate-900 dark:text-slate-100 border-b border-r-[1.5px] border-slate-400 dark:border-slate-600 sticky top-0 left-0 z-30 bg-slate-100 dark:bg-slate-800 w-[308px] min-w-[308px] h-[38px]">
                       Ngày trong tháng →
                     </th>
                     {daysList.map(day => {
@@ -4227,7 +4240,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                         <th 
                           key={day} 
                           colSpan={2} 
-                          className={`text-center py-2 font-extrabold text-[13px] border-b border-r border-slate-300 dark:border-slate-600 sticky top-0 z-20 h-[38px] ${
+                          className={`text-center py-2 font-extrabold text-[13px] border-b border-r-[1.5px] border-slate-400/80 dark:border-slate-600 sticky top-0 z-20 h-[38px] ${
                             isLT
                               ? 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300'
                               : isWeekend 
@@ -4246,10 +4259,10 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
                   {/* Header Row 2: BH / ND / Tất cả / TB(ngày) Sub-columns */}
                   <tr className="bg-slate-50 dark:bg-slate-800/95 text-slate-700 dark:text-slate-200 text-xs font-extrabold select-none">
-                    <th className="px-4 py-2 sticky top-[38px] left-0 z-30 bg-slate-50 dark:bg-slate-800 border-b-2 border-r border-slate-300 dark:border-slate-600 w-[256px] min-w-[256px] max-w-[256px] h-[34px]">
+                    <th className="px-4 py-2 sticky top-[38px] left-0 z-30 bg-slate-50 dark:bg-slate-800 border-b-2 border-r border-slate-400 dark:border-slate-600 w-[256px] min-w-[256px] max-w-[256px] h-[34px]">
                       Danh Mục Kỹ Thuật / Dịch Vụ
                     </th>
-                    <th className="text-center border-b-2 border-r border-slate-300 dark:border-slate-600 sticky top-[38px] left-[256px] z-30 bg-slate-50 dark:bg-slate-800 w-[52px] min-w-[52px] max-w-[52px] h-[34px]">
+                    <th className="text-center border-b-2 border-r-[1.5px] border-slate-400 dark:border-slate-600 sticky top-[38px] left-[256px] z-30 bg-slate-50 dark:bg-slate-800 w-[52px] min-w-[52px] max-w-[52px] h-[34px]">
                       Loại
                     </th>
                     {daysList.map(day => {
@@ -4257,12 +4270,12 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       const isWeekend = day === 7 || day === 8;
                       return (
                         <React.Fragment key={day}>
-                          <th className={`w-10 text-center py-1.5 border-b-2 border-r border-slate-300/80 dark:border-slate-700 font-extrabold sticky top-[38px] z-20 h-[34px] ${
+                          <th className={`w-10 text-center py-1.5 border-b-2 border-b-slate-400 border-r border-r-slate-300 dark:border-slate-600 font-extrabold sticky top-[38px] z-20 h-[34px] ${
                             isLT ? 'bg-red-50 dark:bg-red-950 text-red-700' : isWeekend ? 'bg-amber-50 dark:bg-amber-950 text-amber-900' : 'bg-slate-50 dark:bg-slate-800'
                           }`}>
                             BH
                           </th>
-                          <th className={`w-10 text-center py-1.5 border-b-2 border-r border-slate-300 dark:border-slate-600 font-extrabold sticky top-[38px] z-20 h-[34px] ${
+                          <th className={`w-10 text-center py-1.5 border-b-2 border-b-slate-400 border-r-[1.5px] border-r-slate-400/80 dark:border-slate-600 font-extrabold sticky top-[38px] z-20 h-[34px] ${
                             isLT ? 'bg-red-50 dark:bg-red-950 text-red-700' : isWeekend ? 'bg-amber-50 dark:bg-amber-950 text-amber-900' : 'bg-slate-50 dark:bg-slate-800'
                           }`}>
                             ND
@@ -4319,19 +4332,19 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                             const dayData = item.dailyData[day] || { bh: 0, nd: 0 };
                             return (
                               <React.Fragment key={day}>
-                                <td className={`text-center py-2 border-b border-r border-slate-300/70 dark:border-slate-700 font-semibold text-slate-800 dark:text-slate-200 ${isLT ? 'bg-red-50/50' : isWeekend ? 'bg-amber-50/50' : ''}`}>
+                                <td className={`text-center py-2 border-b border-slate-300 border-r border-r-slate-300 dark:border-slate-700 font-semibold text-slate-800 dark:text-slate-200 ${isLT ? 'bg-red-50/50' : isWeekend ? 'bg-amber-50/50' : ''}`}>
                                   {dayData.bh === 'LT' ? <span className="text-red-600 font-extrabold italic text-xs">LT</span> : (dayData.bh || <span className="text-slate-300 dark:text-slate-700">-</span>)}
                                 </td>
-                                <td className={`text-center py-2 border-b border-r border-slate-300 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 ${isLT ? 'bg-red-50/50' : isWeekend ? 'bg-amber-50/50' : ''}`}>
+                                <td className={`text-center py-2 border-b border-slate-300 border-r-[1.5px] border-r-slate-400/80 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 ${isLT ? 'bg-red-50/50' : isWeekend ? 'bg-amber-50/50' : ''}`}>
                                   {dayData.nd === 'LT' ? <span className="text-red-600 font-extrabold italic text-xs">LT</span> : (dayData.nd || <span className="text-slate-300 dark:text-slate-700">-</span>)}
                                 </td>
                               </React.Fragment>
                             );
                           })}
-                          <td className="text-center py-2 font-bold text-indigo-800 dark:text-indigo-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-l-2 border-l-indigo-400 border-indigo-200">
+                          <td className="text-center py-2 font-bold text-indigo-800 dark:text-indigo-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-l-2 border-l-indigo-400 border-indigo-300">
                             {getRowTotal(item, 'bh') || 0}
                           </td>
-                          <td className="text-center py-2 font-bold text-slate-800 dark:text-slate-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-indigo-200">
+                          <td className="text-center py-2 font-bold text-slate-800 dark:text-slate-200 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-r border-indigo-300">
                             {getRowTotal(item, 'nd') || 0}
                           </td>
                           <td className="text-center py-2 font-extrabold text-blue-950 dark:text-blue-100 bg-blue-100/70 dark:bg-blue-950/60 border-b border-r border-blue-300">
@@ -4349,10 +4362,10 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     <React.Fragment key={group.categoryName}>
                       {/* Category Parent Row Header */}
                       <tr className="bg-indigo-50/90 dark:bg-slate-800 font-extrabold text-slate-900 dark:text-slate-100">
-                        <td colSpan={2} className="px-4 py-2.5 text-[13px] font-black uppercase tracking-wider text-indigo-950 dark:text-indigo-200 sticky left-0 z-10 bg-indigo-50 dark:bg-slate-800 border-b border-r border-slate-300 dark:border-slate-600 w-[308px] min-w-[308px]">
+                        <td colSpan={2} className="px-4 py-2.5 text-[13px] font-black uppercase tracking-wider text-indigo-950 dark:text-indigo-200 sticky left-0 z-10 bg-indigo-50 dark:bg-slate-800 border-b border-r-[1.5px] border-slate-400 dark:border-slate-600 w-[308px] min-w-[308px]">
                           📌 {group.categoryName}
                         </td>
-                        <td colSpan={daysList.length * 2 + 4} className="bg-indigo-50/70 dark:bg-slate-800/70 border-b border-slate-300 dark:border-slate-700"></td>
+                        <td colSpan={daysList.length * 2 + 4} className="bg-indigo-50/70 dark:bg-slate-800/70 border-b border-slate-400/80 dark:border-slate-600"></td>
                       </tr>
 
                       {/* Detail Service Rows under Category */}
@@ -4383,7 +4396,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                                 </span>
                               </div>
                             </td>
-                            <td className="text-center font-semibold text-slate-500 sticky left-[256px] z-10 bg-white dark:bg-slate-900 border-b border-r border-slate-300 dark:border-slate-700 text-[11px] w-[52px] min-w-[52px] max-w-[52px]">
+                            <td className="text-center font-semibold text-slate-500 sticky left-[256px] z-10 bg-white dark:bg-slate-900 border-b border-r-[1.5px] border-slate-400/80 dark:border-slate-600 text-[11px] w-[52px] min-w-[52px] max-w-[52px]">
                               Ca
                             </td>
 
@@ -4407,7 +4420,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                                     }
                                   }}
                                   title={`Bấm để sửa thủ công BH Ngày ${day}${isManualDay ? ' (Đã chỉnh sửa thủ công & khóa)' : ''}`}
-                                  className={`text-center py-2 border-b border-r border-slate-300/75 dark:border-slate-700/80 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer hover:bg-blue-100/70 dark:hover:bg-blue-900/40 ${
+                                  className={`text-center py-2 border-b border-slate-300 border-r border-r-slate-300 dark:border-slate-700 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer hover:bg-blue-100/70 dark:hover:bg-blue-900/40 ${
                                     isManualDay ? 'bg-amber-50/40 dark:bg-amber-950/20' : isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
                                   }`}
                                 >
@@ -4441,7 +4454,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                                     }
                                   }}
                                   title={`Bấm để sửa thủ công ND Ngày ${day}${isManualDay ? ' (Đã chỉnh sửa thủ công & khóa)' : ''}`}
-                                  className={`text-center py-2 border-b border-r border-slate-300 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 ${
+                                  className={`text-center py-2 border-b border-slate-300 border-r-[1.5px] border-r-slate-400/80 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 ${
                                     isManualDay ? 'bg-amber-50/40 dark:bg-amber-950/20' : isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
                                   }`}
                                 >
@@ -4551,7 +4564,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         <div className="space-y-6">
           {/* Overview KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2">
+            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tỷ Lệ Hoàn Thành Task</p>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">97.5%</h3>
@@ -4562,7 +4575,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               <p className="text-xs text-slate-500 dark:text-slate-400">40/41 công việc hoàn thành đúng hạn</p>
             </div>
 
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2">
+            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tổng Ca Trực Đêm Tháng</p>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">22 Ca</h3>
@@ -4571,7 +4584,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               <p className="text-xs text-slate-500 dark:text-slate-400">Phân bổ đều cho 5 nhân sự</p>
             </div>
 
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2">
+            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tổng Lượt Chụp / Xét Nghiệm</p>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{calculateGrandTotal().toLocaleString()} Ca</h3>
@@ -4580,7 +4593,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               <p className="text-xs text-slate-500 dark:text-slate-400">Đồng bộ từ Google Sheets Báo cáo giao ban</p>
             </div>
 
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2">
+            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Chi Phí Bảo Trì & Sửa Chữa</p>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">14.0 Triệu</h3>
@@ -4593,7 +4606,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart 1: Task Completion Rate */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-indigo-600" /> Tiến Độ Hoàn Thành Công Việc Theo Tuần
@@ -4614,7 +4627,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             </div>
 
             {/* Chart 2: Staff Shift Distribution */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
                   <Users className="w-4 h-4 text-indigo-600" /> Thống Kê Ca Trực Theo Nhân Viên
@@ -4637,7 +4650,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             </div>
 
             {/* Chart 3: Equipment Usage Frequency derived from Google Sheet */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
                   <Activity className="w-4 h-4 text-emerald-600" /> Tần Suất Ca Chụp & Xét Nghiệm Theo Bộ Phận
@@ -4658,7 +4671,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             </div>
 
             {/* Chart 4: Maintenance Costs History */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
                   <Wrench className="w-4 h-4 text-amber-600" /> Biến Động Chi Phí Bảo Trì & Sửa Chữa (Triệu VNĐ)

@@ -291,7 +291,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
   return (
     <div className="space-y-5">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -332,8 +332,8 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
         </div>
 
         {/* Summary KPI Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-300 dark:border-slate-700">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
             <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-blue-600" />
               Tổng lượt kiểm tra
@@ -343,7 +343,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60">
+          <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800">
             <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5" />
               Đã tự động ghi Firebase
@@ -356,8 +356,8 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
           <div
             className={`p-3.5 rounded-xl border ${
               stats.totalPendingDiscrepancies > 0
-                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
-                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80'
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700'
+                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700'
             }`}
           >
             <div
@@ -381,7 +381,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
             <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
               {cloudState.status === 'synced' ? (
                 <Cloud className="w-3.5 h-3.5 text-emerald-600" />
@@ -400,7 +400,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
       </div>
 
       {/* Filters & Search */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
           {(
             [
@@ -418,7 +418,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
               className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
                 filterStatus === tab.id
                   ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
               {tab.label}
@@ -433,14 +433,14 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Tìm kỹ thuật, ngày hoặc nội dung..."
-            className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-800 dark:text-slate-100 w-full md:w-64"
+            className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl outline-none text-slate-800 dark:text-slate-100 w-full md:w-64"
           />
         </div>
       </div>
 
       {/* History Entries List */}
       {filteredEntries.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-2">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 p-10 text-center space-y-2 shadow-sm">
           <History className="w-9 h-9 text-slate-300 dark:text-slate-600 mx-auto" />
           <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
             Chưa có bản ghi lịch sử đồng bộ phù hợp
@@ -465,7 +465,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
             return (
               <div
                 key={entry.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden"
+                className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden"
               >
                 {/* Row Summary Header */}
                 <button
@@ -521,7 +521,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
 
                 {/* Expanded Details */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-4 bg-slate-50/40 dark:bg-slate-950/30">
+                  <div className="px-4 pb-4 pt-3 border-t border-slate-300 dark:border-slate-700 space-y-4 bg-slate-50/70 dark:bg-slate-950/30">
                     {/* Discrepancy Items Table */}
                     {discrepancies.length > 0 && (
                       <div className="space-y-2">
@@ -543,7 +543,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                   parseInt(entry.startDate.slice(0, 4), 10)
                                 )
                               }
-                              className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-900 dark:text-amber-200 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
                             >
                               <Search className="w-3 h-3" />
                               <span>Mở Rà soát số liệu khoảng này</span>
@@ -551,19 +551,19 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                           )}
                         </div>
 
-                        <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900">
+                        <div className="overflow-x-auto border-[1.5px] border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 shadow-2xs">
                           <table className="w-full text-left border-collapse text-[11px]">
-                            <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
+                            <thead className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold border-b-2 border-slate-300 dark:border-slate-600">
                               <tr>
-                                <th className="p-2.5">Ngày</th>
-                                <th className="p-2.5">Kỹ thuật / Bộ phận</th>
-                                <th className="p-2.5">Trên Firebase</th>
-                                <th className="p-2.5">Trên Google Sheet</th>
-                                <th className="p-2.5">Tình trạng</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Ngày</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Kỹ thuật / Bộ phận</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Trên Firebase</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Trên Google Sheet</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Tình trạng</th>
                                 <th className="p-2.5 text-right">Quyết định cập nhật</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
                               {discrepancies.map((disc) => {
                                 const isPending = !disc.resolutionStatus || disc.resolutionStatus === 'pending';
                                 const isBusy = resolvingKey === `${entry.id}__${disc.id}`;
@@ -584,17 +584,17 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                         };
 
                                 return (
-                                  <tr key={disc.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
-                                    <td className="p-2.5 font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap tabular-nums">
+                                  <tr key={disc.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
+                                    <td className="p-2.5 font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap tabular-nums border-r border-slate-300 dark:border-slate-700">
                                       {disc.dateLabel}
                                     </td>
-                                    <td className="p-2.5">
+                                    <td className="p-2.5 border-r border-slate-300 dark:border-slate-700">
                                       <div className="font-semibold text-slate-800 dark:text-slate-100">
                                         {disc.serviceName}
                                       </div>
                                       <div className="text-[10px] text-slate-500">{disc.category}</div>
                                     </td>
-                                    <td className="p-2.5 tabular-nums whitespace-nowrap font-semibold text-slate-700 dark:text-slate-200">
+                                    <td className="p-2.5 tabular-nums whitespace-nowrap font-semibold text-slate-700 dark:text-slate-200 border-r border-slate-300 dark:border-slate-700">
                                       BH: {disc.systemBh} · ND: {disc.systemNd}
                                       {disc.isManualLocked && (
                                         <span className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
@@ -603,10 +603,10 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                         </span>
                                       )}
                                     </td>
-                                    <td className="p-2.5 tabular-nums whitespace-nowrap font-bold text-blue-700 dark:text-blue-300">
+                                    <td className="p-2.5 tabular-nums whitespace-nowrap font-bold text-blue-700 dark:text-blue-300 border-r border-slate-300 dark:border-slate-700">
                                       BH: {disc.sheetBh} · ND: {disc.sheetNd}
                                     </td>
-                                    <td className="p-2.5 whitespace-nowrap">
+                                    <td className="p-2.5 whitespace-nowrap border-r border-slate-300 dark:border-slate-700">
                                       <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${typeInfo.cls}`}>
                                         {typeInfo.label}
                                       </span>
@@ -640,7 +640,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                                 'kept_system'
                                               )
                                             }
-                                            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                                            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
                                             title="Giữ nguyên số liệu đang có trên Firebase"
                                           >
                                             <Check className="w-3 h-3" />
@@ -678,26 +678,26 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                             {entry.autoWrittenCount > autoSamples.length ? `, hiển thị ${autoSamples.length} ô đầu` : ''})
                           </span>
                         </h4>
-                        <div className="overflow-x-auto border border-emerald-200/80 dark:border-emerald-900/60 rounded-xl bg-white dark:bg-slate-900 max-h-56 overflow-y-auto">
+                        <div className="overflow-x-auto border-[1.5px] border-emerald-300 dark:border-emerald-800 rounded-xl bg-white dark:bg-slate-900 max-h-56 overflow-y-auto">
                           <table className="w-full text-left border-collapse text-[11px]">
-                            <thead className="sticky top-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-bold border-b border-emerald-200 dark:border-emerald-900/60">
+                            <thead className="sticky top-0 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-bold border-b-2 border-emerald-300 dark:border-emerald-800">
                               <tr>
-                                <th className="p-2">Ngày</th>
-                                <th className="p-2">Kỹ thuật</th>
-                                <th className="p-2">Bộ phận</th>
+                                <th className="p-2 border-r border-emerald-200 dark:border-emerald-800">Ngày</th>
+                                <th className="p-2 border-r border-emerald-200 dark:border-emerald-800">Kỹ thuật</th>
+                                <th className="p-2 border-r border-emerald-200 dark:border-emerald-800">Bộ phận</th>
                                 <th className="p-2 text-right">Đã ghi lên Firebase</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
                               {autoSamples.map((s, idx) => (
                                 <tr key={`${s.dateLabel}-${s.serviceName}-${idx}`}>
-                                  <td className="p-2 font-bold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                                  <td className="p-2 font-bold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap border-r border-slate-200 dark:border-slate-700">
                                     {s.dateLabel}
                                   </td>
-                                  <td className="p-2 font-semibold text-slate-800 dark:text-slate-100">
+                                  <td className="p-2 font-semibold text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700">
                                     {s.serviceName}
                                   </td>
-                                  <td className="p-2 text-slate-500 dark:text-slate-400">{s.category}</td>
+                                  <td className="p-2 text-slate-500 dark:text-slate-400 border-r border-slate-200 dark:border-slate-700">{s.category}</td>
                                   <td className="p-2 text-right font-bold text-emerald-700 dark:text-emerald-300 tabular-nums whitespace-nowrap">
                                     BH: {s.bh} · ND: {s.nd}
                                   </td>
