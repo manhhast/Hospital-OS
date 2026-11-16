@@ -91,6 +91,9 @@ export const Header: React.FC<HeaderProps> = ({
         res.message,
         res.success ? 'success' : 'warning'
       );
+      if (!res.success && res.code === 'auth/unauthorized-domain' && currentUser.role === 'Admin') {
+        onNavigateModule('settings');
+      }
       return;
     }
     if (currentUser.role === 'Admin') {

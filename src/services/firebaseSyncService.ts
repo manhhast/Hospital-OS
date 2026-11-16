@@ -16,6 +16,7 @@ import {
 import {
   auth,
   db,
+  firebaseConfig,
   handleFirestoreError,
   OperationType,
   signInWithGoogleForFirebase,
@@ -72,11 +73,13 @@ export interface FirebaseCloudState {
   userUid: string | null;
   isAdmin: boolean;
   workspaceId: string;
+  projectId: string;
   lastSyncedAt: string | null;
   syncedBucketsCount: number;
   syncedReportMonthsCount: number;
   activeReportYear: number;
   errorMessage: string | null;
+  unauthorizedDomain: string | null;
   invites: CloudInviteItem[];
   members: CloudMemberItem[];
 }
@@ -131,11 +134,13 @@ class FirebaseSyncService {
     userUid: null,
     isAdmin: false,
     workspaceId: FIRESTORE_WORKSPACE_ID,
+    projectId: firebaseConfig.projectId,
     lastSyncedAt: null,
     syncedBucketsCount: 0,
     syncedReportMonthsCount: 0,
     activeReportYear: storageService.getSettings().reportSheetYear || DEFAULT_REPORT_YEAR,
     errorMessage: null,
+    unauthorizedDomain: null,
     invites: [],
     members: []
   };
@@ -195,9 +200,13 @@ class FirebaseSyncService {
     this.adminUnsubs = [];
   }
 
-  public async signInWithGoogle(): Promise<{ success: boolean; message: string }> {
+  public async signInWithGoogle(): Promise<{
+    success: boolean;
+    code?: string;
+    message: string;
+  }> {
     try {
-      this.setState({ status: 'connecting', errorMessage: null });
+      this.setState({ status: 'connecting', errorMessage: null, unauthorizedDomain: null });
       const user = await signInWithGoogleForFirebase();
       return {
         success: true,
@@ -205,15 +214,52 @@ class FirebaseSyncService {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const rawCode =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code || '')
+          : '';
+      const hostname =
+        typeof window !== 'undefined' && window.location?.hostname
+          ? window.location.hostname
+          : 'tên miền hiện tại';
+
+      const isUnauthorizedDomain =
+        rawCode === 'auth/unauthorized-domain' || msg.includes('auth/unauthorized-domain');
+      const isPopupClosed =
+        rawCode === 'auth/popup-closed-by-user' || msg.includes('popup-closed-by-user');
+      const isPopupBlocked =
+        rawCode === 'auth/popup-blocked' || msg.includes('auth/popup-blocked');
+      const isNetworkError =
+        rawCode === 'auth/network-request-failed' || msg.includes('network-request-failed');
+
+      let friendlyMessage = `Không thể đăng nhập Google: ${msg}`;
+      let detectedCode = rawCode || undefined;
+
+      if (isUnauthorizedDomain) {
+        detectedCode = 'auth/unauthorized-domain';
+        friendlyMessage = `Tên miền "${hostname}" chưa được thêm vào Authorized domains của Firebase Authentication (Project: ${firebaseConfig.projectId}). Mở Cấu hình Hệ thống để sao chép tên miền và thêm vào Firebase Console.`;
+      } else if (isPopupClosed) {
+        detectedCode = 'auth/popup-closed-by-user';
+        friendlyMessage = 'Đã đóng cửa sổ đăng nhập Google trước khi hoàn tất.';
+      } else if (isPopupBlocked) {
+        detectedCode = 'auth/popup-blocked';
+        friendlyMessage =
+          'Trình duyệt đang chặn cửa sổ bật lên (Pop-up) đăng nhập Google. Vui lòng cho phép Pop-up cho trang web này và thử lại.';
+      } else if (isNetworkError) {
+        detectedCode = 'auth/network-request-failed';
+        friendlyMessage = 'Lỗi kết nối mạng tới Google Authentication. Vui lòng kiểm tra Internet và thử lại.';
+      }
+
       this.setState({
         status: this.currentFirebaseUser ? 'error' : 'disconnected',
-        errorMessage: msg
+        errorMessage: isPopupClosed ? null : friendlyMessage,
+        unauthorizedDomain: isUnauthorizedDomain ? hostname : null
       });
+
       return {
         success: false,
-        message: msg.includes('popup-closed-by-user')
-          ? 'Đã hủy cửa sổ đăng nhập Google.'
-          : `Không thể đăng nhập Google: ${msg}`
+        code: detectedCode,
+        message: friendlyMessage
       };
     }
   }
@@ -229,6 +275,7 @@ class FirebaseSyncService {
       userUid: null,
       isAdmin: false,
       errorMessage: null,
+      unauthorizedDomain: null,
       invites: [],
       members: []
     });
@@ -245,7 +292,6 @@ class FirebaseSyncService {
         userName: null,
         userUid: null,
         isAdmin: false,
-        errorMessage: null,
         invites: [],
         members: []
       });
@@ -269,7 +315,8 @@ class FirebaseSyncService {
       userEmail: fbUser.email,
       userName: fbUser.displayName,
       userUid: fbUser.uid,
-      errorMessage: null
+      errorMessage: null,
+      unauthorizedDomain: null
     });
 
     try {

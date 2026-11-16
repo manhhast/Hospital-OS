@@ -3,7 +3,7 @@ import {
   Settings, Save, RefreshCw, Key, Folder, Database, Mail, Shield, AlertTriangle, 
   FileSpreadsheet, Link, Sun, Moon, Monitor, Palette, CheckCircle2, Trash2, 
   PlayCircle, Layers, Building2, UserCheck, Stethoscope, Calendar, Lock,
-  Cloud, CloudOff, UploadCloud, DownloadCloud, UserPlus, LogOut
+  Cloud, CloudOff, UploadCloud, DownloadCloud, UserPlus, LogOut, Copy, ExternalLink
 } from 'lucide-react';
 import { AppSettings, UserRole } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
@@ -65,6 +65,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     });
     return () => unsub();
   }, []);
+
+  const handleCopyHostname = async (hostnameToCopy: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(hostnameToCopy);
+        onShowToast('Đã sao chép tên miền', `Đã copy "${hostnameToCopy}" để dán vào Firebase Console.`, 'success');
+      } else {
+        onShowToast('Tên miền triển khai', `Vui lòng sao chép thủ công: ${hostnameToCopy}`, 'info');
+      }
+    } catch {
+      onShowToast('Tên miền triển khai', `Vui lòng sao chép thủ công: ${hostnameToCopy}`, 'info');
+    }
+  };
 
   const handleFirebaseSignIn = async () => {
     setIsCloudBusy(true);
@@ -435,8 +448,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {cloudState.errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
-              {cloudState.errorMessage}
+            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 space-y-2.5">
+              <div className="font-semibold leading-relaxed">{cloudState.errorMessage}</div>
+
+              {cloudState.unauthorizedDomain && (
+                <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-rose-200/80 dark:border-rose-800/70 space-y-2 text-slate-700 dark:text-slate-200">
+                  <div className="font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
+                    <Shield className="w-4 h-4 shrink-0" />
+                    <span>Hướng dẫn mở khóa tên miền trên Firebase Console (chỉ làm 1 lần):</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
+                    <li>
+                      Mở trang{' '}
+                      <a
+                        href={`https://console.firebase.google.com/project/${cloudState.projectId}/authentication/settings`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        <span>Firebase Console &rarr; Authentication &rarr; Settings</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </li>
+                    <li>
+                      Chọn mục <strong>Authorized domains</strong> &rarr; nhấn nút <strong>Add domain</strong>.
+                    </li>
+                    <li>Dán chính xác tên miền bên dưới rồi nhấn <strong>Add</strong>, sau đó quay lại bấm đăng nhập Google:</li>
+                  </ol>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <code className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono font-bold text-slate-900 dark:text-slate-100">
+                      {cloudState.unauthorizedDomain}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyHostname(cloudState.unauthorizedDomain!)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-semibold cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Sao chép tên miền</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
