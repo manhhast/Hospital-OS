@@ -3,9 +3,11 @@ import {
   Bell, Search, User as UserIcon, Shield, Bug, Sun, Moon, Monitor, Check,
   Plus, CheckCircle2, AlertTriangle, Hospital, Activity, KeyRound, LogIn,
   X, FileText, CheckSquare, Wrench, Building2, Clock, Users, ArrowRight,
-  Sparkles, Command, ChevronRight, LogOut, ArrowLeftRight, Send, BellRing
+  Sparkles, Command, ChevronRight, LogOut, ArrowLeftRight, Send, BellRing,
+  Cloud, CloudOff, RefreshCw
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
+import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
 import { EquipmentItem, TaskItem, User, UserRole } from '../../types/hospital';
 import { medicalSearchEngine, SearchResultItem, removeVietnameseTones } from '../../services/searchService';
 import {
@@ -49,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(() => storageService.getEquipment());
   const [taskList, setTaskList] = useState<TaskItem[]>(() => storageService.getTasks());
+  const [cloudState, setCloudState] = useState<FirebaseCloudState>(() => firebaseSyncService.getState());
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showThemeDropdown, setShowThemeDropdown] = useState(false);
   const [showAlertPopover, setShowAlertPopover] = useState(false);
@@ -71,8 +74,37 @@ export const Header: React.FC<HeaderProps> = ({
       setEquipmentList(storageService.getEquipment());
       setTaskList(storageService.getTasks());
     });
-    return () => unsubscribe();
+    const unsubCloud = firebaseSyncService.subscribe(() => {
+      setCloudState(firebaseSyncService.getState());
+    });
+    return () => {
+      unsubscribe();
+      unsubCloud();
+    };
   }, []);
+
+  const handleHeaderCloudClick = async () => {
+    if (cloudState.status === 'disconnected' || cloudState.status === 'unverified') {
+      const res = await firebaseSyncService.signInWithGoogle();
+      onShowToast?.(
+        res.success ? 'Firebase Cloud' : 'Kết nối Firebase',
+        res.message,
+        res.success ? 'success' : 'warning'
+      );
+      return;
+    }
+    if (currentUser.role === 'Admin') {
+      onNavigateModule('settings');
+    } else if (cloudState.status === 'synced') {
+      onShowToast?.(
+        'Firebase Cloud đang hoạt động',
+        `Tài khoản ${cloudState.userEmail || ''} đang đồng bộ thời gian thực (${cloudState.syncedBucketsCount} phân hệ).`,
+        'info'
+      );
+    } else if (cloudState.errorMessage) {
+      onShowToast?.('Trạng thái Firebase Cloud', cloudState.errorMessage, 'warning');
+    }
+  };
 
   const eqCompliance = useMemo(() => scanEquipmentExpirations(equipmentList, 30), [equipmentList]);
   const taskReminders = useMemo(() => scanTaskReminders(taskList, 3), [taskList]);
@@ -137,13 +169,13 @@ export const Header: React.FC<HeaderProps> = ({
       case 'schedule': return 'Lịch trực & Ca công tác';
       case 'meetings': return 'Cuộc họp & Hội chẩn';
       case 'reports': return 'Báo cáo & Thống kê';
-      case 'integration': return 'Trung tâm Tích hợp LIS / PACS';
+      case 'integration': return 'Cấu hình · Cổng API HIS/LIS/PACS';
       case 'discussion': return 'Kênh Trao đổi Nội bộ';
-      case 'notifications': return 'Trung tâm Thông báo';
-      case 'settings': return 'Cấu hình Hệ thống';
-      case 'users': return 'Người dùng & Phân quyền';
-      case 'audit': return 'Lịch sử Audit Log';
-      case 'gas-architecture': return 'Kiến trúc Google Apps Script';
+      case 'notifications': return 'Cấu hình · Thông báo Nội bộ';
+      case 'settings': return 'Cấu hình · Thiết lập Hệ thống';
+      case 'users': return 'Cấu hình · Phân quyền Hệ thống';
+      case 'audit': return 'Cấu hình · Lịch sử Audit Log';
+      case 'gas-architecture': return 'Cấu hình · Kiến trúc GAS Code';
       default: return 'Phân hệ Cận Lâm Sàng';
     }
   };
@@ -325,6 +357,43 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Debug</span>
           </div>
         )}
+
+        {/* Firebase Cloud Sync Trigger */}
+        <button
+          type="button"
+          onClick={() => void handleHeaderCloudClick()}
+          className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+            cloudState.status === 'synced'
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60 hover:bg-emerald-100'
+              : cloudState.status === 'syncing' || cloudState.status === 'connecting'
+              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/60'
+              : cloudState.status === 'unauthorized' || cloudState.status === 'error'
+              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60'
+              : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100'
+          }`}
+          title={
+            cloudState.status === 'synced'
+              ? `Firebase Đã đồng bộ (${cloudState.userEmail || ''})`
+              : cloudState.errorMessage || 'Kết nối Google để đồng bộ dữ liệu lên Firebase Cloud'
+          }
+        >
+          {cloudState.status === 'syncing' || cloudState.status === 'connecting' ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          ) : cloudState.status === 'synced' ? (
+            <Cloud className="w-3.5 h-3.5" />
+          ) : (
+            <CloudOff className="w-3.5 h-3.5" />
+          )}
+          <span className="hidden xl:inline whitespace-nowrap">
+            {cloudState.status === 'synced'
+              ? 'Firebase Cloud'
+              : cloudState.status === 'syncing' || cloudState.status === 'connecting'
+              ? 'Đang đồng bộ...'
+              : cloudState.status === 'unauthorized'
+              ? 'Chờ cấp quyền'
+              : 'Kết nối Firebase'}
+          </span>
+        </button>
 
         {/* Unified Equipment Expiration & Task Reminder Bell */}
         <div className="relative" ref={alertPopoverRef}>
@@ -665,6 +734,46 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md shrink-0 shadow-2xs ${getRoleBadgeColor(currentUser.role)}`}>
                   {currentUser.role}
                 </span>
+              </div>
+
+              {/* Cloud Firebase Status Row */}
+              <div className="mb-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-2 text-[11px]">
+                <div className="min-w-0">
+                  <div className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <Cloud className={`w-3.5 h-3.5 shrink-0 ${cloudState.status === 'synced' ? 'text-emerald-500' : 'text-slate-400'}`} />
+                    <span className="truncate">
+                      {cloudState.status === 'synced'
+                        ? `Firebase: ${cloudState.userEmail}`
+                        : cloudState.status === 'unauthorized'
+                        ? 'Chưa cấp quyền Firebase'
+                        : 'Chưa kết nối Firebase'}
+                    </span>
+                  </div>
+                </div>
+                {cloudState.status === 'disconnected' || cloudState.status === 'unverified' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoleDropdown(false);
+                      void handleHeaderCloudClick();
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 cursor-pointer"
+                  >
+                    Kết nối Google
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoleDropdown(false);
+                      void firebaseSyncService.signOut();
+                      onShowToast?.('Firebase Cloud', 'Đã ngắt kết nối tài khoản Google khỏi phiên đồng bộ.', 'info');
+                    }}
+                    className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 font-semibold shrink-0 cursor-pointer"
+                  >
+                    Ngắt kết nối
+                  </button>
+                )}
               </div>
 
               {/* The 3 Required Action Buttons: Đăng xuất, Chuyển tài khoản, Đổi mật khẩu */}

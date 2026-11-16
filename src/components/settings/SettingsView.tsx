@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, Save, RefreshCw, Key, Folder, Database, Mail, Shield, AlertTriangle, 
   FileSpreadsheet, Link, Sun, Moon, Monitor, Palette, CheckCircle2, Trash2, 
-  PlayCircle, Layers, Building2, UserCheck, Stethoscope
+  PlayCircle, Layers, Building2, UserCheck, Stethoscope, Calendar, Lock,
+  Cloud, CloudOff, UploadCloud, DownloadCloud, UserPlus, LogOut
 } from 'lucide-react';
-import { AppSettings } from '../../types/hospital';
+import { AppSettings, UserRole } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
+import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
+import {
+  AVAILABLE_REPORT_YEARS,
+  DEFAULT_REPORT_YEAR,
+  getReportSheetConfigForYear
+} from '../../services/reportArchiveService';
 
 interface SettingsViewProps {
   onShowToast: (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
@@ -22,11 +29,106 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const s = storageService.getSettings();
-    if (!s.googleSheetUrl) {
-      s.googleSheetUrl = localStorage.getItem('google_sheet_url') || '';
+    const initialYear = s.reportSheetYear || DEFAULT_REPORT_YEAR;
+    const legacyUrl = s.googleSheetUrl || localStorage.getItem('google_sheet_url') || '';
+    const legacyId = s.reportGoogleSheetId || '';
+    const existingMap = { ...(s.reportGoogleSheetsByYear || {}) };
+
+    if (!existingMap[String(initialYear)] && (legacyUrl || legacyId)) {
+      existingMap[String(initialYear)] = {
+        url: legacyUrl,
+        sheetId: legacyId
+      };
     }
-    return s;
+
+    return {
+      ...s,
+      reportSheetYear: initialYear,
+      googleSheetUrl: legacyUrl,
+      reportGoogleSheetsByYear: existingMap
+    };
   });
+
+  const [selectedSheetYear, setSelectedSheetYear] = useState<number>(() => {
+    return settings.reportSheetYear || DEFAULT_REPORT_YEAR;
+  });
+
+  // Firebase Cloud Firestore State
+  const [cloudState, setCloudState] = useState<FirebaseCloudState>(() => firebaseSyncService.getState());
+  const [isCloudBusy, setIsCloudBusy] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<UserRole>('Staff');
+
+  useEffect(() => {
+    const unsub = firebaseSyncService.subscribe(() => {
+      setCloudState(firebaseSyncService.getState());
+    });
+    return () => unsub();
+  }, []);
+
+  const handleFirebaseSignIn = async () => {
+    setIsCloudBusy(true);
+    try {
+      const res = await firebaseSyncService.signInWithGoogle();
+      onShowToast(
+        res.success ? 'Kết nối Firebase thành công' : 'Kết nối Firebase',
+        res.message,
+        res.success ? 'success' : 'warning'
+      );
+    } finally {
+      setIsCloudBusy(false);
+    }
+  };
+
+  const handleFirebasePushAll = async () => {
+    setIsCloudBusy(true);
+    try {
+      const res = await firebaseSyncService.syncAllLocalToCloud();
+      onShowToast(
+        'Đồng bộ lên Firebase thành công',
+        `Đã lưu ${res.bucketsPushed} phân hệ dữ liệu và ${res.reportMonthsPushed} bảng báo cáo tháng lên Cloud Firestore.`,
+        'success'
+      );
+    } catch (err) {
+      onShowToast('Lỗi đồng bộ Firebase', err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setIsCloudBusy(false);
+    }
+  };
+
+  const handleFirebasePullAll = async () => {
+    setIsCloudBusy(true);
+    try {
+      const res = await firebaseSyncService.pullAllCloudToLocal();
+      setSettings(storageService.getSettings());
+      onShowToast(
+        'Tải dữ liệu Firebase hoàn tất',
+        `Đã tải ${res.bucketsPulled} phân hệ và ${res.reportMonthsPulled} bảng báo cáo tháng từ Cloud Firestore về máy.`,
+        'success'
+      );
+    } catch (err) {
+      onShowToast('Lỗi tải dữ liệu Firebase', err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setIsCloudBusy(false);
+    }
+  };
+
+  const handleInviteCloudMember = async () => {
+    if (!inviteEmail.trim()) {
+      onShowToast('Thiếu email', 'Vui lòng nhập Gmail đồng nghiệp cần cấp quyền đồng bộ Firebase.', 'warning');
+      return;
+    }
+    setIsCloudBusy(true);
+    try {
+      const res = await firebaseSyncService.inviteCloudMember(inviteEmail, inviteRole);
+      onShowToast(res.success ? 'Đã cấp quyền' : 'Lỗi cấp quyền', res.message, res.success ? 'success' : 'error');
+      if (res.success) setInviteEmail('');
+    } catch (err) {
+      onShowToast('Lỗi cấp quyền Firebase', err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setIsCloudBusy(false);
+    }
+  };
 
   // Helper functions for auto-extracting & bi-directional matching between URL and ID
   const extractIdFromUrlOrText = (input: string): string => {
@@ -52,54 +154,87 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return `https://docs.google.com/spreadsheets/d/${clean}/edit?usp=sharing`;
   };
 
+  const currentYearConfig = getReportSheetConfigForYear(settings, selectedSheetYear);
+
+  const handleSelectReportYear = (nextYear: number) => {
+    setSelectedSheetYear(nextYear);
+    const nextCfg = getReportSheetConfigForYear(settings, nextYear);
+    setSettings((prev) => ({
+      ...prev,
+      reportSheetYear: nextYear,
+      googleSheetUrl: nextCfg.url,
+      reportGoogleSheetId: nextCfg.sheetId
+    }));
+  };
+
+  const updateActiveYearSheetConfig = (newUrl: string, newSheetId: string) => {
+    const yearKey = String(selectedSheetYear);
+    setSettings((prev) => ({
+      ...prev,
+      reportSheetYear: selectedSheetYear,
+      googleSheetUrl: newUrl,
+      reportGoogleSheetId: newSheetId,
+      reportGoogleSheetsByYear: {
+        ...(prev.reportGoogleSheetsByYear || {}),
+        [yearKey]: {
+          url: newUrl,
+          sheetId: newSheetId,
+          updatedAt: new Date().toISOString()
+        }
+      }
+    }));
+  };
+
   const handleReportUrlChange = (val: string) => {
     if (val.startsWith('http://') || val.startsWith('https://') || val.includes('/d/')) {
       const extractedId = extractIdFromUrlOrText(val);
-      setSettings({
-        ...settings,
-        googleSheetUrl: val,
-        reportGoogleSheetId: extractedId
-      });
+      updateActiveYearSheetConfig(val, extractedId);
     } else {
-      // User typed an ID into the URL field directly
       const cleanId = val.trim();
       const generatedUrl = buildSpreadsheetUrlFromId(cleanId);
-      setSettings({
-        ...settings,
-        googleSheetUrl: generatedUrl,
-        reportGoogleSheetId: cleanId
-      });
+      updateActiveYearSheetConfig(generatedUrl, cleanId);
     }
   };
 
   const handleReportIdChange = (val: string) => {
     if (val.startsWith('http://') || val.startsWith('https://') || val.includes('/d/')) {
-      // User pasted a full URL into the ID field
       const extractedId = extractIdFromUrlOrText(val);
-      setSettings({
-        ...settings,
-        reportGoogleSheetId: extractedId,
-        googleSheetUrl: val
-      });
+      updateActiveYearSheetConfig(val, extractedId);
     } else {
-      // User typed or pasted a raw ID
       const cleanId = val.trim();
       const generatedUrl = buildSpreadsheetUrlFromId(cleanId);
-      setSettings({
-        ...settings,
-        reportGoogleSheetId: cleanId,
-        googleSheetUrl: generatedUrl
-      });
+      updateActiveYearSheetConfig(generatedUrl, cleanId);
     }
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    storageService.saveSettings(settings);
-    if (settings.googleSheetUrl) {
-      localStorage.setItem('google_sheet_url', settings.googleSheetUrl);
+    const yearKey = String(selectedSheetYear);
+    const cfg = getReportSheetConfigForYear(settings, selectedSheetYear);
+    const normalizedSettings: AppSettings = {
+      ...settings,
+      reportSheetYear: selectedSheetYear,
+      googleSheetUrl: cfg.url,
+      reportGoogleSheetId: cfg.sheetId,
+      reportGoogleSheetsByYear: {
+        ...(settings.reportGoogleSheetsByYear || {}),
+        [yearKey]: {
+          url: cfg.url,
+          sheetId: cfg.sheetId,
+          updatedAt: new Date().toISOString()
+        }
+      }
+    };
+    setSettings(normalizedSettings);
+    storageService.saveSettings(normalizedSettings);
+    if (cfg.url) {
+      localStorage.setItem('google_sheet_url', cfg.url);
     }
-    onShowToast('Cấu hình đã lưu', 'Đã cập nhật các tham số hệ thống và phân tách rõ 2 Google Sheets thành công', 'success');
+    onShowToast(
+      'Cấu hình đã lưu',
+      `Đã lưu cấu hình Google Sheet Báo cáo cho năm ${selectedSheetYear} và các tham số hệ thống thành công.`,
+      'success'
+    );
   };
 
   const usersCount = storageService.getUsers().length;
@@ -237,50 +372,323 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* HYBRID CLOUD STORAGE: FIREBASE CLOUD FIRESTORE + GOOGLE DRIVE */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-amber-200/80 dark:border-amber-900/50 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
+              <Cloud className="w-5 h-5 text-amber-500 mr-2 shrink-0" />
+              Lưu Trữ Đám Mây Firebase Cloud Firestore &amp; Google Drive
+            </h3>
+            <span
+              className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                cloudState.status === 'synced'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300/60'
+                  : cloudState.status === 'syncing' || cloudState.status === 'connecting'
+                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300/60'
+                  : cloudState.status === 'unauthorized' || cloudState.status === 'error'
+                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300/60'
+                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300/60'
+              }`}
+            >
+              {cloudState.status === 'synced'
+                ? 'Đã kết nối · Đồng bộ Real-time'
+                : cloudState.status === 'syncing' || cloudState.status === 'connecting'
+                ? 'Đang đồng bộ dữ liệu...'
+                : cloudState.status === 'unauthorized'
+                ? 'Chờ Admin cấp quyền'
+                : cloudState.status === 'error'
+                ? 'Lỗi kết nối Cloud'
+                : 'Chưa kết nối Google Cloud'}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            Kiến trúc lưu trữ kết hợp: <strong className="text-slate-800 dark:text-slate-200">Toàn bộ dữ liệu vận hành</strong> (công việc, lịch trực, thiết bị, nhân sự, phòng ban, báo cáo số ca theo năm) được lưu &amp; đồng bộ tức thời qua <strong className="text-amber-600 dark:text-amber-400">Firebase Cloud Firestore</strong>; riêng <strong className="text-blue-600 dark:text-blue-400">tệp gốc Hồ sơ, Quy trình SOP &amp; Văn bản ISO</strong> vẫn lưu trữ an toàn trên <strong className="text-blue-600 dark:text-blue-400">Google Drive</strong> (Folder ID cấu hình ở mục 3 bên dưới).
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">Tài khoản Firebase</div>
+              <div className="font-bold text-slate-800 dark:text-slate-100 mt-1 truncate">
+                {cloudState.userEmail || 'Chưa đăng nhập'}
+              </div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">Workspace Khoa</div>
+              <div className="font-mono font-bold text-slate-800 dark:text-slate-100 mt-1 truncate">
+                {cloudState.workspaceId}
+              </div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">Phân hệ &amp; Báo cáo</div>
+              <div className="font-bold text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">
+                {cloudState.syncedBucketsCount} phân hệ · {cloudState.syncedReportMonthsCount} tháng
+              </div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">Đồng bộ gần nhất</div>
+              <div className="font-bold text-slate-800 dark:text-slate-100 mt-1 tabular-nums">
+                {cloudState.lastSyncedAt || '--:--'}
+              </div>
+            </div>
+          </div>
+
+          {cloudState.errorMessage && (
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
+              {cloudState.errorMessage}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2.5 text-xs">
+            {cloudState.status === 'disconnected' || cloudState.status === 'unverified' ? (
+              <button
+                type="button"
+                disabled={isCloudBusy}
+                onClick={() => void handleFirebaseSignIn()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
+              >
+                <Cloud className="w-4 h-4" />
+                <span>Đăng nhập Google để Đồng bộ Firebase</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={isCloudBusy || cloudState.status === 'unauthorized'}
+                  onClick={() => void handleFirebasePushAll()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>Đẩy toàn bộ dữ liệu lên Firebase</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isCloudBusy || cloudState.status === 'unauthorized'}
+                  onClick={() => void handleFirebasePullAll()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
+                >
+                  <DownloadCloud className="w-4 h-4" />
+                  <span>Tải từ Firebase về máy</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isCloudBusy}
+                  onClick={() => void firebaseSyncService.signOut()}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Ngắt kết nối Google</span>
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Admin Collaborator Access Management */}
+          {cloudState.isAdmin && cloudState.status === 'synced' && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <UserPlus className="w-4 h-4 text-blue-600" />
+                Cấp quyền Gmail đồng bộ Firebase cho máy tính khác trong khoa
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 text-xs">
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="Nhập Gmail đồng nghiệp (vd: bshung.cls@gmail.com)"
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                />
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as UserRole)}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-slate-800 dark:text-slate-100"
+                >
+                  <option value="Staff">Nhân viên / KTV (Staff)</option>
+                  <option value="Doctor">Bác sĩ (Doctor)</option>
+                  <option value="Manager">Trưởng / Phó khoa (Manager)</option>
+                  <option value="Admin">Quản trị (Admin)</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={isCloudBusy}
+                  onClick={() => void handleInviteCloudMember()}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 cursor-pointer disabled:opacity-60"
+                >
+                  Cấp quyền
+                </button>
+              </div>
+
+              {(cloudState.invites.length > 0 || cloudState.members.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                    <div className="font-bold text-slate-700 dark:text-slate-200">
+                      Email đã cấp quyền ({cloudState.invites.length})
+                    </div>
+                    {cloudState.invites.length === 0 ? (
+                      <div className="text-slate-400">Chưa có email mời bổ sung.</div>
+                    ) : (
+                      cloudState.invites.map((inv) => (
+                        <div key={inv.inviteId} className="flex items-center justify-between gap-2 py-1 border-b border-slate-200/60 dark:border-slate-700/60 last:border-none">
+                          <span className="truncate font-mono text-slate-700 dark:text-slate-200">
+                            {inv.email} ({inv.role})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void firebaseSyncService.removeCloudInvite(inv.inviteId)}
+                            className="text-rose-600 hover:underline font-semibold shrink-0 cursor-pointer"
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                    <div className="font-bold text-slate-700 dark:text-slate-200">
+                      Thành viên đang đồng bộ ({cloudState.members.length})
+                    </div>
+                    {cloudState.members.map((m) => (
+                      <div key={m.uid} className="flex items-center justify-between gap-2 py-1 border-b border-slate-200/60 dark:border-slate-700/60 last:border-none">
+                        <span className="truncate text-slate-700 dark:text-slate-200">
+                          {m.displayName} · <span className="font-mono">{m.email}</span> ({m.role})
+                        </span>
+                        {m.uid !== cloudState.userUid && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void firebaseSyncService.toggleMemberStatus(
+                                m.uid,
+                                m.status === 'Active' ? 'Revoked' : 'Active'
+                              )
+                            }
+                            className={`font-semibold shrink-0 cursor-pointer ${
+                              m.status === 'Active' ? 'text-rose-600 hover:underline' : 'text-emerald-600 hover:underline'
+                            }`}
+                          >
+                            {m.status === 'Active' ? 'Thu hồi' : 'Khôi phục'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* SHEET 1: GOOGLE SHEET BÁO CÁO SỐ CA */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-emerald-200/80 dark:border-emerald-900/50 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <FileSpreadsheet className="w-5 h-5 text-emerald-600 mr-2" /> 
-              1. Google Sheets Báo Cáo & Thống Kê Số Ca
+              <FileSpreadsheet className="w-5 h-5 text-emerald-600 mr-2 shrink-0" /> 
+              1. Google Sheets Báo Cáo &amp; Thống Kê Số Ca
             </h3>
-            <span className="text-[11px] font-extrabold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-full border border-emerald-300/60">
-              Lấy dữ liệu số ca
+            <span className="text-[11px] font-extrabold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-full border border-emerald-300/60 tabular-nums">
+              Lấy dữ liệu số ca · Năm {selectedSheetYear}
             </span>
           </div>
 
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Trang tính Google Sheets này dùng riêng để <strong className="text-slate-700 dark:text-slate-200">đọc dữ liệu giao ban số ca thực tế</strong> cho menu <strong className="text-slate-700 dark:text-slate-200">"Báo cáo & Thống kê"</strong>. Hệ thống hỗ trợ đồng bộ tất cả 12 tháng (tên tab dạng <strong>Tháng 1</strong>..<strong>Tháng 12</strong>, <strong>Tháng 11/2026</strong>, <strong>T11</strong>, <strong>11/2026</strong>) theo ngày, tuần (1-52) và cả năm.
+            Trang tính Google Sheets này dùng riêng để <strong className="text-slate-700 dark:text-slate-200">đọc dữ liệu giao ban số ca thực tế theo từng năm</strong> cho menu <strong className="text-slate-700 dark:text-slate-200">"Báo cáo &amp; Thống kê"</strong>. Hệ thống hỗ trợ đồng bộ tất cả 12 tháng (tên tab dạng <strong>Tháng 1</strong>..<strong>Tháng 12</strong>, <strong>Tháng 11/{selectedSheetYear}</strong>, <strong>T11</strong>, <strong>11/{selectedSheetYear}</strong>).
           </p>
+
+          {/* Year Selector & Configured Years Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+            <div className="md:col-span-4">
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                Chọn Năm Áp Dụng Google Sheet:
+              </label>
+              <select
+                value={selectedSheetYear}
+                onChange={(e) => handleSelectReportYear(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl font-bold text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500 tabular-nums cursor-pointer"
+              >
+                {AVAILABLE_REPORT_YEARS.map((y) => {
+                  const cfg = getReportSheetConfigForYear(settings, y);
+                  return (
+                    <option key={y} value={y}>
+                      Năm {y}{cfg.sheetId ? ' (Đã gắn ID)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="md:col-span-8 space-y-1.5">
+              <span className="block font-semibold text-slate-600 dark:text-slate-300">
+                Chọn nhanh năm đã cấu hình nguồn dữ liệu:
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {AVAILABLE_REPORT_YEARS.map((y) => {
+                  const cfg = getReportSheetConfigForYear(settings, y);
+                  const hasId = Boolean(cfg.sheetId);
+                  const isActiveYear = y === selectedSheetYear;
+                  return (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => handleSelectReportYear(y)}
+                      className={`px-2.5 py-1 rounded-lg font-bold tabular-nums transition-colors cursor-pointer border ${
+                        isActiveYear
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : hasId
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                          : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {y}
+                      {hasId && !isActiveYear ? ' ✓' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
           <div className="space-y-3 text-xs">
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-1.5">
                 <Link className="w-3.5 h-3.5 text-emerald-600" />
-                Đường dẫn Google Sheets (URL Báo cáo số ca giao ban Khoa CLS):
+                Đường dẫn Google Sheets Năm {selectedSheetYear} (URL Báo cáo số ca giao ban Khoa CLS):
               </label>
               <input
                 type="text"
-                value={settings.googleSheetUrl || ''}
+                value={currentYearConfig.url}
                 onChange={(e) => handleReportUrlChange(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs.../edit"
+                placeholder={`https://docs.google.com/spreadsheets/d/... (Nguồn năm ${selectedSheetYear})`}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Dán URL hoặc ID trang tính Báo cáo số ca (Tự động khớp ô ID bên dưới).</p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Dán URL hoặc ID trang tính Báo cáo số ca của năm <strong>{selectedSheetYear}</strong> (Tự động khớp ô ID bên dưới).
+              </p>
             </div>
 
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                Google Sheet ID Báo Cáo (Trích xuất tự động):
+                Google Sheet ID Báo Cáo Năm {selectedSheetYear} (Trích xuất tự động):
               </label>
               <input
                 type="text"
-                value={settings.reportGoogleSheetId || ''}
+                value={currentYearConfig.sheetId}
                 onChange={(e) => handleReportIdChange(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-emerald-700 dark:text-emerald-400 font-bold"
-                placeholder="Nhập ID hoặc dán URL (Tự động khớp với ô URL ở trên)"
+                placeholder={`Nhập ID hoặc dán URL Google Sheet năm ${selectedSheetYear}`}
               />
-              <p className="text-[11px] text-slate-400 mt-1">Chỉ cần nhập ID hoặc dán URL vào đây, ô URL ở trên sẽ tự động tạo khớp tương ứng.</p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Chỉ cần nhập ID hoặc dán URL vào đây, ô URL ở trên sẽ tự động tạo khớp tương ứng cho năm {selectedSheetYear}.
+              </p>
+            </div>
+          </div>
+
+          {/* Immutable Archive Guarantee Banner */}
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs">
+            <Lock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              <strong className="text-slate-800 dark:text-slate-100">Cơ chế lưu bất biến hằng ngày:</strong> Khi kéo số liệu từ Google Sheet theo ngày/tháng, dữ liệu được chốt và lưu trực tiếp lên kho lưu trữ hệ thống theo năm (IndexedDB + LocalStorage). Nếu sau này xóa hoặc sửa dữ liệu trên file Google Sheet cũng <strong>không làm mất hoặc ghi đè</strong> số liệu đã lưu — mọi điều chỉnh sau đó chỉ thực hiện bằng thao tác <strong>chỉnh sửa thủ công</strong> trong phân hệ Báo cáo &amp; Thống kê.
             </div>
           </div>
         </div>

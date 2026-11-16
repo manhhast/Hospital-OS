@@ -3,7 +3,7 @@ import {
   BarChart3, TrendingUp, PieChart, Calendar, FileSpreadsheet, Download, 
   CheckCircle2, Wrench, Activity, Users, FileText, ArrowUpRight, ArrowDownRight, Search,
   RefreshCw, Link, Edit3, Table, Layers, Sparkles, Filter, Check, Save, Upload, Plus, ChevronLeft, ChevronRight,
-  Pin, Star, Bookmark, AlertTriangle, AlertCircle, Eye, EyeOff, SlidersHorizontal, Copy, Send, Printer, X
+  Pin, Star, Bookmark, AlertTriangle, AlertCircle, Eye, EyeOff, SlidersHorizontal, Copy, Send, Printer, X, Lock, Database
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -19,6 +19,15 @@ import {
   ClinicalTriageResult, DEFAULT_PINNED_SERVICE_NAMES 
 } from '../../utils/clinicalAnalytics';
 import { scanEquipmentExpirations, scanTaskReminders } from '../../utils/operationalAlerts';
+import {
+  AVAILABLE_REPORT_YEARS,
+  DEFAULT_REPORT_YEAR,
+  getReportSheetConfigForYear,
+  REPORT_ARCHIVE_UPDATED_EVENT,
+  reportArchiveService,
+  REPORT_MONTHS
+} from '../../services/reportArchiveService';
+import { firebaseSyncService } from '../../services/firebaseSyncService';
 
 // Data model for daily case report row matching the Google Sheet screenshot
 export interface CaseReportItem {
@@ -28,10 +37,14 @@ export interface CaseReportItem {
   dailyData: {
     [day: number]: { bh: number | string; nd: number | string }; // Day 1 to 31: BH (Bảo hiểm), ND (Nhân dân)
   };
+  manualDays?: {
+    [day: number]: { updatedAt: string; updatedBy: string };
+  };
+  lastSyncedAt?: string;
 }
 
 // Helper to compute date range for Week 1..52 in a given year (e.g. 2026)
-const getWeekDateRange = (weekNum: number, year: number = 2026) => {
+const getWeekDateRange = (weekNum: number, year: number = DEFAULT_REPORT_YEAR) => {
   const w = Math.max(1, Math.min(52, weekNum));
   const startDayOfYear = (w - 1) * 7 + 1;
   const endDayOfYear = w === 52 ? 365 : w * 7;
@@ -106,10 +119,7 @@ const findLatestDayInItems = (items: CaseReportItem[], maxDay: number = 31): num
   return 1;
 };
 
-const ALL_MONTHS = [
-  'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
-  'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
-];
+const ALL_MONTHS = REPORT_MONTHS;
 
 const getMonthNumber = (monthStr: string): number => {
   const match = String(monthStr || '').match(/(\d{1,2})/);
@@ -190,14 +200,18 @@ const resolveSpreadsheetId = (urlOrId?: string): string | null => {
 };
 
 // Helper to find the latest month and day that has valid data across all stored months
-const findLatestDataDate = (store: { [monthKey: string]: CaseReportItem[] }, fallbackItems?: CaseReportItem[]): { month: string; day: number; week: number } => {
+const findLatestDataDate = (
+  store: { [monthKey: string]: CaseReportItem[] },
+  fallbackItems?: CaseReportItem[],
+  year: number = DEFAULT_REPORT_YEAR
+): { month: string; day: number; week: number } => {
   const monthKeys = [...ALL_MONTHS].reverse();
 
   for (const m of monthKeys) {
     const items = store[m];
     if (items && items.length > 0) {
       const mNum = getMonthNumber(m);
-      const maxDays = getDaysInMonth(m, 2026);
+      const maxDays = getDaysInMonth(m, year);
 
       for (let d = maxDays; d >= 1; d--) {
         let hasData = false;
@@ -216,7 +230,7 @@ const findLatestDataDate = (store: { [monthKey: string]: CaseReportItem[] }, fal
           }
         }
         if (totalDayCases > 0 || hasData) {
-          const weekNum = getWeekNumberForDate(2026, mNum, d);
+          const weekNum = getWeekNumberForDate(year, mNum, d);
           return { month: m, day: d, week: weekNum };
         }
       }
@@ -225,7 +239,7 @@ const findLatestDataDate = (store: { [monthKey: string]: CaseReportItem[] }, fal
 
   if (fallbackItems && fallbackItems.length > 0) {
     const latestDay = findLatestDayInItems(fallbackItems, 28);
-    const weekNum = getWeekNumberForDate(2026, 2, latestDay);
+    const weekNum = getWeekNumberForDate(year, 2, latestDay);
     return { month: 'Tháng 2', day: latestDay, week: weekNum };
   }
 
@@ -247,29 +261,15 @@ const monthToFirstWeekMap: { [m: string]: number } = {
   'Tháng 12': 49
 };
 
-// Helper to load initial monthly store across all 12 months from localStorage
-const loadInitialMonthlyStore = (): { [monthKey: string]: CaseReportItem[] } => {
-  const store: { [monthKey: string]: CaseReportItem[] } = {};
-  ALL_MONTHS.forEach(m => {
-    const saved = localStorage.getItem(`google_sheet_data_${m}`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          store[m] = parsed;
-        }
-      } catch (e) { /* ignore */ }
-    }
-  });
-  return store;
-};
-
 export const ReportsAnalyticsView: React.FC = () => {
-  const initialStore = loadInitialMonthlyStore();
-  const initialLatest = findLatestDataDate(initialStore);
+  const initialSettings = storageService.getSettings();
+  const initialYear = initialSettings.reportSheetYear || DEFAULT_REPORT_YEAR;
+  const initialStore = reportArchiveService.loadYearArchiveSync(initialYear);
+  const initialLatest = findLatestDataDate(initialStore, undefined, initialYear);
 
+  const [selectedYear, setSelectedYear] = useState<number>(initialYear);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'google_sheet'>('google_sheet');
-  const [timePeriod, setTimePeriod] = useState<string>(`${initialLatest.month}/2026`);
+  const [timePeriod, setTimePeriod] = useState<string>(`${initialLatest.month}/${initialYear}`);
   const [sheetTab, setSheetTab] = useState<string>('Báo cáo ngày');
 
   // Smart Report specific state - automatically default to latest day with data
@@ -302,28 +302,24 @@ export const ReportsAnalyticsView: React.FC = () => {
     return true;
   };
 
-  // Multi-month data cache store
+  // Multi-month data cache store (scoped to selectedYear and backed by System Archive)
   const [monthlyDataStore, setMonthlyDataStore] = useState<{ [monthKey: string]: CaseReportItem[] }>(initialStore);
 
-  const getEffectiveSheetTarget = (): string => {
+  const getEffectiveSheetTarget = (targetYear: number = selectedYear): string => {
     const s = storageService.getSettings();
-    if (s.googleSheetUrl && s.googleSheetUrl.trim()) return s.googleSheetUrl.trim();
-    if (s.reportGoogleSheetId && s.reportGoogleSheetId.trim()) {
-      return `https://docs.google.com/spreadsheets/d/${s.reportGoogleSheetId.trim()}/edit`;
-    }
-    return localStorage.getItem('google_sheet_url') || '';
+    return getReportSheetConfigForYear(s, targetYear).url;
   };
 
   // Google Sheets integration state
-  const [sheetUrl, setSheetUrl] = useState<string>(() => getEffectiveSheetTarget());
+  const [sheetUrl, setSheetUrl] = useState<string>(() => getEffectiveSheetTarget(initialYear));
 
-  // Sync sheetUrl when settings or localStorage change
+  // Sync sheetUrl when settings or selectedYear change
   useEffect(() => {
-    const currentUrl = getEffectiveSheetTarget();
+    const currentUrl = getEffectiveSheetTarget(selectedYear);
     if (currentUrl !== sheetUrl) {
       setSheetUrl(currentUrl);
     }
-  }, [activeTab]);
+  }, [activeTab, selectedYear]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -362,20 +358,17 @@ export const ReportsAnalyticsView: React.FC = () => {
     setTimeout(() => setSyncToast(null), 3500);
   };
 
-  // Initial case data matching Google Sheet screenshot exactly for Month 2
+  // Initial case data loaded from year archive (with Month 2 sample fallback for 2026)
   const [caseReports, setCaseReports] = useState<CaseReportItem[]>(() => {
-    const saved = localStorage.getItem('google_sheet_data_Tháng 2');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const saTim = parsed.find((i: any) => i.name && i.name.includes('Siêu âm tim'));
-        // Sanity check: if day 5 has corrupted total column value (e.g. bh > 50), purge cache
-        if (saTim && saTim.dailyData && saTim.dailyData[5] && (Number(saTim.dailyData[5].bh) > 50 || Number(saTim.dailyData[5].bh) === 328)) {
-          localStorage.removeItem('google_sheet_data_Tháng 2');
-        } else {
-          return parsed;
-        }
-      } catch (e) { /* use default */ }
+    const archivedFeb = initialStore['Tháng 2'];
+    if (archivedFeb && archivedFeb.length > 0) {
+      return archivedFeb;
+    }
+    if (initialStore[initialLatest.month]?.length) {
+      return initialStore[initialLatest.month];
+    }
+    if (initialYear !== 2026) {
+      return [];
     }
     const ltBlock = { bh: 'LT', nd: 'LT' };
     return [
@@ -782,7 +775,8 @@ export const ReportsAnalyticsView: React.FC = () => {
   const fetchSingleTab = async (
     targetUrl: string,
     targetTab: string,
-    probeCsv?: string | null
+    probeCsv?: string | null,
+    targetYear: number = selectedYear
   ): Promise<CaseReportItem[] | null> => {
     try {
       const spreadsheetId = resolveSpreadsheetId(targetUrl);
@@ -795,7 +789,7 @@ export const ReportsAnalyticsView: React.FC = () => {
       const probeDetectedMonth = resolvedProbeCsv ? detectMonthInSheetCsv(resolvedProbeCsv) : null;
 
       const targetMonthNum = targetTab.startsWith('Tháng') ? getMonthNumber(targetTab) : null;
-      const candidates = targetTab.startsWith('Tháng') ? getCandidateTabNames(targetTab, 2026) : [targetTab];
+      const candidates = targetTab.startsWith('Tháng') ? getCandidateTabNames(targetTab, targetYear) : [targetTab];
 
       for (const candidateTab of candidates) {
         const csvText = await fetchRawTabCsv(spreadsheetId, candidateTab);
@@ -821,40 +815,40 @@ export const ReportsAnalyticsView: React.FC = () => {
     return null;
   };
 
-  // Sync all 12 months (Tháng 1 .. Tháng 12) concurrently
-  const syncAllMonths = async (showToast = true, autoSelectLatest = true) => {
-    const effectiveUrl = sheetUrl || getEffectiveSheetTarget();
+  // Sync all 12 months (Tháng 1 .. Tháng 12) concurrently using immutable non-destructive merge
+  const syncAllMonths = async (showToast = true, autoSelectLatest = true, targetYear: number = selectedYear) => {
+    const effectiveUrl = getEffectiveSheetTarget(targetYear) || sheetUrl;
     const spreadsheetId = resolveSpreadsheetId(effectiveUrl);
 
     if (!spreadsheetId) {
       if (showToast) {
-        setSyncToast('⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo. Vào mục "Cấu hình hệ thống" để dán URL hoặc ID trang tính.');
+        setSyncToast(`⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo cho Năm ${targetYear}. Vào "Menu Cấu Hình → Cấu Hình Hệ Thống" để dán URL hoặc ID trang tính.`);
         setTimeout(() => setSyncToast(null), 5000);
       }
       return;
     }
 
-    if (effectiveUrl !== sheetUrl) {
+    if (effectiveUrl !== sheetUrl && targetYear === selectedYear) {
       setSheetUrl(effectiveUrl);
     }
 
     setIsSyncing(true);
-    if (showToast) setSyncToast('Đang kết nối & đồng bộ dữ liệu thực tế cả 12 tháng (T1 - T12) từ Google Sheet...');
+    if (showToast) setSyncToast(`Đang đồng bộ dữ liệu năm ${targetYear} (T1 - T12) và lưu bảo vệ lên hệ thống...`);
 
     try {
       const probeCsv = await fetchRawTabCsv(spreadsheetId, '__cls_probe_nonexistent__');
       const updatedStore: { [key: string]: CaseReportItem[] } = {};
+      let totalNewlyCaptured = 0;
+      let totalProtected = 0;
 
       await Promise.all(
         ALL_MONTHS.map(async (tab) => {
-          const items = await fetchSingleTab(effectiveUrl, tab, probeCsv);
+          const items = await fetchSingleTab(effectiveUrl, tab, probeCsv, targetYear);
           if (items && items.length > 0) {
-            updatedStore[tab] = items;
-            try {
-              localStorage.setItem(`google_sheet_data_${tab}`, JSON.stringify(items));
-            } catch (storageErr) {
-              console.warn(`Unable to cache ${tab} in localStorage:`, storageErr);
-            }
+            const mergeRes = reportArchiveService.mergeSyncedMonthIntoArchive(targetYear, tab, items);
+            updatedStore[tab] = mergeRes.mergedItems;
+            totalNewlyCaptured += mergeRes.newlyCapturedDays;
+            totalProtected += mergeRes.protectedExistingDays;
           }
         })
       );
@@ -865,11 +859,11 @@ export const ReportsAnalyticsView: React.FC = () => {
         setMonthlyDataStore(prev => {
           const merged = { ...prev, ...updatedStore };
           if (autoSelectLatest) {
-            const latest = findLatestDataDate(merged);
+            const latest = findLatestDataDate(merged, undefined, targetYear);
             setSelectedReportMonth(latest.month);
             setSelectedReportDay(latest.day);
             setSelectedReportWeek(latest.week);
-            setTimePeriod(`${latest.month}/2026`);
+            setTimePeriod(`${latest.month}/${targetYear}`);
             if (merged[latest.month]) {
               setCaseReports(merged[latest.month]);
             }
@@ -882,21 +876,20 @@ export const ReportsAnalyticsView: React.FC = () => {
         if (sheetTab.startsWith('Tháng') && updatedStore[sheetTab]) {
           setCaseReports(updatedStore[sheetTab]);
         }
-        try {
-          localStorage.setItem('google_sheet_url', effectiveUrl);
-        } catch { /* ignore */ }
 
         if (showToast) {
-          setSyncToast(`✅ Đã đồng bộ thành công ${syncedMonthsList.length} tháng (${syncedMonthsList.join(', ')}) từ Google Sheets!`);
+          setSyncToast(
+            `✅ Đã đồng bộ Năm ${targetYear} (${syncedMonthsList.length} tháng): nạp mới ${totalNewlyCaptured} ô số liệu, giữ nguyên bảo vệ ${totalProtected} ô đã lưu trên hệ thống.`
+          );
         }
       } else {
         if (autoSelectLatest) {
           setMonthlyDataStore(prev => {
-            const latest = findLatestDataDate(prev, caseReports);
+            const latest = findLatestDataDate(prev, caseReports, targetYear);
             setSelectedReportMonth(latest.month);
             setSelectedReportDay(latest.day);
             setSelectedReportWeek(latest.week);
-            setTimePeriod(`${latest.month}/2026`);
+            setTimePeriod(`${latest.month}/${targetYear}`);
             if (prev[latest.month]) {
               setCaseReports(prev[latest.month]);
             }
@@ -904,73 +897,82 @@ export const ReportsAnalyticsView: React.FC = () => {
           });
         }
         if (showToast) {
-          setSyncToast('⚠️ Không tìm thấy tab tháng hợp lệ (Tháng 1..Tháng 12 hoặc T11, 11/2026). Vui lòng kiểm tra quyền chia sẻ công khai ("Ai có đường liên kết đều có thể xem") và tên tab trên Google Sheet.');
+          setSyncToast(
+            `⚠️ Không đọc được tab mới từ Google Sheet năm ${targetYear}. Toàn bộ dữ liệu đã lưu trên hệ thống vẫn được bảo toàn nguyên vẹn.`
+          );
         }
       }
     } catch (error: any) {
       console.warn('Sync all months error:', error);
       if (autoSelectLatest) {
         setMonthlyDataStore(prev => {
-          const latest = findLatestDataDate(prev, caseReports);
+          const latest = findLatestDataDate(prev, caseReports, targetYear);
           setSelectedReportMonth(latest.month);
           setSelectedReportDay(latest.day);
           setSelectedReportWeek(latest.week);
-          setTimePeriod(`${latest.month}/2026`);
+          setTimePeriod(`${latest.month}/${targetYear}`);
           return prev;
         });
       }
-      if (showToast) setSyncToast('⚠️ Không thể kết nối Google Sheet. Đã giữ nguyên dữ liệu lưu tạm gần nhất.');
+      if (showToast) setSyncToast('⚠️ Không thể kết nối Google Sheet. Dữ liệu đã lưu trên hệ thống vẫn được bảo vệ an toàn.');
     } finally {
       setIsSyncing(false);
       if (showToast) setTimeout(() => setSyncToast(null), 5500);
     }
   };
 
-  // Real Google Sheets sync fetcher for single tab
-  const fetchGoogleSheetData = async (targetUrl: string, targetTab: string, showToast = true, autoSelectLatest = false) => {
-    const effectiveUrl = targetUrl || getEffectiveSheetTarget();
+  // Real Google Sheets sync fetcher for single tab (non-destructive)
+  const fetchGoogleSheetData = async (
+    targetUrl: string,
+    targetTab: string,
+    showToast = true,
+    autoSelectLatest = false,
+    targetYear: number = selectedYear
+  ) => {
+    const effectiveUrl = targetUrl || getEffectiveSheetTarget(targetYear);
     const spreadsheetId = resolveSpreadsheetId(effectiveUrl);
 
     if (!spreadsheetId) {
       if (showToast) {
-        setSyncToast('⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo trong "Cấu hình hệ thống".');
+        setSyncToast(`⚠️ Chưa cấu hình liên kết Google Sheets Báo cáo cho Năm ${targetYear} trong "Cấu hình hệ thống".`);
         setTimeout(() => setSyncToast(null), 4500);
       }
       return;
     }
 
     setIsSyncing(true);
-    if (showToast) setSyncToast(`Đang tải dữ liệu ${targetTab} từ Google Sheet...`);
+    if (showToast) setSyncToast(`Đang tải dữ liệu ${targetTab}/${targetYear} từ Google Sheet...`);
 
     try {
-      const parsedItems = await fetchSingleTab(effectiveUrl, targetTab);
+      const parsedItems = await fetchSingleTab(effectiveUrl, targetTab, undefined, targetYear);
       if (parsedItems && parsedItems.length > 0) {
-        setCaseReports(parsedItems);
+        const mergeRes = reportArchiveService.mergeSyncedMonthIntoArchive(targetYear, targetTab, parsedItems);
+        setCaseReports(mergeRes.mergedItems);
         setMonthlyDataStore(prev => {
-          const merged = { ...prev, [targetTab]: parsedItems };
+          const merged = { ...prev, [targetTab]: mergeRes.mergedItems };
           if (autoSelectLatest) {
-            const latest = findLatestDataDate(merged);
+            const latest = findLatestDataDate(merged, undefined, targetYear);
             setSelectedReportMonth(latest.month);
             setSelectedReportDay(latest.day);
             setSelectedReportWeek(latest.week);
-            setTimePeriod(`${latest.month}/2026`);
+            setTimePeriod(`${latest.month}/${targetYear}`);
           }
           return merged;
         });
-        try {
-          localStorage.setItem(`google_sheet_data_${targetTab}`, JSON.stringify(parsedItems));
-          localStorage.setItem('google_sheet_url', effectiveUrl);
-        } catch { /* ignore */ }
-        if (showToast) setSyncToast(`✅ Đã đồng bộ thành công dữ liệu ${targetTab} từ Google Sheet!`);
+        if (showToast) {
+          setSyncToast(
+            `✅ Đã đồng bộ ${targetTab}/${targetYear}: nạp mới ${mergeRes.newlyCapturedDays} ô, bảo vệ ${mergeRes.protectedExistingDays} ô đã lưu.`
+          );
+        }
       } else {
         if (showToast) {
-          setSyncToast(`⚠️ Không tìm thấy dữ liệu trong tab "${targetTab}" (hỗ trợ tên tab: ${targetTab}, ${targetTab}/2026, T${getMonthNumber(targetTab)}, ${getMonthNumber(targetTab)}/2026).`);
+          setSyncToast(`⚠️ Không tìm thấy dữ liệu mới trong tab "${targetTab}" (hỗ trợ: ${targetTab}, ${targetTab}/${targetYear}, T${getMonthNumber(targetTab)}, ${getMonthNumber(targetTab)}/${targetYear}). Dữ liệu hệ thống đã lưu vẫn giữ nguyên.`);
         }
       }
     } catch (error: any) {
       console.warn('Google Sheet fetch info:', error);
       if (showToast) {
-        setSyncToast(`⚠️ Lỗi đồng bộ ${targetTab}: ${error.message || 'Không thể truy cập trang tính'}`);
+        setSyncToast(`⚠️ Lỗi đồng bộ ${targetTab}/${targetYear}: ${error.message || 'Không thể truy cập trang tính'}`);
       }
     } finally {
       setIsSyncing(false);
@@ -980,10 +982,69 @@ export const ReportsAnalyticsView: React.FC = () => {
     }
   };
 
-  // Auto fetch and sync all months on mount to automatically select latest date with data
+  // Switch active reporting year cleanly
+  const handleChangeReportYear = (nextYear: number) => {
+    setSelectedYear(nextYear);
+    setEditingCell(null);
+    const nextStore = reportArchiveService.loadYearArchiveSync(nextYear);
+    const latest = findLatestDataDate(nextStore, undefined, nextYear);
+    setMonthlyDataStore(nextStore);
+    setSelectedReportMonth(latest.month);
+    setSelectedReportDay(latest.day);
+    setSelectedReportWeek(latest.week);
+    setTimePeriod(`${latest.month}/${nextYear}`);
+    setCaseReports(nextStore[latest.month] || []);
+    setSheetUrl(getEffectiveSheetTarget(nextYear));
+
+    void reportArchiveService.hydrateYearArchiveFromIDB(nextYear).then((hydrated) => {
+      if (Object.keys(hydrated).length > 0) {
+        const latestHydrated = findLatestDataDate(hydrated, undefined, nextYear);
+        setMonthlyDataStore(hydrated);
+        setSelectedReportMonth(latestHydrated.month);
+        setSelectedReportDay(latestHydrated.day);
+        setSelectedReportWeek(latestHydrated.week);
+        setTimePeriod(`${latestHydrated.month}/${nextYear}`);
+        setCaseReports(hydrated[latestHydrated.month] || []);
+      }
+    });
+
+    if (resolveSpreadsheetId(getEffectiveSheetTarget(nextYear))) {
+      void syncAllMonths(false, true, nextYear);
+    }
+    void firebaseSyncService.subscribeReportYear(nextYear);
+  };
+
+  // Hydrate durable IndexedDB backup & auto-sync new data on mount
   useEffect(() => {
-    syncAllMonths(false, true);
+    let active = true;
+    void reportArchiveService.hydrateYearArchiveFromIDB(initialYear).then((hydrated) => {
+      if (!active) return;
+      if (Object.keys(hydrated).length > Object.keys(initialStore).length) {
+        const latest = findLatestDataDate(hydrated, undefined, initialYear);
+        setMonthlyDataStore(hydrated);
+        setSelectedReportMonth(latest.month);
+        setSelectedReportDay(latest.day);
+        setSelectedReportWeek(latest.week);
+        setTimePeriod(`${latest.month}/${initialYear}`);
+        setCaseReports(hydrated[latest.month] || []);
+      }
+    });
+    syncAllMonths(false, true, initialYear);
+    return () => { active = false; };
   }, []);
+
+  // Refresh UI immediately when Firebase Cloud pushes updated archive data for active year
+  useEffect(() => {
+    const handleCloudArchiveUpdated = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ year?: number; monthKey?: string }>).detail;
+      if (detail && detail.year !== selectedYear) return;
+      const refreshed = reportArchiveService.loadYearArchiveSync(selectedYear);
+      setMonthlyDataStore(refreshed);
+      setCaseReports((prev) => refreshed[selectedReportMonth] || prev);
+    };
+    window.addEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleCloudArchiveUpdated);
+    return () => window.removeEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleCloudArchiveUpdated);
+  }, [selectedYear, selectedReportMonth]);
 
   // When sheetTab changes for monthly tabs, ensure caseReports matches that month
   useEffect(() => {
@@ -992,22 +1053,22 @@ export const ReportsAnalyticsView: React.FC = () => {
         setCaseReports(monthlyDataStore[sheetTab]);
       } else {
         setCaseReports([]);
-        const effectiveUrl = sheetUrl || getEffectiveSheetTarget();
+        const effectiveUrl = sheetUrl || getEffectiveSheetTarget(selectedYear);
         if (resolveSpreadsheetId(effectiveUrl)) {
-          fetchGoogleSheetData(effectiveUrl, sheetTab, false);
+          fetchGoogleSheetData(effectiveUrl, sheetTab, false, false, selectedYear);
         }
       }
     }
   }, [sheetTab]);
 
   const handleSyncGoogleSheet = () => {
-    syncAllMonths(true, true);
+    syncAllMonths(true, true, selectedYear);
   };
 
   // Dynamic days array for month (uses numeric month parsing so Tháng 12 is 31 days, not 28)
   const getDaysList = () => {
     const activeMonth = sheetTab.startsWith('Tháng') ? sheetTab : selectedReportMonth;
-    const count = getDaysInMonth(activeMonth, 2026);
+    const count = getDaysInMonth(activeMonth, selectedYear);
     return Array.from({ length: count }, (_, i) => i + 1);
   };
   const daysList = getDaysList();
@@ -1086,7 +1147,7 @@ export const ReportsAnalyticsView: React.FC = () => {
 
   // Get active work days for any specified month
   const getActiveWorkDaysForMonth = (mTab: string, items: CaseReportItem[]) => {
-    const maxDays = getDaysInMonth(mTab, 2026);
+    const maxDays = getDaysInMonth(mTab, selectedYear);
     let activeCount = 0;
     for (let day = 1; day <= maxDays; day++) {
       let isLT = false;
@@ -1106,8 +1167,8 @@ export const ReportsAnalyticsView: React.FC = () => {
     const hasMonthData = Boolean(monthlyDataStore[selectedReportMonth] && monthlyDataStore[selectedReportMonth].length > 0);
     const monthItems = hasMonthData
       ? monthlyDataStore[selectedReportMonth]
-      : (selectedReportMonth === 'Tháng 2' ? caseReports : []);
-    const daysInMonth = getDaysInMonth(selectedReportMonth, 2026);
+      : (selectedReportMonth === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
+    const daysInMonth = getDaysInMonth(selectedReportMonth, selectedYear);
     const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
 
     let totalDayBH = 0;
@@ -1243,7 +1304,7 @@ export const ReportsAnalyticsView: React.FC = () => {
         .map((t) => `  • ${t.itemName}: ${t.todayCount} ca (TB ${t.mean.toFixed(1)}, Z=${t.zScore > 0 ? `+${t.zScore}` : t.zScore})`);
 
       return [
-        `📊 BÁO CÁO SỐ LIỆU GIAO BAN NGÀY ${String(selectedReportDay).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/2026 — KHOA CẬN LÂM SÀNG`,
+        `📊 BÁO CÁO SỐ LIỆU GIAO BAN NGÀY ${String(selectedReportDay).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/${selectedYear} — KHOA CẬN LÂM SÀNG`,
         `────────────────────────────────────────`,
         `• Tổng số ca thực hiện: ${totalDayAll.toLocaleString('vi-VN')} ca${isHolidayLT ? ' (Lễ Tết - LT)' : ''}`,
         `  - Bảo hiểm (BHYT): ${totalDayBH.toLocaleString('vi-VN')} ca (${bhPct}%)`,
@@ -1284,12 +1345,12 @@ export const ReportsAnalyticsView: React.FC = () => {
       storageService.sendNotification({
         recipient: 'Ban Chủ Nhiệm Khoa CLS',
         targetAddress: storageService.getSettings().defaultTelegramChatId || '@cls_giaoban',
-        title: `Báo cáo số liệu ngày ${selectedReportDay}/${mNum}/2026 (${totalDayAll.toLocaleString('vi-VN')} ca)`,
+        title: `Báo cáo số liệu ngày ${selectedReportDay}/${mNum}/${selectedYear} (${totalDayAll.toLocaleString('vi-VN')} ca)`,
         content: text,
         channel: 'Telegram',
         status: 'Đã gửi'
       });
-      setSyncToast(`✅ Đã phát Bản tin Giao ban Ngày ${selectedReportDay}/${mNum} tới Ban Chủ Nhiệm Khoa!`);
+      setSyncToast(`✅ Đã phát Bản tin Giao ban Ngày ${selectedReportDay}/${mNum}/${selectedYear} tới Ban Chủ Nhiệm Khoa!`);
       setTimeout(() => setSyncToast(null), 3500);
     };
 
@@ -1371,19 +1432,19 @@ export const ReportsAnalyticsView: React.FC = () => {
               <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h4 className="text-sm font-extrabold text-amber-900 dark:text-amber-200">
-                  Chưa có dữ liệu đồng bộ cho {selectedReportMonth}/2026
+                  Chưa có dữ liệu đồng bộ cho {selectedReportMonth}/{selectedYear}
                 </h4>
                 <p className="text-xs text-amber-800/90 dark:text-amber-300/90">
-                  Vui lòng kiểm tra trang tính Google Sheets đã có tab tên{' '}
-                  <strong>{selectedReportMonth}</strong>, <strong>{selectedReportMonth}/2026</strong>,{' '}
+                  Vui lòng kiểm tra trang tính Google Sheets năm <strong>{selectedYear}</strong> đã có tab tên{' '}
+                  <strong>{selectedReportMonth}</strong>, <strong>{selectedReportMonth}/{selectedYear}</strong>,{' '}
                   <strong>T{getMonthNumber(selectedReportMonth)}</strong> hoặc{' '}
-                  <strong>{getMonthNumber(selectedReportMonth)}/2026</strong> và bấm nút Đồng bộ ngay.
+                  <strong>{getMonthNumber(selectedReportMonth)}/{selectedYear}</strong> và bấm nút Đồng bộ ngay.
                 </p>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => syncAllMonths(true, false)}
+              onClick={() => syncAllMonths(true, false, selectedYear)}
               disabled={isSyncing}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
             >
@@ -1749,8 +1810,8 @@ export const ReportsAnalyticsView: React.FC = () => {
 
   // SMART WEEKLY REPORT RENDERER (YEAR-BASED WEEKS 1..52)
   const renderWeeklyReport = () => {
-    const currWeekInfo = getWeekDateRange(selectedReportWeek);
-    const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1) : null;
+    const currWeekInfo = getWeekDateRange(selectedReportWeek, selectedYear);
+    const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1, selectedYear) : null;
 
     // Collect dates for current week
     const weekDates: Date[] = [];
@@ -1887,7 +1948,7 @@ export const ReportsAnalyticsView: React.FC = () => {
               <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 BÁO CÁO CÔNG TÁC TUẦN
                 <span className="px-2.5 py-0.5 text-xs font-black bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 rounded-full border border-indigo-200 dark:border-indigo-800">
-                  Tuần {selectedReportWeek} ({currWeekInfo.dateRangeLabel}) - Năm 2026
+                  Tuần {selectedReportWeek} ({currWeekInfo.dateRangeLabel}) - Năm {selectedYear}
                 </span>
               </h3>
               <p className="text-xs text-slate-500">Tổng hợp lượt ca theo tuần trong năm (Từ Tuần 1 đến Tuần 52)</p>
@@ -2111,7 +2172,7 @@ export const ReportsAnalyticsView: React.FC = () => {
           monthlyValues[m] = { count: val, isActual: true };
           actualSum += val;
           actualMonthCount++;
-        } else if (m === 'Tháng 2' && caseReports.length > 0) {
+        } else if (m === 'Tháng 2' && selectedYear === 2026 && caseReports.length > 0) {
           const matchedItem = caseReports.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
           const val = matchedItem ? getRowTotal(matchedItem) : 0;
           monthlyValues[m] = { count: val, isActual: true };
@@ -2204,7 +2265,7 @@ export const ReportsAnalyticsView: React.FC = () => {
             </div>
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                BÁO CÁO NĂM CÔNG TÁC CHẨN ĐOÁN HÌNH ẢNH 2026
+                BÁO CÁO NĂM CÔNG TÁC CHẨN ĐOÁN HÌNH ẢNH {selectedYear}
                 <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-black bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 rounded-full border border-purple-200 dark:border-purple-800">
                   Chuẩn hóa 12 tháng
                 </span>
@@ -2217,11 +2278,11 @@ export const ReportsAnalyticsView: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => syncAllMonths(true)}
+              onClick={() => syncAllMonths(true, true, selectedYear)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold border border-blue-200 dark:border-blue-800 transition-all cursor-pointer shadow-2xs"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ 12 Tháng Thực Tế'}
+              {isSyncing ? 'Đang đồng bộ...' : `Đồng bộ 12 Tháng (${selectedYear})`}
             </button>
 
             <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
@@ -2253,7 +2314,7 @@ export const ReportsAnalyticsView: React.FC = () => {
           </div>
 
           <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Hợp Cả Năm 2026</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Hợp Cả Năm {selectedYear}</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-purple-900 dark:text-purple-200">{grandFullYearTotal.toLocaleString()} ca</h4>
               <span className="text-xs font-extrabold text-purple-700 bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded-full">12 Tháng Kế Hoạch</span>
@@ -2283,7 +2344,7 @@ export const ReportsAnalyticsView: React.FC = () => {
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-purple-600" /> BIỂU ĐỒ DIỄN BIẾN SỐ CA 12 THÁNG TRONG NĂM 2026
+              <BarChart3 className="w-4 h-4 text-purple-600" /> BIỂU ĐỒ DIỄN BIẾN SỐ CA 12 THÁNG TRONG NĂM {selectedYear}
             </h4>
             <div className="flex items-center gap-4 text-xs font-bold">
               <span className="flex items-center gap-1 text-blue-700 dark:text-blue-300">
@@ -2319,7 +2380,7 @@ export const ReportsAnalyticsView: React.FC = () => {
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-xs overflow-hidden">
           <div className="bg-slate-50 dark:bg-slate-800/90 px-5 py-4 border-b border-slate-300 dark:border-slate-700 flex items-center justify-between">
             <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-              MA TRẬN SỐ LIỆU TỔNG HỢP CÔNG TÁC {annualViewMode === 'full' ? '12 THÁNG NĂM 2026' : `${actualMonths.length} THÁNG THỰC TẾ (${actualLabelRange})`}
+              MA TRẬN SỐ LIỆU TỔNG HỢP CÔNG TÁC {annualViewMode === 'full' ? `12 THÁNG NĂM ${selectedYear}` : `${actualMonths.length} THÁNG THỰC TẾ (${actualLabelRange})`}
             </h4>
             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
               Tổng số kỹ thuật: {masterServices.length} dịch vụ
@@ -2482,12 +2543,16 @@ export const ReportsAnalyticsView: React.FC = () => {
     );
   };
 
-  // Cell editing logic
+  // Manual cell editing logic (persists directly to year-scoped immutable system archive)
   const handleSaveCell = () => {
     if (!editingCell) return;
-    const num = parseInt(editValue, 10) || 0;
+    const rawClean = editValue.trim().toUpperCase();
+    const parsedVal: number | string =
+      rawClean === 'LT' ? 'LT' : (parseInt(rawClean.replace(/[^0-9]/g, ''), 10) || 0);
+    const activeMonthKey = sheetTab.startsWith('Tháng') ? sheetTab : selectedReportMonth;
+    const editorName = storageService.getCurrentUser().name;
 
-    setCaseReports(prev => prev.map(item => {
+    const updatedList = caseReports.map(item => {
       if (item.id === editingCell.itemId) {
         const currentDayData = item.dailyData[editingCell.day] || { bh: 0, nd: 0 };
         return {
@@ -2496,14 +2561,27 @@ export const ReportsAnalyticsView: React.FC = () => {
             ...item.dailyData,
             [editingCell.day]: {
               ...currentDayData,
-              [editingCell.type]: num
+              [editingCell.type]: parsedVal
             }
           }
         };
       }
       return item;
-    }));
+    });
 
+    const lockedList = reportArchiveService.saveManualDayUpdates(
+      selectedYear,
+      activeMonthKey,
+      updatedList,
+      [editingCell.day],
+      editorName
+    );
+    setCaseReports(lockedList);
+    setMonthlyDataStore(prev => ({ ...prev, [activeMonthKey]: lockedList }));
+    setSyncToast(
+      `🔒 Đã chỉnh sửa thủ công & khóa bảo vệ Ngày ${editingCell.day} - ${activeMonthKey}/${selectedYear} trên hệ thống.`
+    );
+    setTimeout(() => setSyncToast(null), 3500);
     setEditingCell(null);
     setEditValue('');
   };
@@ -2544,7 +2622,7 @@ export const ReportsAnalyticsView: React.FC = () => {
     const wb = XLSX.utils.book_new();
 
     if (sheetTab === 'Báo cáo ngày') {
-      const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' ? caseReports : []);
+      const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
       const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
 
       const dailyRows = monthItems.map(item => {
@@ -2571,11 +2649,11 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       const ws = XLSX.utils.json_to_sheet(dailyRows);
       XLSX.utils.book_append_sheet(wb, ws, `Ngày ${selectedReportDay} ${selectedReportMonth}`);
-      XLSX.writeFile(wb, `Bao_Cao_Ngay_${selectedReportDay}_${selectedReportMonth.replace(/\s+/g, '_')}_2026.xlsx`);
+      XLSX.writeFile(wb, `Bao_Cao_Ngay_${selectedReportDay}_${selectedReportMonth.replace(/\s+/g, '_')}_${selectedYear}.xlsx`);
 
     } else if (sheetTab === 'Báo cáo tuần') {
-      const currWeekInfo = getWeekDateRange(selectedReportWeek);
-      const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1) : null;
+      const currWeekInfo = getWeekDateRange(selectedReportWeek, selectedYear);
+      const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1, selectedYear) : null;
 
       const weekDates: Date[] = [];
       let curDate = new Date(currWeekInfo.startDate);
@@ -2642,7 +2720,7 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       const ws = XLSX.utils.json_to_sheet(weeklyRows);
       XLSX.utils.book_append_sheet(wb, ws, `Tuần ${selectedReportWeek}`);
-      XLSX.writeFile(wb, `Bao_Cao_Tuan_${selectedReportWeek}_2026.xlsx`);
+      XLSX.writeFile(wb, `Bao_Cao_Tuan_${selectedReportWeek}_${selectedYear}.xlsx`);
 
     } else if (sheetTab === 'Báo cáo năm') {
       const allMonths = ALL_MONTHS;
@@ -2688,7 +2766,7 @@ export const ReportsAnalyticsView: React.FC = () => {
             monthlyValues[m] = val;
             actualSum += val;
             actualMonthCount++;
-          } else if (m === 'Tháng 2' && caseReports.length > 0) {
+          } else if (m === 'Tháng 2' && selectedYear === 2026 && caseReports.length > 0) {
             const matchedItem = caseReports.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
             const val = matchedItem ? getRowTotal(matchedItem) : 0;
             monthlyValues[m] = val;
@@ -2723,7 +2801,7 @@ export const ReportsAnalyticsView: React.FC = () => {
 
         row[`Tổng ${actualMonths.length} Tháng Thực Tế`] = actualSum;
         if (annualViewMode === 'full') {
-          row['Dự Báo Cả Năm 2026'] = fullYearTotal;
+          row[`Dự Báo Cả Năm ${selectedYear}`] = fullYearTotal;
           row['TB / Tháng'] = Math.round(fullYearTotal / 12);
         }
 
@@ -2731,13 +2809,13 @@ export const ReportsAnalyticsView: React.FC = () => {
       });
 
       const ws = XLSX.utils.json_to_sheet(annualRows);
-      XLSX.utils.book_append_sheet(wb, ws, `Báo Cáo Năm 2026`);
-      XLSX.writeFile(wb, `Bao_Cao_Nam_2026_${annualViewMode}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, `Báo Cáo Năm ${selectedYear}`);
+      XLSX.writeFile(wb, `Bao_Cao_Nam_${selectedYear}_${annualViewMode}.xlsx`);
 
     } else {
       // Monthly matrix tab (e.g., Tháng 1 .. Tháng 12)
-      const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' ? caseReports : []);
-      const maxDays = getDaysInMonth(sheetTab, 2026);
+      const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
+      const maxDays = getDaysInMonth(sheetTab, selectedYear);
       
       const matrixRows = targetMonthItems.map(item => {
         const row: any = {
@@ -2756,7 +2834,7 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       const ws = XLSX.utils.json_to_sheet(matrixRows);
       XLSX.utils.book_append_sheet(wb, ws, sheetTab);
-      XLSX.writeFile(wb, `Bao_Cao_${sheetTab.replace(/\s+/g, '_')}_2026.xlsx`);
+      XLSX.writeFile(wb, `Bao_Cao_${sheetTab.replace(/\s+/g, '_')}_${selectedYear}.xlsx`);
     }
   };
 
@@ -2769,12 +2847,12 @@ export const ReportsAnalyticsView: React.FC = () => {
     let fileName = '';
 
     if (sheetTab === 'Báo cáo ngày') {
-      const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' ? caseReports : []);
+      const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
       const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
 
       titleText = `BÁO CÁO GIAO BAN KHOA CẬN LÂM SÀNG - NGÀY ${selectedReportDay}`;
-      periodText = `Thời gian: Ngày ${selectedReportDay} - ${selectedReportMonth} năm 2026`;
-      fileName = `Bao_Cao_Ngay_${selectedReportDay}_${selectedReportMonth.replace(/\s+/g, '_')}_2026.doc`;
+      periodText = `Thời gian: Ngày ${selectedReportDay} - ${selectedReportMonth} năm ${selectedYear}`;
+      fileName = `Bao_Cao_Ngay_${selectedReportDay}_${selectedReportMonth.replace(/\s+/g, '_')}_${selectedYear}.doc`;
 
       let totalBH = 0;
       let totalND = 0;
@@ -2877,12 +2955,12 @@ export const ReportsAnalyticsView: React.FC = () => {
       `;
 
     } else if (sheetTab === 'Báo cáo tuần') {
-      const currWeekInfo = getWeekDateRange(selectedReportWeek);
-      const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1) : null;
+      const currWeekInfo = getWeekDateRange(selectedReportWeek, selectedYear);
+      const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1, selectedYear) : null;
 
       titleText = `BÁO CÁO GIAO BAN HOẠT ĐỘNG KHOA CLS - TUẦN ${selectedReportWeek}`;
-      periodText = `Thời gian: Tuần ${selectedReportWeek} (${currWeekInfo.dateRangeLabel}) năm 2026`;
-      fileName = `Bao_Cao_Tuan_${selectedReportWeek}_2026.doc`;
+      periodText = `Thời gian: Tuần ${selectedReportWeek} (${currWeekInfo.dateRangeLabel}) năm ${selectedYear}`;
+      fileName = `Bao_Cao_Tuan_${selectedReportWeek}_${selectedYear}.doc`;
 
       const weekDates: Date[] = [];
       let curDate = new Date(currWeekInfo.startDate);
@@ -3043,9 +3121,9 @@ export const ReportsAnalyticsView: React.FC = () => {
       const actualMonthsSet = new Set(actualMonths);
       const actualRangeText = actualMonths.map(m => m.replace('Tháng ', 'T')).join(', ');
 
-      titleText = `BÁO CÁO THỐNG KÊ HOẠT ĐỘNG NĂM 2026 - KHOA CẬN LÂM SÀNG`;
-      periodText = `Thời gian: Toàn bộ Năm 2026 (${annualViewMode === 'full' ? 'Dự báo 12 tháng' : `${actualMonths.length} tháng thực tế`})`;
-      fileName = `Bao_Cao_Nam_2026_${annualViewMode}.doc`;
+      titleText = `BÁO CÁO THỐNG KÊ HOẠT ĐỘNG NĂM ${selectedYear} - KHOA CẬN LÂM SÀNG`;
+      periodText = `Thời gian: Toàn bộ Năm ${selectedYear} (${annualViewMode === 'full' ? 'Dự báo 12 tháng' : `${actualMonths.length} tháng thực tế`})`;
+      fileName = `Bao_Cao_Nam_${selectedYear}_${annualViewMode}.doc`;
 
       const seasonalFactors: { [m: string]: number } = {
         'Tháng 1': 0.98, 'Tháng 2': 0.95, 'Tháng 3': 1.0,
@@ -3079,7 +3157,7 @@ export const ReportsAnalyticsView: React.FC = () => {
           <th style="width: 25%;">Kỹ Thuật / Dịch Vụ</th>
           ${displayedMonths.map(m => `<th>${m}</th>`).join('')}
           <th>Tổng Thực Tế</th>
-          ${annualViewMode === 'full' ? '<th>Dự Báo 2026</th><th>TB/Tháng</th>' : ''}
+          ${annualViewMode === 'full' ? `<th>Dự Báo ${selectedYear}</th><th>TB/Tháng</th>` : ''}
         </tr>
       `;
 
@@ -3108,7 +3186,7 @@ export const ReportsAnalyticsView: React.FC = () => {
               monthlyValues[m] = val;
               actualSum += val;
               actualMonthCount++;
-            } else if (m === 'Tháng 2' && caseReports.length > 0) {
+            } else if (m === 'Tháng 2' && selectedYear === 2026 && caseReports.length > 0) {
               const matchedItem = caseReports.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
               const val = matchedItem ? getRowTotal(matchedItem) : 0;
               monthlyValues[m] = val;
@@ -3169,11 +3247,11 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       summaryCardsHtml = `
         <div class="summary-box">
-          <div class="summary-title">TỔNG QUAN HOẠT ĐỘNG CẢ NĂM 2026</div>
+          <div class="summary-title">TỔNG QUAN HOẠT ĐỘNG CẢ NĂM ${selectedYear}</div>
           <table style="width: 100%; border: none;">
             <tr>
               <td style="border: none; padding: 4px 8px;">• <b>Tổng ${actualMonths.length} tháng thực tế (${actualRangeText}):</b> <span style="color: #047857; font-size: 13pt;">${grandActualSum.toLocaleString('vi-VN')}</span> ca</td>
-              ${annualViewMode === 'full' ? `<td style="border: none; padding: 4px 8px;">• <b>Dự báo tổng cả năm 2026:</b> <span style="color: #1e40af; font-size: 13pt;">${grandFullYearTotal.toLocaleString('vi-VN')}</span> ca</td>` : ''}
+              ${annualViewMode === 'full' ? `<td style="border: none; padding: 4px 8px;">• <b>Dự báo tổng cả năm ${selectedYear}:</b> <span style="color: #1e40af; font-size: 13pt;">${grandFullYearTotal.toLocaleString('vi-VN')}</span> ca</td>` : ''}
             </tr>
           </table>
         </div>
@@ -3181,10 +3259,10 @@ export const ReportsAnalyticsView: React.FC = () => {
 
     } else {
       // Monthly tab e.g. Tháng 1 .. Tháng 12
-      const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' ? caseReports : []);
+      const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
       titleText = `BÁO CÁO TỔNG HỢP HOẠT ĐỘNG KHOA CẬN LÂM SÀNG - ${sheetTab.toUpperCase()}`;
-      periodText = `Thời gian: ${sheetTab} năm 2026`;
-      fileName = `Bao_Cao_${sheetTab.replace(/\s+/g, '_')}_2026.doc`;
+      periodText = `Thời gian: ${sheetTab} năm ${selectedYear}`;
+      fileName = `Bao_Cao_${sheetTab.replace(/\s+/g, '_')}_${selectedYear}.doc`;
 
       let monthBH = 0;
       let monthND = 0;
@@ -3196,7 +3274,7 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       summaryCardsHtml = `
         <div class="summary-box">
-          <div class="summary-title">TỔNG QUAN SỐ LIỆU ${sheetTab.toUpperCase()} NĂM 2026</div>
+          <div class="summary-title">TỔNG QUAN SỐ LIỆU ${sheetTab.toUpperCase()} NĂM ${selectedYear}</div>
           <table style="width: 100%; border: none;">
             <tr>
               <td style="border: none; padding: 4px 8px;">• <b>Tổng ca thực hiện:</b> <span style="color: #1e40af; font-size: 13pt;">${monthTotal.toLocaleString('vi-VN')}</span> ca</td>
@@ -3407,7 +3485,7 @@ export const ReportsAnalyticsView: React.FC = () => {
               <b>KTV. Nguyễn Văn A</b>
             </td>
             <td style="width: 50%;">
-              <i>TP. Hồ Chí Minh, ngày ${new Date().getDate()} tháng ${new Date().getMonth() + 1} năm 2026</i><br/>
+              <i>TP. Hồ Chí Minh, ngày ${new Date().getDate()} tháng ${new Date().getMonth() + 1} năm ${new Date().getFullYear()}</i><br/>
               <b>TRƯỞNG KHOA CẬN LÂM SÀNG</b><br/>
               <i>(Ký, đóng dấu và ghi rõ họ tên)</i>
               <br/><br/><br/><br/>
@@ -3537,8 +3615,9 @@ export const ReportsAnalyticsView: React.FC = () => {
 
       {/* TAB 1: GOOGLE SHEET DAILY CASE REPORT (SLIDES / SPREADSHEET MATRIX) */}
       {activeTab === 'google_sheet' && (() => {
-        const effectiveSheetUrl = sheetUrl || getEffectiveSheetTarget();
+        const effectiveSheetUrl = getEffectiveSheetTarget(selectedYear) || sheetUrl;
         const syncedMonthKeys = ALL_MONTHS.filter(m => monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+        const archiveStats = reportArchiveService.getYearSummaryStats(selectedYear, monthlyDataStore);
         const syncedLabel = syncedMonthKeys.length > 0
           ? syncedMonthKeys.map(m => m.replace('Tháng ', 'T')).join(', ')
           : 'Chưa đồng bộ';
@@ -3554,17 +3633,27 @@ export const ReportsAnalyticsView: React.FC = () => {
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                    Liên kết Google Sheets Báo Cáo Giao Ban Khoa CLS
+                    Liên kết Google Sheets Báo Cáo Giao Ban Khoa CLS · Năm {selectedYear}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Hỗ trợ đồng bộ 12 tháng (T1 - T12/2026) • Dữ liệu đã nạp: <strong className="text-emerald-600 dark:text-emerald-400">{syncedLabel}</strong>
+                    Đồng bộ 12 tháng (T1 - T12/{selectedYear}) &middot; Đã lưu hệ thống:{' '}
+                    <strong className="text-emerald-600 dark:text-emerald-400">{syncedLabel}</strong>
+                    {archiveStats.totalRecordedCells > 0 && (
+                      <span className="ml-1.5 tabular-nums text-slate-500">
+                        ({archiveStats.totalRecordedCells.toLocaleString('vi-VN')} ô đã khóa bảo vệ)
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
-                <span className="px-2.5 py-1.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-xl text-xs font-extrabold border border-emerald-300/60 shrink-0 inline-flex items-center">
-                  Tự động đồng bộ
+                <span
+                  className="px-2.5 py-1.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 shrink-0 inline-flex items-center gap-1"
+                  title="Dữ liệu đã kéo về hệ thống sẽ không bị mất khi xóa Google Sheet, chỉ có thể chỉnh sửa thủ công"
+                >
+                  <Lock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Lưu hệ thống · Chỉ sửa thủ công</span>
                 </span>
                 {resolveSpreadsheetId(effectiveSheetUrl) ? (
                   <a
@@ -3572,19 +3661,19 @@ export const ReportsAnalyticsView: React.FC = () => {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs group shrink-0"
-                    title="Bấm để mở trang tính Google Sheets trong tab mới (Chỉnh sửa liên kết trong 'Cấu hình hệ thống')"
+                    title={`Bấm để mở trang tính Google Sheets Năm ${selectedYear} (Chỉnh sửa liên kết trong 'Menu Cấu Hình → Cấu Hình Hệ Thống')`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                    <span>Đã kết nối</span>
+                    <Database className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Đã kết nối ({selectedYear})</span>
                     <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                   </a>
                 ) : (
                   <span
                     className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 shrink-0"
-                    title="Vào mục 'Cấu hình hệ thống' để dán URL hoặc ID Google Sheets"
+                    title={`Vào mục 'Menu Cấu Hình → Cấu Hình Hệ Thống' để dán URL hoặc ID Google Sheets cho năm ${selectedYear}`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                    <span>Chưa gắn link Sheet</span>
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Chưa gắn link ({selectedYear})</span>
                   </span>
                 )}
                 <button
@@ -3680,12 +3769,12 @@ export const ReportsAnalyticsView: React.FC = () => {
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-semibold text-slate-400">Đang xem:</span>
-                  <span className="px-3 py-1 bg-blue-600 text-white rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5">
+                  <span className="px-3 py-1 bg-blue-600 text-white rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 tabular-nums">
                     <Calendar className="w-3.5 h-3.5" />
-                    {sheetTab === 'Báo cáo ngày' && `Ngày ${selectedReportDay} - ${selectedReportMonth}/2026`}
-                    {sheetTab === 'Báo cáo tuần' && `Tuần ${selectedReportWeek} (${getWeekDateRange(selectedReportWeek).dateRangeLabel}) - Năm 2026`}
-                    {sheetTab.startsWith('Tháng') && `Báo cáo Tổng hợp ${sheetTab}/2026`}
-                    {sheetTab === 'Báo cáo năm' && `Toàn bộ Năm 2026 (${annualViewMode === 'full' ? '12 Tháng' : `${syncedMonthKeys.length || 1} Tháng thực tế`})`}
+                    {sheetTab === 'Báo cáo ngày' && `Ngày ${selectedReportDay} - ${selectedReportMonth}/${selectedYear}`}
+                    {sheetTab === 'Báo cáo tuần' && `Tuần ${selectedReportWeek} (${getWeekDateRange(selectedReportWeek, selectedYear).dateRangeLabel}) - Năm ${selectedYear}`}
+                    {sheetTab.startsWith('Tháng') && `Báo cáo Tổng hợp ${sheetTab}/${selectedYear}`}
+                    {sheetTab === 'Báo cáo năm' && `Toàn bộ Năm ${selectedYear} (${annualViewMode === 'full' ? '12 Tháng' : `${syncedMonthKeys.length || 1} Tháng thực tế`})`}
                   </span>
                 </div>
 
@@ -3695,7 +3784,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                   title="Xuất báo cáo Excel theo khoảng thời gian đang chọn"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
-                  <span>Xuất Excel ({sheetTab === 'Báo cáo ngày' ? `Ngày ${selectedReportDay}` : sheetTab === 'Báo cáo tuần' ? `Tuần ${selectedReportWeek}` : sheetTab === 'Báo cáo năm' ? 'Năm 2026' : sheetTab})</span>
+                  <span>Xuất Excel ({sheetTab === 'Báo cáo ngày' ? `Ngày ${selectedReportDay}` : sheetTab === 'Báo cáo tuần' ? `Tuần ${selectedReportWeek}` : sheetTab === 'Báo cáo năm' ? `Năm ${selectedYear}` : sheetTab})</span>
                 </button>
 
                 <button
@@ -3768,10 +3857,27 @@ export const ReportsAnalyticsView: React.FC = () => {
 
               {/* Contextual Sub-controls (Dynamic based on selected mode) */}
               <div className="flex flex-wrap items-center gap-2">
+                {/* 0. Year Picker */}
+                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+                  <span className="text-slate-500 pl-2 text-[11px]">Năm:</span>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => handleChangeReportYear(Number(e.target.value))}
+                    className="bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 font-black px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none cursor-pointer text-xs tabular-nums"
+                    title="Chọn năm dữ liệu báo cáo & nguồn Google Sheet tương ứng"
+                  >
+                    {AVAILABLE_REPORT_YEARS.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* 1. Month Picker (All 12 Months for Day, Week, Month) */}
                 {(sheetTab === 'Báo cáo ngày' || sheetTab === 'Báo cáo tuần' || sheetTab.startsWith('Tháng')) && (
                   <div className="flex flex-wrap items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                    <span className="text-slate-500 pl-2 pr-1 text-[11px]">Tháng (2026):</span>
+                    <span className="text-slate-500 pl-2 pr-1 text-[11px] tabular-nums">Tháng ({selectedYear}):</span>
                     {ALL_MONTHS.map(m => {
                       const mNum = getMonthNumber(m);
                       const hasSynced = Boolean(monthlyDataStore[m] && monthlyDataStore[m].length > 0);
@@ -3780,22 +3886,22 @@ export const ReportsAnalyticsView: React.FC = () => {
                         <button
                           key={m}
                           type="button"
-                          title={`${m}/2026${hasSynced ? ' (Đã có dữ liệu đồng bộ)' : ' (Chưa có dữ liệu - bấm để kiểm tra/đồng bộ)'}`}
+                          title={`${m}/${selectedYear}${hasSynced ? ' (Đã lưu trong hệ thống)' : ' (Chưa có dữ liệu - bấm để kiểm tra/đồng bộ)'}`}
                           onClick={() => {
                             setSelectedReportMonth(m);
-                            setTimePeriod(`${m}/2026`);
+                            setTimePeriod(`${m}/${selectedYear}`);
                             const stored = monthlyDataStore[m];
-                            const targetItems = stored && stored.length > 0 ? stored : (m === 'Tháng 2' ? caseReports : []);
-                            const maxD = getDaysInMonth(m, 2026);
+                            const targetItems = stored && stored.length > 0 ? stored : (m === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
+                            const maxD = getDaysInMonth(m, selectedYear);
                             const latestDInMonth = targetItems.length > 0 ? findLatestDayInItems(targetItems, maxD) : 1;
                             setSelectedReportDay(latestDInMonth);
-                            setSelectedReportWeek(getWeekNumberForDate(2026, mNum, latestDInMonth));
+                            setSelectedReportWeek(getWeekNumberForDate(selectedYear, mNum, latestDInMonth));
                             if (targetItems.length > 0) {
                               setCaseReports(targetItems);
                             } else {
                               setCaseReports([]);
                               if (resolveSpreadsheetId(effectiveSheetUrl) && !sheetTab.startsWith('Tháng')) {
-                                fetchGoogleSheetData(effectiveSheetUrl, m, true, false);
+                                fetchGoogleSheetData(effectiveSheetUrl, m, true, false, selectedYear);
                               }
                             }
                             if (sheetTab.startsWith('Tháng')) {
@@ -3840,7 +3946,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                       onChange={e => setSelectedReportDay(Number(e.target.value))}
                       className="bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 font-black px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none cursor-pointer text-xs"
                     >
-                      {Array.from({ length: getDaysInMonth(selectedReportMonth, 2026) }, (_, i) => i + 1).map(d => (
+                      {Array.from({ length: getDaysInMonth(selectedReportMonth, selectedYear) }, (_, i) => i + 1).map(d => (
                         <option key={d} value={d} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                           Ngày {d}
                         </option>
@@ -3850,10 +3956,10 @@ export const ReportsAnalyticsView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        const maxD = getDaysInMonth(selectedReportMonth, 2026);
+                        const maxD = getDaysInMonth(selectedReportMonth, selectedYear);
                         setSelectedReportDay(prev => Math.min(maxD, prev + 1));
                       }}
-                      disabled={selectedReportDay >= getDaysInMonth(selectedReportMonth, 2026)}
+                      disabled={selectedReportDay >= getDaysInMonth(selectedReportMonth, selectedYear)}
                       className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                       title="Ngày sau"
                     >
@@ -3872,7 +3978,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                       onClick={() => {
                         const nextW = Math.max(1, selectedReportWeek - 1);
                         setSelectedReportWeek(nextW);
-                        setSelectedReportMonth(getWeekDateRange(nextW).startMonthStr);
+                        setSelectedReportMonth(getWeekDateRange(nextW, selectedYear).startMonthStr);
                       }}
                       disabled={selectedReportWeek <= 1}
                       className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
@@ -3886,13 +3992,13 @@ export const ReportsAnalyticsView: React.FC = () => {
                       onChange={e => {
                         const w = Number(e.target.value);
                         setSelectedReportWeek(w);
-                        const info = getWeekDateRange(w);
+                        const info = getWeekDateRange(w, selectedYear);
                         setSelectedReportMonth(info.startMonthStr);
                       }}
                       className="bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 font-black px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 outline-none cursor-pointer text-xs"
                     >
                       {Array.from({ length: 52 }, (_, i) => i + 1).map(w => {
-                        const info = getWeekDateRange(w);
+                        const info = getWeekDateRange(w, selectedYear);
                         return (
                           <option key={w} value={w} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                             Tuần {w} ({info.dateRangeLabel})
@@ -3906,7 +4012,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                       onClick={() => {
                         const nextW = Math.min(52, selectedReportWeek + 1);
                         setSelectedReportWeek(nextW);
-                        setSelectedReportMonth(getWeekDateRange(nextW).startMonthStr);
+                        setSelectedReportMonth(getWeekDateRange(nextW, selectedYear).startMonthStr);
                       }}
                       disabled={selectedReportWeek >= 52}
                       className="p-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
@@ -3963,7 +4069,7 @@ export const ReportsAnalyticsView: React.FC = () => {
                   BÁO CÁO GIAO BAN KHOA CẬN LÂM SÀNG
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
-                  Thời gian: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{sheetTab} - Năm 2026</span> | Thống kê số lượt Bảo hiểm (BH) & Nhân dân (ND) theo từng ngày
+                  Thời gian: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{sheetTab} - Năm {selectedYear}</span> &middot; Bấm trực tiếp vào ô số liệu để chỉnh sửa thủ công (được khóa bảo vệ khỏi ghi đè khi đồng bộ Sheet)
                 </p>
               </div>
 
@@ -4151,21 +4257,45 @@ export const ReportsAnalyticsView: React.FC = () => {
                               Ca
                             </td>
 
-                          {/* Days Cells (Read-only data synced directly from Google Sheets) */}
+                          {/* Days Cells (Archived on system; click to edit manually only) */}
                           {daysList.map(day => {
                             const isLT = getMonthNumber(sheetTab) === 2 && day >= 15 && day <= 21;
                             const isWeekend = day === 7 || day === 8;
                             const dayData = item.dailyData[day] || { bh: 0, nd: 0 };
-                            
+                            const isManualDay = Boolean(item.manualDays?.[day]);
+                            const isEditingBh = editingCell?.itemId === item.id && editingCell.day === day && editingCell.type === 'bh';
+                            const isEditingNd = editingCell?.itemId === item.id && editingCell.day === day && editingCell.type === 'nd';
+
                             return (
                               <React.Fragment key={day}>
                                 {/* BH Cell */}
-                                <td 
-                                  className={`text-center py-2 border-b border-r border-slate-300/75 dark:border-slate-700/80 font-semibold text-slate-800 dark:text-slate-200 ${
-                                    isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
+                                <td
+                                  onClick={() => {
+                                    if (!isEditingBh) {
+                                      setEditingCell({ itemId: item.id, day, type: 'bh' });
+                                      setEditValue(dayData.bh === 'LT' ? 'LT' : String(dayData.bh ?? 0));
+                                    }
+                                  }}
+                                  title={`Bấm để sửa thủ công BH Ngày ${day}${isManualDay ? ' (Đã chỉnh sửa thủ công & khóa)' : ''}`}
+                                  className={`text-center py-2 border-b border-r border-slate-300/75 dark:border-slate-700/80 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer hover:bg-blue-100/70 dark:hover:bg-blue-900/40 ${
+                                    isManualDay ? 'bg-amber-50/40 dark:bg-amber-950/20' : isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
                                   }`}
                                 >
-                                  {dayData.bh === 'LT' ? (
+                                  {isEditingBh ? (
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      onBlur={handleSaveCell}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveCell();
+                                        if (e.key === 'Escape') { setEditingCell(null); setEditValue(''); }
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="w-10 text-center text-xs font-bold px-0.5 py-0.5 bg-white dark:bg-slate-800 border border-blue-500 rounded outline-none"
+                                    />
+                                  ) : dayData.bh === 'LT' ? (
                                     <span className="text-red-600 dark:text-red-400 font-extrabold italic text-xs">LT</span>
                                   ) : (
                                     dayData.bh || <span className="text-slate-300 dark:text-slate-700 font-normal">-</span>
@@ -4173,12 +4303,33 @@ export const ReportsAnalyticsView: React.FC = () => {
                                 </td>
 
                                 {/* ND Cell */}
-                                <td 
-                                  className={`text-center py-2 border-b border-r border-slate-300 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 ${
-                                    isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
+                                <td
+                                  onClick={() => {
+                                    if (!isEditingNd) {
+                                      setEditingCell({ itemId: item.id, day, type: 'nd' });
+                                      setEditValue(dayData.nd === 'LT' ? 'LT' : String(dayData.nd ?? 0));
+                                    }
+                                  }}
+                                  title={`Bấm để sửa thủ công ND Ngày ${day}${isManualDay ? ' (Đã chỉnh sửa thủ công & khóa)' : ''}`}
+                                  className={`text-center py-2 border-b border-r border-slate-300 dark:border-slate-600 font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 ${
+                                    isManualDay ? 'bg-amber-50/40 dark:bg-amber-950/20' : isLT ? 'bg-red-50/50 dark:bg-red-950/30' : isWeekend ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''
                                   }`}
                                 >
-                                  {dayData.nd === 'LT' ? (
+                                  {isEditingNd ? (
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      onBlur={handleSaveCell}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveCell();
+                                        if (e.key === 'Escape') { setEditingCell(null); setEditValue(''); }
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="w-10 text-center text-xs font-bold px-0.5 py-0.5 bg-white dark:bg-slate-800 border border-emerald-500 rounded outline-none"
+                                    />
+                                  ) : dayData.nd === 'LT' ? (
                                     <span className="text-red-600 dark:text-red-400 font-extrabold italic text-xs">LT</span>
                                   ) : (
                                     dayData.nd || <span className="text-slate-300 dark:text-slate-700 font-normal">-</span>
@@ -4247,10 +4398,10 @@ export const ReportsAnalyticsView: React.FC = () => {
                       <td colSpan={daysList.length * 2 + 6} className="px-6 py-10 text-center">
                         <div className="max-w-lg mx-auto space-y-2">
                           <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                            Chưa có dữ liệu đồng bộ cho {sheetTab}/2026
+                            Chưa có dữ liệu đồng bộ cho {sheetTab}/{selectedYear}
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Hệ thống hỗ trợ tự động nhận diện các tên tab: <strong>{sheetTab}</strong>, <strong>{sheetTab}/2026</strong>, <strong>T{getMonthNumber(sheetTab)}</strong>, <strong>{getMonthNumber(sheetTab)}/2026</strong>. Hãy đảm bảo Google Sheet đã mở quyền xem công khai và bấm <strong>Đồng bộ ngay</strong>.
+                            Hệ thống hỗ trợ tự động nhận diện các tên tab: <strong>{sheetTab}</strong>, <strong>{sheetTab}/{selectedYear}</strong>, <strong>T{getMonthNumber(sheetTab)}</strong>, <strong>{getMonthNumber(sheetTab)}/{selectedYear}</strong>. Hãy đảm bảo Google Sheet năm {selectedYear} đã mở quyền xem công khai và bấm <strong>Đồng bộ ngay</strong>.
                           </p>
                         </div>
                       </td>
@@ -4433,10 +4584,10 @@ export const ReportsAnalyticsView: React.FC = () => {
             <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                  Nhập / Cập Nhật Số Liệu Ngày {selectedReportDay} - {selectedReportMonth}/2026
+                  Nhập / Cập Nhật Số Liệu Ngày {selectedReportDay} - {selectedReportMonth}/{selectedYear}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Nhập số ca BHYT và Nhân dân (hoặc nhập "LT" nếu là ngày nghỉ Lễ/Tết). Số liệu được lưu tự động cho báo cáo ngày/tuần/tháng.
+                  Nhập số ca BHYT và Nhân dân (hoặc nhập "LT" nếu là ngày nghỉ Lễ/Tết). Số liệu được khóa lưu bất biến trên hệ thống, không bị xóa hay ghi đè khi thay đổi file Google Sheet.
                 </p>
               </div>
               <button
@@ -4530,15 +4681,17 @@ export const ReportsAnalyticsView: React.FC = () => {
                       }
                     };
                   });
-                  setMonthlyDataStore((prev) => ({ ...prev, [selectedReportMonth]: updatedList }));
-                  setCaseReports(updatedList);
-                  try {
-                    localStorage.setItem(`google_sheet_data_${selectedReportMonth}`, JSON.stringify(updatedList));
-                  } catch {
-                    // ignore quota errors
-                  }
+                  const lockedList = reportArchiveService.saveManualDayUpdates(
+                    selectedYear,
+                    selectedReportMonth,
+                    updatedList,
+                    [selectedReportDay],
+                    storageService.getCurrentUser().name
+                  );
+                  setMonthlyDataStore((prev) => ({ ...prev, [selectedReportMonth]: lockedList }));
+                  setCaseReports(lockedList);
                   setIsDailyEntryOpen(false);
-                  setSyncToast(`✅ Đã lưu số liệu Ngày ${selectedReportDay} - ${selectedReportMonth}!`);
+                  setSyncToast(`🔒 Đã lưu thủ công & khóa bảo vệ số liệu Ngày ${selectedReportDay} - ${selectedReportMonth}/${selectedYear}!`);
                   setTimeout(() => setSyncToast(null), 3500);
                 }}
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"

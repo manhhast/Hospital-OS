@@ -12,11 +12,7 @@ import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { TaskManagementView } from './components/tasks/TaskManagementView';
 import { DocumentManagementView } from './components/documents/DocumentManagementView';
-import { NotificationCenterView } from './components/notifications/NotificationCenterView';
-import { SettingsView } from './components/settings/SettingsView';
-import { UserManagementView } from './components/users/UserManagementView';
-import { AuditLogView } from './components/audit/AuditLogView';
-import { GASArchitectureView } from './components/gas/GASArchitectureView';
+import { SystemConfigHubView, CONFIG_MODULE_IDS, ConfigModuleId } from './components/settings/SystemConfigHubView';
 import { ScheduleView } from './components/schedule/ScheduleView';
 import { DiscussionView } from './components/discussion/DiscussionView';
 import { EquipmentManagementView } from './components/equipment/EquipmentManagementView';
@@ -24,14 +20,14 @@ import { RoomManagementView } from './components/rooms/RoomManagementView';
 import { StaffManagementView } from './components/hr/StaffManagementView';
 import { MeetingManagementView } from './components/meetings/MeetingManagementView';
 import { ReportsAnalyticsView } from './components/reports/ReportsAnalyticsView';
-import { IntegrationHubView } from './components/integration/IntegrationHubView';
 import { AIEcosystemView } from './components/ai/AIEcosystemView';
 import { AuthModal } from './components/auth/AuthModal';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { storageService } from './services/storageService';
+import { firebaseSyncService } from './services/firebaseSyncService';
 import { ToastMessage, TaskItem, DocumentItem, NotificationLog, User } from './types/hospital';
 
-const ADMIN_ONLY_MODULES = ['integration', 'notifications', 'users', 'settings', 'audit', 'gas-architecture'];
+const ADMIN_ONLY_MODULES: string[] = CONFIG_MODULE_IDS;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
@@ -120,8 +116,9 @@ export default function App() {
   const [documents, setDocuments] = useState<DocumentItem[]>(storageService.getDocuments());
   const [notifications, setNotifications] = useState<NotificationLog[]>(storageService.getNotifications());
 
-  // Storage listener sync
+  // Storage & Firebase cloud sync lifecycle
   useEffect(() => {
+    firebaseSyncService.init();
     const unsubscribe = storageService.subscribe(() => {
       setTasks(storageService.getTasks());
       setDocuments(storageService.getDocuments());
@@ -129,7 +126,10 @@ export default function App() {
       setCurrentUser(storageService.getCurrentUser());
       setIsAuthenticated(storageService.isAuthenticated());
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      firebaseSyncService.destroy();
+    };
   }, []);
 
   // Admin access guard: If non-admin attempts to view admin-only modules, redirect to dashboard
@@ -337,10 +337,6 @@ export default function App() {
             <MeetingManagementView />
           )}
 
-          {activeModule === 'integration' && (
-            <IntegrationHubView />
-          )}
-
           {activeModule === 'schedule' && (
             <ScheduleView />
           )}
@@ -349,36 +345,16 @@ export default function App() {
             <DiscussionView />
           )}
 
-          {activeModule === 'notifications' && (
-            <NotificationCenterView
+          {CONFIG_MODULE_IDS.includes(activeModule as ConfigModuleId) && (
+            <SystemConfigHubView
+              activeTab={activeModule as ConfigModuleId}
+              onSelectTab={(tab) => setActiveModule(tab)}
               notifications={notifications}
               onNotificationsUpdated={() => setNotifications(storageService.getNotifications())}
-              onShowToast={showToast}
-            />
-          )}
-
-          {activeModule === 'settings' && (
-            <SettingsView
               onShowToast={showToast}
               onConfirmAction={triggerConfirm}
               themeMode={themeMode}
               onChangeThemeMode={handleThemeModeChange}
-            />
-          )}
-
-          {activeModule === 'users' && (
-            <UserManagementView
-              onShowToast={showToast}
-            />
-          )}
-
-          {activeModule === 'audit' && (
-            <AuditLogView />
-          )}
-
-          {activeModule === 'gas-architecture' && (
-            <GASArchitectureView
-              onShowToast={showToast}
             />
           )}
         </main>

@@ -14,7 +14,7 @@ import * as sampleDemoData from './sampleDemoData';
 
 const PRODUCTION_MODE_KEY = 'cls_workhub_prod_clean_state_v2';
 
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   TASKS: 'cls_workhub_tasks',
   DOCUMENTS: 'cls_workhub_documents',
   USERS: 'cls_workhub_users',
@@ -39,6 +39,38 @@ const STORAGE_KEYS = {
   WORK_TASK_ROWS: 'cls_workhub_work_task_rows',
   EQUIPMENT_DURATION_DEFAULTS: 'cls_workhub_equipment_duration_defaults'
 };
+
+export const CLOUD_BUCKET_STORAGE_MAP = {
+  tasks: STORAGE_KEYS.TASKS,
+  documents: STORAGE_KEYS.DOCUMENTS,
+  users: STORAGE_KEYS.USERS,
+  notifications: STORAGE_KEYS.NOTIFICATIONS,
+  audit_logs: STORAGE_KEYS.AUDIT_LOGS,
+  settings: STORAGE_KEYS.SETTINGS,
+  shifts: STORAGE_KEYS.SHIFTS,
+  work_task_rows: STORAGE_KEYS.WORK_TASK_ROWS,
+  meetings: STORAGE_KEYS.MEETINGS,
+  meeting_items: STORAGE_KEYS.MEETING_ITEMS,
+  messages: STORAGE_KEYS.MESSAGES,
+  channels: STORAGE_KEYS.CHANNELS,
+  announcements: STORAGE_KEYS.ANNOUNCEMENTS,
+  equipment: STORAGE_KEYS.EQUIPMENT,
+  departments: STORAGE_KEYS.DEPARTMENTS,
+  rooms: STORAGE_KEYS.ROOMS,
+  staff_profiles: STORAGE_KEYS.STAFF_PROFILES,
+  leave_requests: STORAGE_KEYS.LEAVE_REQUESTS,
+  training_courses: STORAGE_KEYS.TRAINING_COURSES,
+  integration_endpoints: STORAGE_KEYS.INTEGRATION_ENDPOINTS,
+  integration_payloads: STORAGE_KEYS.INTEGRATION_PAYLOADS,
+  equipment_duration_defaults: STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS
+} as const;
+
+export type CloudBucketKey = keyof typeof CLOUD_BUCKET_STORAGE_MAP;
+
+export const SINGLETON_OBJECT_BUCKETS: ReadonlyArray<CloudBucketKey> = [
+  'settings',
+  'equipment_duration_defaults'
+];
 
 const DEFAULT_DEPARTMENTS: DepartmentUnit[] = [
   {
@@ -71,6 +103,9 @@ class HospitalStorageService {
   private currentUser: User = initialUsers[0]; // Default to Admin
   private listeners: Array<() => void> = [];
   private idSeq = 0;
+  private isApplyingRemote = false;
+  private lastBucketSnapshots: Partial<Record<CloudBucketKey, string>> = {};
+  private cloudBucketChangeHandler: ((bucketKey: CloudBucketKey) => void) | null = null;
 
   private nextUniqueId(prefix: string): string {
     this.idSeq = (this.idSeq + 1) % 1000000;
@@ -97,6 +132,93 @@ class HospitalStorageService {
 
   constructor() {
     this.initDefaultData();
+    this.captureCurrentBucketSnapshots();
+  }
+
+  private captureCurrentBucketSnapshots() {
+    (Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]).forEach((bucketKey) => {
+      const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
+      try {
+        this.lastBucketSnapshots[bucketKey] = localStorage.getItem(storageKey) || '';
+      } catch {
+        this.lastBucketSnapshots[bucketKey] = '';
+      }
+    });
+  }
+
+  public registerCloudBucketChangeHandler(handler: ((bucketKey: CloudBucketKey) => void) | null) {
+    this.cloudBucketChangeHandler = handler;
+  }
+
+  public getBucketItemsForCloud(bucketKey: CloudBucketKey): Record<string, unknown>[] {
+    const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
+    let parsed: unknown = null;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        parsed = JSON.parse(raw);
+      }
+    } catch {
+      parsed = null;
+    }
+
+    if (bucketKey === 'settings' && (!parsed || typeof parsed !== 'object')) {
+      parsed = this.getSettings();
+    } else if (bucketKey === 'equipment_duration_defaults' && (!parsed || typeof parsed !== 'object')) {
+      parsed = this.getEquipmentDurationDefaults();
+    } else if (bucketKey === 'departments' && !Array.isArray(parsed)) {
+      parsed = this.getDepartments();
+    }
+
+    if (SINGLETON_OBJECT_BUCKETS.includes(bucketKey)) {
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return [parsed as Record<string, unknown>];
+      }
+      return [];
+    }
+
+    if (Array.isArray(parsed)) {
+      if (bucketKey === 'documents') {
+        // Keep SOP/ISO document files stored on Google Drive; only metadata & Drive link go to Firestore
+        return parsed.slice(0, 1000).map((doc: any) => {
+          const copy = { ...doc };
+          delete copy.rawFileData;
+          return copy;
+        });
+      }
+      if (bucketKey === 'audit_logs') {
+        return parsed.slice(0, 50);
+      }
+      return parsed.slice(0, 1000);
+    }
+
+    return [];
+  }
+
+  public applyRemoteBucketData(bucketKey: CloudBucketKey, items: Record<string, unknown>[]): void {
+    const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
+    let serialized = '[]';
+
+    if (SINGLETON_OBJECT_BUCKETS.includes(bucketKey)) {
+      const firstObj = items[0];
+      if (!firstObj || typeof firstObj !== 'object') return;
+      serialized = JSON.stringify(firstObj);
+    } else {
+      serialized = JSON.stringify(items);
+    }
+
+    if (this.lastBucketSnapshots[bucketKey] === serialized) {
+      return;
+    }
+
+    this.isApplyingRemote = true;
+    try {
+      this.safeSetItem(storageKey, serialized);
+      this.lastBucketSnapshots[bucketKey] = serialized;
+      this.notify();
+    } finally {
+      this.isApplyingRemote = false;
+    }
   }
 
   public subscribe(listener: () => void) {
@@ -107,6 +229,20 @@ class HospitalStorageService {
   }
 
   private notify() {
+    if (!this.isApplyingRemote && this.cloudBucketChangeHandler) {
+      (Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]).forEach((bucketKey) => {
+        const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
+        try {
+          const current = localStorage.getItem(storageKey) || '';
+          if (current !== (this.lastBucketSnapshots[bucketKey] ?? '')) {
+            this.lastBucketSnapshots[bucketKey] = current;
+            this.cloudBucketChangeHandler?.(bucketKey);
+          }
+        } catch {
+          // ignore read errors
+        }
+      });
+    }
     this.listeners.forEach(listener => listener());
   }
 

@@ -623,11 +623,19 @@ export interface NotificationLog {
   errorMessage?: string;
 }
 
+export interface ReportSheetYearConfig {
+  url: string;
+  sheetId: string;
+  updatedAt?: string;
+}
+
 export interface AppSettings {
   telegramBotToken: string;
   defaultTelegramChatId: string;
   googleDriveFolderId: string;
   // 1. Google Sheet Báo Cáo Số Ca (Case Reports Data)
+  reportSheetYear?: number;
+  reportGoogleSheetsByYear?: Record<string, ReportSheetYearConfig>;
   googleSheetUrl?: string;
   reportGoogleSheetId?: string;
   // 2. Google Sheet Cơ Sở Dữ Liệu Lưu ID Tệp Tải Lên (File & Document Indexing)

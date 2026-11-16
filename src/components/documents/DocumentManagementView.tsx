@@ -344,6 +344,10 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
               <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
                 {documents.length} tài liệu • {documents.filter(d => d.syncStatus !== 'pending').length} đã đồng bộ (100%)
               </span>
+              <span>•</span>
+              <span className="text-blue-700 dark:text-blue-400 font-semibold">
+                Tệp gốc lưu Google Drive · Chỉ mục đồng bộ Firebase
+              </span>
             </p>
           </div>
         </div>

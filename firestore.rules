@@ -1,0 +1,352 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Reusable Hardened Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdminEmail() {
+      return isVerifiedEmail() && request.auth.token.email == 'ngmha.st@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerifiedEmail() && (
+        isBootstrappedAdminEmail() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidRole(role) {
+      return role is string && role in ['Admin', 'Manager', 'Doctor', 'Staff'];
+    }
+
+    function isAllowedBucketKey(bucketKey) {
+      return bucketKey is string && bucketKey in [
+        'tasks',
+        'documents',
+        'users',
+        'notifications',
+        'audit_logs',
+        'settings',
+        'shifts',
+        'work_task_rows',
+        'meetings',
+        'meeting_items',
+        'messages',
+        'channels',
+        'announcements',
+        'equipment',
+        'departments',
+        'rooms',
+        'staff_profiles',
+        'leave_requests',
+        'training_courses',
+        'integration_endpoints',
+        'integration_payloads',
+        'equipment_duration_defaults'
+      ];
+    }
+
+    function isWorkspaceOwner(workspaceId) {
+      return exists(/databases/$(database)/documents/workspaces/$(workspaceId)) &&
+        get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid;
+    }
+
+    function isActiveMember(workspaceId) {
+      return exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'Active';
+    }
+
+    function isAuthorizedWorkspaceMember(workspaceId) {
+      return isAdmin() || isWorkspaceOwner(workspaceId) || isActiveMember(workspaceId);
+    }
+
+    // 3. Entity Validation Blueprints (Create & Update)
+    function isValidAdminMember(data) {
+      return data.keys().hasAll(['uid', 'email', 'grantedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'grantedAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.grantedAt is timestamp;
+    }
+
+    function isValidWorkspace(data) {
+      return data.keys().hasAll(['workspaceId', 'ownerId', 'name', 'googleDriveFolderId', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['workspaceId', 'ownerId', 'name', 'googleDriveFolderId', 'createdAt', 'updatedAt']) &&
+        isValidId(data.workspaceId) && data.workspaceId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 160 &&
+        data.googleDriveFolderId is string && data.googleDriveFolderId.size() <= 200 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWorkspaceInvite(data) {
+      return data.keys().hasAll(['inviteId', 'workspaceId', 'ownerId', 'email', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['inviteId', 'workspaceId', 'ownerId', 'email', 'role', 'createdAt', 'updatedAt']) &&
+        isValidId(data.inviteId) &&
+        isValidId(data.workspaceId) && data.workspaceId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        isValidRole(data.role) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWorkspaceMember(data) {
+      return data.keys().hasAll(['uid', 'workspaceId', 'ownerId', 'inviteId', 'email', 'displayName', 'role', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'workspaceId', 'ownerId', 'inviteId', 'email', 'displayName', 'role', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isValidId(data.workspaceId) && data.workspaceId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        isValidId(data.inviteId) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+        isValidRole(data.role) &&
+        data.status is string && data.status in ['Active', 'Revoked'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDataBucket(data) {
+      return data.keys().hasAll(['bucketKey', 'workspaceId', 'ownerId', 'items', 'itemCount', 'updatedByUid', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['bucketKey', 'workspaceId', 'ownerId', 'items', 'itemCount', 'updatedByUid', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        isAllowedBucketKey(data.bucketKey) &&
+        isValidId(data.workspaceId) && data.workspaceId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.items is list && data.items.size() <= 1000 &&
+        (data.items.size() == 0 || data.items[0] is map) &&
+        data.itemCount is int && data.itemCount == data.items.size() &&
+        isValidId(data.updatedByUid) && data.updatedByUid == request.auth.uid &&
+        data.updatedByName is string && data.updatedByName.size() >= 1 && data.updatedByName.size() <= 120 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidReportArchiveMonth(data) {
+      return data.keys().hasAll(['archiveKey', 'workspaceId', 'ownerId', 'year', 'monthKey', 'items', 'updatedByUid', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['archiveKey', 'workspaceId', 'ownerId', 'year', 'monthKey', 'items', 'updatedByUid', 'updatedByName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.archiveKey) && data.archiveKey.matches('^20[2-3][0-9]_m(0[1-9]|1[0-2])$') &&
+        isValidId(data.workspaceId) && data.workspaceId.size() <= 64 &&
+        isValidId(data.ownerId) &&
+        data.year is int && data.year >= 2020 && data.year <= 2040 &&
+        data.monthKey is string && data.monthKey.size() >= 1 && data.monthKey.size() <= 24 &&
+        data.items is list && data.items.size() <= 500 &&
+        (data.items.size() == 0 || data.items[0] is map) &&
+        isValidId(data.updatedByUid) && data.updatedByUid == request.auth.uid &&
+        data.updatedByName is string && data.updatedByName.size() >= 1 && data.updatedByName.size() <= 120 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules
+    match /admins/{userId} {
+      allow get: if isVerifiedEmail() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow create: if isVerifiedEmail() &&
+        isValidId(userId) &&
+        isValidAdminMember(incoming()) &&
+        incoming().uid == userId &&
+        incoming().grantedAt == request.time &&
+        (isBootstrappedAdminEmail() && request.auth.uid == userId && incoming().email == request.auth.token.email);
+      allow update: if false;
+      allow delete: if isBootstrappedAdminEmail() && isValidId(userId) && request.auth.uid != userId;
+    }
+
+    match /workspaces/{workspaceId} {
+      allow get: if isVerifiedEmail() && isValidId(workspaceId) && isAuthorizedWorkspaceMember(workspaceId);
+      allow list: if isVerifiedEmail() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdminEmail());
+      allow create: if isVerifiedEmail() &&
+        isValidId(workspaceId) &&
+        isValidWorkspace(incoming()) &&
+        incoming().workspaceId == workspaceId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if isVerifiedEmail() &&
+        isValidId(workspaceId) &&
+        isValidWorkspace(incoming()) &&
+        (isAdmin() || isWorkspaceOwner(workspaceId)) &&
+        incoming().workspaceId == existing().workspaceId &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'googleDriveFolderId', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(workspaceId);
+
+      match /invites/{inviteId} {
+        allow get: if isVerifiedEmail() && isValidId(workspaceId) && isValidId(inviteId) &&
+          (existing().email == request.auth.token.email || existing().ownerId == request.auth.uid || isAdmin());
+        allow list: if isVerifiedEmail() && (resource.data.ownerId == request.auth.uid || isBootstrappedAdminEmail());
+        allow create: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(inviteId) &&
+          isValidWorkspaceInvite(incoming()) &&
+          incoming().workspaceId == workspaceId &&
+          incoming().inviteId == inviteId &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          (isAdmin() || isWorkspaceOwner(workspaceId));
+        allow update: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(inviteId) &&
+          isValidWorkspaceInvite(incoming()) &&
+          (isAdmin() || isWorkspaceOwner(workspaceId)) &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().inviteId == existing().inviteId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['role', 'updatedAt']);
+        allow delete: if isVerifiedEmail() && isValidId(workspaceId) && isValidId(inviteId) &&
+          (isAdmin() || isWorkspaceOwner(workspaceId));
+      }
+
+      match /members/{memberId} {
+        allow get: if isVerifiedEmail() && isValidId(workspaceId) && isValidId(memberId) &&
+          (request.auth.uid == memberId || isAuthorizedWorkspaceMember(workspaceId));
+        allow list: if isVerifiedEmail() &&
+          (resource.data.ownerId == request.auth.uid || resource.data.uid == request.auth.uid || isBootstrappedAdminEmail());
+        allow create: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(memberId) &&
+          isValidWorkspaceMember(incoming()) &&
+          incoming().uid == memberId &&
+          incoming().workspaceId == workspaceId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)) &&
+          (
+            (
+              (isAdmin() || isWorkspaceOwner(workspaceId)) &&
+              incoming().ownerId == request.auth.uid
+            ) ||
+            (
+              request.auth.uid == memberId &&
+              incoming().ownerId == request.auth.uid &&
+              incoming().email == request.auth.token.email &&
+              incoming().status == 'Active' &&
+              exists(/databases/$(database)/documents/workspaces/$(workspaceId)/invites/$(incoming().inviteId)) &&
+              get(/databases/$(database)/documents/workspaces/$(workspaceId)/invites/$(incoming().inviteId)).data.email == request.auth.token.email &&
+              incoming().role == get(/databases/$(database)/documents/workspaces/$(workspaceId)/invites/$(incoming().inviteId)).data.role
+            )
+          );
+        allow update: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(memberId) &&
+          isValidWorkspaceMember(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().inviteId == existing().inviteId &&
+          incoming().email == existing().email &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            (
+              (isAdmin() || isWorkspaceOwner(workspaceId)) &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role', 'status', 'updatedAt'])
+            ) ||
+            (
+              request.auth.uid == memberId &&
+              existing().status == 'Active' &&
+              incoming().status == existing().status &&
+              incoming().role == existing().role &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+            )
+          );
+        allow delete: if isVerifiedEmail() && isValidId(workspaceId) && isValidId(memberId) &&
+          (isAdmin() || isWorkspaceOwner(workspaceId));
+      }
+
+      match /buckets/{bucketKey} {
+        allow get: if isVerifiedEmail() && isValidId(workspaceId) && isValidId(bucketKey) &&
+          isAllowedBucketKey(bucketKey) && isAuthorizedWorkspaceMember(workspaceId);
+        allow create: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(bucketKey) &&
+          isValidDataBucket(incoming()) &&
+          incoming().bucketKey == bucketKey &&
+          incoming().workspaceId == workspaceId &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)) &&
+          isAuthorizedWorkspaceMember(workspaceId);
+        allow update: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(bucketKey) &&
+          isValidDataBucket(incoming()) &&
+          incoming().bucketKey == existing().bucketKey &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          isAuthorizedWorkspaceMember(workspaceId) &&
+          (
+            isAdmin() ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['items', 'itemCount', 'updatedByUid', 'updatedByName', 'updatedAt'])
+          );
+        allow delete: if isAdmin() && isValidId(workspaceId) && isValidId(bucketKey);
+      }
+
+      match /report_archives/{archiveKey} {
+        allow get: if isVerifiedEmail() && isValidId(workspaceId) && isValidId(archiveKey) &&
+          isAuthorizedWorkspaceMember(workspaceId);
+        allow create: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(archiveKey) &&
+          isValidReportArchiveMonth(incoming()) &&
+          incoming().archiveKey == archiveKey &&
+          incoming().workspaceId == workspaceId &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)) &&
+          isAuthorizedWorkspaceMember(workspaceId);
+        allow update: if isVerifiedEmail() &&
+          isValidId(workspaceId) &&
+          isValidId(archiveKey) &&
+          isValidReportArchiveMonth(incoming()) &&
+          incoming().archiveKey == existing().archiveKey &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().year == existing().year &&
+          incoming().monthKey == existing().monthKey &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          isAuthorizedWorkspaceMember(workspaceId) &&
+          (
+            isAdmin() ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['items', 'updatedByUid', 'updatedByName', 'updatedAt'])
+          );
+        allow delete: if false;
+      }
+    }
+  }
+}
