@@ -996,8 +996,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Sparkles className="w-5 h-5 text-amber-300" />
               </div>
               <div className="min-w-0">
-                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">Trợ lý phân tích AI CLS</h4>
-                <p className="text-xs text-slate-500 truncate">Giao ban sáng • Dự báo tải lượng • RUL máy</p>
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">Trợ Lý Ảo Thông Minh &amp; AI CLS</h4>
+                <p className="text-xs text-slate-500 truncate">Hỏi đáp dữ liệu thực • Telegram Bot • Giao ban</p>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-indigo-500 shrink-0" />

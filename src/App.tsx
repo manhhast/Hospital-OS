@@ -27,6 +27,8 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { storageService } from './services/storageService';
 import { firebaseSyncService } from './services/firebaseSyncService';
 import { runThreeDaySmartSync } from './services/googleSheetReportService';
+import { scheduleLiveContextSync } from './services/aiContextService';
+import { REPORT_ARCHIVE_UPDATED_EVENT } from './services/reportArchiveService';
 import { ToastMessage, TaskItem, DocumentItem, NotificationLog, User } from './types/hospital';
 
 const ADMIN_ONLY_MODULES: string[] = CONFIG_MODULE_IDS;
@@ -128,18 +130,32 @@ export default function App() {
   // Storage & Firebase cloud sync lifecycle
   useEffect(() => {
     firebaseSyncService.init();
+    scheduleLiveContextSync(600);
     const unsubscribe = storageService.subscribe(() => {
       setTasks(storageService.getTasks());
       setDocuments(storageService.getDocuments());
       setNotifications(storageService.getNotifications());
       setCurrentUser(storageService.getCurrentUser());
       setIsAuthenticated(storageService.isAuthenticated());
+      scheduleLiveContextSync(1200);
     });
+    const handleReportArchiveUpdated = () => {
+      scheduleLiveContextSync(900);
+    };
+    window.addEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
     return () => {
       unsubscribe();
+      window.removeEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
       firebaseSyncService.destroy();
     };
   }, []);
+
+  // Re-sync live hospital context when authenticated state becomes active
+  useEffect(() => {
+    if (isAuthenticated) {
+      scheduleLiveContextSync(400);
+    }
+  }, [isAuthenticated]);
 
   // Automatic 3-day smart sync on app startup (after Firebase initial hydration settles)
   useEffect(() => {

@@ -123,8 +123,8 @@ export const RoomManagementView: React.FC = () => {
               r =>
                 r.name.toLowerCase().includes(normalizedSearch) ||
                 r.code.toLowerCase().includes(normalizedSearch) ||
-                r.managerInCharge.toLowerCase().includes(normalizedSearch) ||
-                r.primaryEquipment.toLowerCase().includes(normalizedSearch)
+                (r.managerInCharge || '').toLowerCase().includes(normalizedSearch) ||
+                (r.primaryEquipment || '').toLowerCase().includes(normalizedSearch)
             );
 
         const isVisible = !normalizedSearch || deptMatches || matchingRooms.length > 0;
@@ -145,7 +145,8 @@ export const RoomManagementView: React.FC = () => {
         r.name.toLowerCase().includes(normalizedSearch) ||
         r.code.toLowerCase().includes(normalizedSearch) ||
         (r.departmentSection && r.departmentSection.toLowerCase().includes(normalizedSearch)) ||
-        r.managerInCharge.toLowerCase().includes(normalizedSearch)
+        (r.managerInCharge || '').toLowerCase().includes(normalizedSearch) ||
+        (r.primaryEquipment || '').toLowerCase().includes(normalizedSearch)
     );
   }, [orphanRooms, normalizedSearch]);
 
@@ -808,7 +809,7 @@ export const RoomManagementView: React.FC = () => {
                               </div>
 
                               <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Phụ trách: <strong className="text-slate-700 dark:text-slate-200">{room.managerInCharge}</strong>
+                                Phụ trách: <strong className="text-slate-700 dark:text-slate-200">{room.managerInCharge || 'Chưa chỉ định'}</strong>
                               </p>
 
                               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
@@ -849,11 +850,17 @@ export const RoomManagementView: React.FC = () => {
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                     Vị trí: {selectedRoom.floor} • Trưởng phòng:{' '}
-                    <strong className="text-slate-800 dark:text-slate-200">{selectedRoom.managerInCharge}</strong>
+                    <strong className="text-slate-800 dark:text-slate-200">{selectedRoom.managerInCharge || 'Chưa chỉ định'}</strong>
                     {selectedRoom.deputyManager && (
                       <span>
                         {' '}
                         • Phó phụ trách: <strong>{selectedRoom.deputyManager}</strong>
+                      </span>
+                    )}
+                    {selectedRoom.primaryEquipment && selectedRoom.primaryEquipment !== 'Chưa gán máy chính' && (
+                      <span>
+                        {' '}
+                        • Máy chính: <strong className="text-blue-600 dark:text-blue-400">{selectedRoom.primaryEquipment}</strong>
                       </span>
                     )}
                   </p>
@@ -1075,6 +1082,7 @@ export const RoomManagementView: React.FC = () => {
         departments={departments}
         defaultDepartmentSection={defaultRoomDeptSection}
         staffList={staffList}
+        equipmentList={equipmentList}
       />
 
       {/* MODAL 3: Safe Level 1 Department Deletion */}

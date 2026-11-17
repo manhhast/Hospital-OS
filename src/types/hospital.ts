@@ -632,6 +632,7 @@ export interface ReportSheetYearConfig {
 export interface AppSettings {
   telegramBotToken: string;
   defaultTelegramChatId: string;
+  telegramQaEnabled?: boolean;
   googleDriveFolderId: string;
   // 1. Google Sheet Báo Cáo Số Ca (Case Reports Data)
   reportSheetYear?: number;

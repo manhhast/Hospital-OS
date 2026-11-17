@@ -26,11 +26,7 @@ export const MorningBriefingTab: React.FC<MorningBriefingTabProps> = ({ onShowTo
     setIsLoading(true);
     try {
       const data = await aiService.generateMorningBriefing({
-        reportDate,
-        totalCases: 1341,
-        diffPercentage: 18,
-        bhytPercentage: 74,
-        vienPhiPercentage: 26
+        reportDate
       });
       setBriefing(data);
       if (onShowToast) {

@@ -1,58 +1,68 @@
 import React, { useState } from 'react';
-import { 
-  Sparkles, Sun, TrendingUp, BookOpen, Wrench, 
-  Cpu, Layers, ShieldCheck, Zap, ArrowRight 
+import {
+  Sparkles, Sun, TrendingUp, BookOpen, Wrench, Bot
 } from 'lucide-react';
+import { SmartAssistantTab } from './SmartAssistantTab';
 import { MorningBriefingTab } from './MorningBriefingTab';
 import { PredictiveForecastingTab } from './PredictiveForecastingTab';
 import { IsoCopilotTab } from './IsoCopilotTab';
 import { PredictiveMaintenanceTab } from './PredictiveMaintenanceTab';
 
+export type AIEcosystemTabId = 'assistant' | 'briefing' | 'forecasting' | 'iso-copilot' | 'maintenance';
+
 interface AIEcosystemViewProps {
-  initialTab?: 'briefing' | 'forecasting' | 'iso-copilot' | 'maintenance';
+  initialTab?: AIEcosystemTabId;
   onShowToast?: (title: string, message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
   onNavigateModule?: (module: string) => void;
 }
 
-export const AIEcosystemView: React.FC<AIEcosystemViewProps> = ({ 
-  initialTab = 'briefing', 
+export const AIEcosystemView: React.FC<AIEcosystemViewProps> = ({
+  initialTab = 'assistant',
   onShowToast,
   onNavigateModule
 }) => {
-  const [activeTab, setActiveTab] = useState<'briefing' | 'forecasting' | 'iso-copilot' | 'maintenance'>(initialTab);
+  const [activeTab, setActiveTab] = useState<AIEcosystemTabId>(initialTab);
 
   const tabs = [
+    {
+      id: 'assistant' as const,
+      label: 'Trợ Lý Ảo Thông Minh',
+      subtitle: 'Hỏi Đáp Tổng Hợp Dữ Liệu Thực',
+      icon: Bot,
+      color: 'text-indigo-600',
+      badge: 'Live Data + Telegram'
+    },
     {
       id: 'briefing' as const,
       label: 'AI Smart Brief',
       subtitle: 'Báo Cáo Giao Ban 07:00 Sáng',
       icon: Sun,
       color: 'text-amber-500',
-      badge: '07:00 AM'
+      badge: 'Giao ban'
     },
     {
       id: 'forecasting' as const,
-      label: 'Predictive Forecasting',
-      subtitle: 'Dự Báo Lưu Lượng & Xếp Lịch',
+      label: 'Dự Báo Lưu Lượng',
+      subtitle: 'Chuỗi Thời Gian & Xếp Kíp Trực',
       icon: TrendingUp,
       color: 'text-blue-500',
-      badge: 'Time-Series ML'
+      badge: 'Time-Series'
     },
     {
       id: 'iso-copilot' as const,
       label: 'AI ISO 15189 Copilot',
-      subtitle: 'Trợ Lý RAG SOP & Tiêu Chuẩn',
+      subtitle: 'Tra Cứu SOP & Tiêu Chuẩn',
       icon: BookOpen,
       color: 'text-emerald-500',
-      badge: 'RAG Pipeline'
+      badge: 'SOP / ISO'
     },
     {
       id: 'maintenance' as const,
-      label: 'Predictive Maintenance',
-      subtitle: 'Bảo Trì Dự Đoán & RUL Máy',
+      label: 'Bảo Trì Dự Đoán',
+      subtitle: 'Sức Khỏe & Hạn Kiểm Chuẩn Máy',
       icon: Wrench,
       color: 'text-rose-500',
-      badge: 'RUL Sensor AI'
+      badge: 'RUL Thiết bị'
     }
   ];
 
@@ -61,70 +71,59 @@ export const AIEcosystemView: React.FC<AIEcosystemViewProps> = ({
       {/* Ecosystem Header Banner */}
       <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-sky-50/80 dark:bg-gradient-to-r dark:from-slate-900 dark:via-indigo-950 dark:to-slate-900 text-slate-800 dark:text-white p-6 rounded-3xl border border-blue-200/70 dark:border-indigo-500/20 shadow-xs dark:shadow-xl relative overflow-hidden transition-colors">
         <div className="absolute top-0 right-0 w-80 h-80 bg-blue-400/10 dark:bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-        
+
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-xs font-black tracking-wide flex items-center gap-1.5 shadow-xs shadow-blue-500/20">
                 <Sparkles className="w-3.5 h-3.5" />
-                HỆ SINH THÁI AI KHOA CẬN LÂM SÀNG
+                TRỢ LÝ ẢO &amp; HỆ SINH THÁI AI CLS
               </span>
               <span className="text-xs text-indigo-700 dark:text-indigo-300 font-bold bg-white/90 dark:bg-indigo-950/80 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800 shadow-2xs">
-                Gemini 3.7 Flash Engine
+                Gemini 4 AI Engine
               </span>
             </div>
             <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white">
-              Trung Tâm Điều Hành Trí Tuệ Nhân Tạo (AI Clinical Diagnostics Hub)
+              Trợ Lý Ảo Điều Hành Khoa Cận Lâm Sàng (Web &amp; Telegram Q&amp;A)
             </h1>
             <p className="text-xs text-slate-600 dark:text-slate-300 max-w-2xl font-normal leading-relaxed">
-              Hệ thống tích hợp 4 trụ cột AI thực chiến: Tóm tắt giao ban tự động 07:00, Dự báo lưu lượng chuỗi thời gian, Trợ lý ISO 15189 RAG và Phân tích bảo trì dự đoán thiết bị.
+              Tổng hợp trực tiếp dữ liệu số ca Google Sheet, thiết bị, phòng, nhân sự, lịch trực, công việc và hồ sơ ISO 15189 để trả lời chính xác mọi câu hỏi trên ứng dụng và qua Telegram Bot.
             </p>
-          </div>
-
-          <div className="flex items-center gap-3 bg-white/80 dark:bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-blue-200/70 dark:border-white/10 shrink-0 shadow-2xs">
-            <div className="text-center px-2">
-              <div className="text-lg font-black text-slate-900 dark:text-white">4 / 4</div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-300 font-semibold">Trụ cột AI Active</div>
-            </div>
-            <div className="w-px h-8 bg-slate-200 dark:bg-white/20" />
-            <div className="text-center px-2">
-              <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">&lt; 30p</div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-300 font-semibold">TAT Mục tiêu</div>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* 4 Pillar Tab Buttons */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* 5 Tab Buttons */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+              className={`p-3.5 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
                 isActive
                   ? 'bg-white dark:bg-slate-900 border-blue-500 shadow-md shadow-blue-500/10 ring-2 ring-blue-500/20'
                   : 'bg-white/80 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
               }`}
             >
               <div>
-                <div className="flex items-center justify-between">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 ' + tab.color}`}>
+                <div className="flex items-center justify-between gap-1">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 ' + tab.color}`}>
                     <Icon className="w-4 h-4" />
                   </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
-                    isActive 
-                      ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' 
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md truncate ${
+                    isActive
+                      ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                   }`}>
                     {tab.badge}
                   </span>
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-2.5">
                   <h3 className={`text-xs font-black ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>
                     {tab.label}
                   </h3>
@@ -135,7 +134,7 @@ export const AIEcosystemView: React.FC<AIEcosystemViewProps> = ({
               </div>
 
               {isActive && (
-                <div className="w-full h-1 bg-blue-600 rounded-full mt-3" />
+                <div className="w-full h-1 bg-blue-600 rounded-full mt-2.5" />
               )}
             </button>
           );
@@ -144,6 +143,9 @@ export const AIEcosystemView: React.FC<AIEcosystemViewProps> = ({
 
       {/* Active Tab View Content */}
       <div className="transition-opacity duration-200">
+        {activeTab === 'assistant' && (
+          <SmartAssistantTab onShowToast={onShowToast} onNavigateModule={onNavigateModule} />
+        )}
         {activeTab === 'briefing' && (
           <MorningBriefingTab onShowToast={onShowToast} />
         )}

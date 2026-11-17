@@ -6,11 +6,12 @@ import {
   Gauge, DollarSign, ShieldAlert, Lock, Unlock, Settings, Sliders, BellRing, Send, CheckSquare
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
-import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus } from '../../types/hospital';
+import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus, ParaclinicalRoom } from '../../types/hospital';
 import { EquipmentDetailModal } from './EquipmentDetailModal';
 import { SafetyInterlockTab } from './SafetyInterlockTab';
 import { OeeReliabilityTab } from './OeeReliabilityTab';
 import { DepreciationUtilizationTab } from './DepreciationUtilizationTab';
+import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
 import { checkEquipmentSafetyInterlock, calculateEquipmentOEE, calculateEquipmentDepreciation } from '../../utils/equipmentAnalytics';
 import {
@@ -25,6 +26,7 @@ import {
 
 export const EquipmentManagementView: React.FC = () => {
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
+  const [roomsList, setRoomsList] = useState<ParaclinicalRoom[]>(() => storageService.getRooms());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -117,11 +119,23 @@ export const EquipmentManagementView: React.FC = () => {
   const refreshData = () => {
     const list = storageService.getEquipment();
     setEquipmentList(list);
+    setRoomsList(storageService.getRooms());
     if (detailEquipment) {
       const refreshedItem = list.find(e => e.id === detailEquipment.id);
       if (refreshedItem) setDetailEquipment(refreshedItem);
     }
   };
+
+  const roomOptions: ComboboxOption[] = useMemo(
+    () =>
+      roomsList.map((r) => ({
+        value: r.name,
+        label: r.name,
+        badge: r.code || r.departmentSection,
+        subLabel: [r.departmentSection, r.floor, r.status].filter(Boolean).join(' • ')
+      })),
+    [roomsList]
+  );
 
   useEffect(() => {
     refreshData();
@@ -286,7 +300,7 @@ export const EquipmentManagementView: React.FC = () => {
       originCountry: newEqOrigin,
       yearOfManufacture: newEqYear ? parseInt(newEqYear, 10) : new Date().getFullYear(),
       serialNumber: newEqSerial || `SN-${Math.floor(Math.random() * 900000 + 100000)}`,
-      room: newEqRoom || 'Phòng Cận Lâm Sàng',
+      room: newEqRoom.trim() || 'Chưa phân phòng',
       assignedTechnician: newEqTech || storageService.getCurrentUser().name,
       managerInCharge: newEqManager || 'Ban Chủ Nhiệm Khoa',
       status: 'Hoạt động tốt',
@@ -1579,8 +1593,8 @@ export const EquipmentManagementView: React.FC = () => {
 
             <form onSubmit={handleCreateEquipment} className="space-y-5 text-xs">
               {/* PHẦN 1: THÔNG TIN CỐ ĐỊNH — LÝ LỊCH & THÔNG TIN THIẾT BỊ, NGÀY GHI THÊM, NGƯỜI QUẢN LÝ */}
-              <div className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/70 bg-slate-50/80 dark:bg-slate-800/45 overflow-hidden">
-                <div className="bg-indigo-50/90 dark:bg-indigo-950/60 px-4 py-3 border-b border-indigo-200/80 dark:border-indigo-800/70 flex flex-wrap items-center justify-between gap-2">
+              <div className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/70 bg-slate-50/80 dark:bg-slate-800/45">
+                <div className="rounded-t-2xl bg-indigo-50/90 dark:bg-indigo-950/60 px-4 py-3 border-b border-indigo-200/80 dark:border-indigo-800/70 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[11px] font-black uppercase tracking-wider">Phần 1</span>
                     <h4 className="text-sm font-extrabold text-indigo-950 dark:text-indigo-100 uppercase tracking-wide">
@@ -1689,12 +1703,14 @@ export const EquipmentManagementView: React.FC = () => {
 
                     <div>
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Vị trí phòng đặt máy:</label>
-                      <input
-                        type="text"
-                        placeholder="Ví dụ: Phòng MSCT 128 Dải - Tầng 1"
+                      <SearchableCombobox
                         value={newEqRoom}
-                        onChange={e => setNewEqRoom(e.target.value)}
-                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        onChange={setNewEqRoom}
+                        options={roomOptions}
+                        placeholder="Chọn phòng trong danh sách..."
+                        emptyOptionLabel="-- Bỏ trống (Chưa phân phòng) --"
+                        noResultsLabel="Không tìm thấy phòng phù hợp"
+                        inputClassName="!bg-white dark:!bg-slate-900 !border-slate-300 dark:!border-slate-700 !text-xs !py-2.5"
                       />
                     </div>
 

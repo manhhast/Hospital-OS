@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Building2, X, AlertTriangle } from 'lucide-react';
-import { DepartmentUnit, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
+import { DepartmentUnit, EquipmentItem, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
+import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 
 interface RoomModalProps {
   isOpen: boolean;
@@ -10,7 +11,16 @@ interface RoomModalProps {
   departments: DepartmentUnit[];
   defaultDepartmentSection?: string;
   staffList: StaffProfile[];
+  equipmentList?: EquipmentItem[];
 }
+
+const normalizeNullablePlaceholder = (val?: string): string => {
+  const trimmed = (val || '').trim();
+  if (!trimmed || trimmed === 'Chưa chỉ định' || trimmed === 'Chưa gán máy chính') {
+    return '';
+  }
+  return trimmed;
+};
 
 export const RoomModal: React.FC<RoomModalProps> = ({
   isOpen,
@@ -19,7 +29,8 @@ export const RoomModal: React.FC<RoomModalProps> = ({
   initialRoom,
   departments,
   defaultDepartmentSection,
-  staffList
+  staffList,
+  equipmentList = []
 }) => {
   const isEdit = !!initialRoom;
 
@@ -34,18 +45,20 @@ export const RoomModal: React.FC<RoomModalProps> = ({
   const [maxCapacityCasesPerDay, setMaxCapacityCasesPerDay] = useState(40);
   const [status, setStatus] = useState<'Đang hoạt động' | 'Bảo trì' | 'Quá tải' | 'Tạm nghỉ' | 'Tạm ngưng'>('Đang hoạt động');
   const [description, setDescription] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
+    setErrorMsg('');
     const fallbackDept = defaultDepartmentSection || departments[0]?.name || 'Chưa phân bộ phận';
     if (initialRoom) {
       setCode(initialRoom.code || '');
       setName(initialRoom.name || '');
       setDepartmentSection(initialRoom.departmentSection || fallbackDept);
       setFloor(initialRoom.floor || 'Tầng 1 - Khu Cận Lâm Sàng');
-      setManagerInCharge(initialRoom.managerInCharge || (staffList[0]?.fullName || ''));
-      setDeputyManager(initialRoom.deputyManager || '');
-      setPrimaryEquipment(initialRoom.primaryEquipment || '');
+      setManagerInCharge(normalizeNullablePlaceholder(initialRoom.managerInCharge));
+      setDeputyManager(normalizeNullablePlaceholder(initialRoom.deputyManager));
+      setPrimaryEquipment(normalizeNullablePlaceholder(initialRoom.primaryEquipment));
       setPhoneExtension(initialRoom.phoneExtension || '');
       setMaxCapacityCasesPerDay(initialRoom.maxCapacityCasesPerDay || 40);
       setStatus(initialRoom.status || 'Đang hoạt động');
@@ -55,7 +68,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
       setName('');
       setDepartmentSection(fallbackDept);
       setFloor('Tầng 1 - Khu Cận Lâm Sàng');
-      setManagerInCharge(staffList[0]?.fullName || '');
+      setManagerInCharge('');
       setDeputyManager('');
       setPrimaryEquipment('');
       setPhoneExtension('');
@@ -63,14 +76,36 @@ export const RoomModal: React.FC<RoomModalProps> = ({
       setStatus('Đang hoạt động');
       setDescription('');
     }
-  }, [initialRoom, staffList, departments, defaultDepartmentSection, isOpen]);
+  }, [initialRoom, departments, defaultDepartmentSection, isOpen]);
+
+  const staffOptions: ComboboxOption[] = useMemo(
+    () =>
+      staffList.map(s => ({
+        value: s.fullName,
+        label: s.fullName,
+        badge: s.title || 'Nhân viên',
+        subLabel: [s.departmentSection, s.room].filter(Boolean).join(' • ')
+      })),
+    [staffList]
+  );
+
+  const equipmentOptions: ComboboxOption[] = useMemo(
+    () =>
+      equipmentList.map(eq => ({
+        value: eq.name,
+        label: eq.name,
+        badge: eq.code || eq.category,
+        subLabel: [eq.model, eq.room, eq.status].filter(Boolean).join(' • ')
+      })),
+    [equipmentList]
+  );
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !code.trim()) {
-      alert('Vui lòng nhập đầy đủ Mã phòng và Tên phòng');
+      setErrorMsg('Vui lòng nhập đầy đủ Mã phòng và Tên phòng.');
       return;
     }
 
@@ -80,15 +115,15 @@ export const RoomModal: React.FC<RoomModalProps> = ({
       name: name.trim(),
       departmentSection: departmentSection || departments[0]?.name || 'Chưa phân bộ phận',
       floor,
-      managerInCharge: managerInCharge || staffList[0]?.fullName || 'Chưa chỉ định',
-      deputyManager: deputyManager.trim() || undefined,
-      primaryEquipment: primaryEquipment.trim() || 'Chưa gán máy chính',
-      phoneExtension: phoneExtension.trim() || undefined,
+      managerInCharge: managerInCharge.trim(),
+      deputyManager: deputyManager.trim() || '',
+      primaryEquipment: primaryEquipment.trim(),
+      phoneExtension: phoneExtension.trim() || '',
       maxCapacityCasesPerDay: Number(maxCapacityCasesPerDay) || 40,
       currentDayCases: initialRoom?.currentDayCases || 0,
       utilizationRate: initialRoom?.utilizationRate || 0,
       status,
-      description: description.trim() || undefined
+      description: description.trim() || ''
     }, isEdit);
     onClose();
   };
@@ -97,7 +132,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50">
           <div className="flex items-center space-x-3">
@@ -129,6 +164,12 @@ export const RoomModal: React.FC<RoomModalProps> = ({
 
         {/* Modal Form Content */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold text-rose-700 dark:text-rose-300">
+              {errorMsg}
+            </div>
+          )}
+
           {isEdit && initialRoom && initialRoom.name !== name && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-start space-x-2 text-xs text-amber-800 dark:text-amber-300">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -229,52 +270,50 @@ export const RoomModal: React.FC<RoomModalProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Manager In Charge */}
+            {/* Manager In Charge - Searchable Combobox & Nullable */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Trưởng Phòng / Bác Sĩ Phụ Trách
               </label>
-              <select
+              <SearchableCombobox
                 value={managerInCharge}
-                onChange={e => setManagerInCharge(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                <option value="">-- Chọn bác sĩ / người phụ trách --</option>
-                {staffList.map(s => (
-                  <option key={s.userId} value={s.fullName}>
-                    {s.fullName} ({s.title || 'Nhân viên'})
-                  </option>
-                ))}
-              </select>
+                onChange={setManagerInCharge}
+                options={staffOptions}
+                placeholder="Gõ tên để tìm nhanh hoặc bỏ trống..."
+                emptyOptionLabel="-- Bỏ trống (Chưa chỉ định) --"
+                noResultsLabel="Không tìm thấy nhân viên phù hợp"
+              />
             </div>
 
-            {/* Deputy / Lead Tech */}
+            {/* Deputy / Lead Tech - Searchable Combobox & Nullable */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Kỹ Thuật Viên Trưởng / Phó Phụ Trách
               </label>
-              <input
-                type="text"
+              <SearchableCombobox
                 value={deputyManager}
-                onChange={e => setDeputyManager(e.target.value)}
-                placeholder="VD: KTV. Vũ Văn Hải"
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                onChange={setDeputyManager}
+                options={staffOptions}
+                placeholder="Gõ tên nhân viên để tìm nhanh hoặc bỏ trống..."
+                emptyOptionLabel="-- Bỏ trống (Không chỉ định) --"
+                noResultsLabel="Không tìm thấy nhân viên phù hợp"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Primary Equipment */}
+            {/* Primary Equipment - Searchable Combobox from Equipment Catalog & Nullable */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Tên Hệ Thống / Máy Móc Chính
               </label>
-              <input
-                type="text"
+              <SearchableCombobox
                 value={primaryEquipment}
-                onChange={e => setPrimaryEquipment(e.target.value)}
-                placeholder="VD: Somatom Go.Top 128 Dải"
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                onChange={setPrimaryEquipment}
+                options={equipmentOptions}
+                placeholder="Gõ tên hoặc mã máy để tìm nhanh..."
+                emptyOptionLabel="-- Bỏ trống (Chưa gán máy chính) --"
+                noResultsLabel="Không tìm thấy máy móc trong danh mục"
               />
             </div>
 

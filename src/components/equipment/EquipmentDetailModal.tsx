@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, Wrench, ShieldCheck, AlertTriangle, CheckCircle2, Clock, 
   Calendar, User, MapPin, FileText, Cpu, Zap, Award, AlertCircle, 
   Plus, History, Printer, Check, Edit3, Save, Trash2, RotateCcw, AlertOctagon
 } from 'lucide-react';
-import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog } from '../../types/hospital';
+import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog, ParaclinicalRoom } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
+import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 
 interface EquipmentDetailModalProps {
   equipment: EquipmentItem;
@@ -30,6 +31,13 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [isEditingDocs, setIsEditingDocs] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [roomsList, setRoomsList] = useState<ParaclinicalRoom[]>(() => storageService.getRooms());
+
+  useEffect(() => {
+    return storageService.subscribe(() => {
+      setRoomsList(storageService.getRooms());
+    });
+  }, []);
 
   // Tab 1: Profile form state
   const [editCode, setEditCode] = useState(equipment.code || '');
@@ -40,7 +48,10 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [editOriginCountry, setEditOriginCountry] = useState(equipment.originCountry || '');
   const [editYearOfManufacture, setEditYearOfManufacture] = useState<number | string>(equipment.yearOfManufacture || '');
   const [editSerialNumber, setEditSerialNumber] = useState(equipment.serialNumber || '');
-  const [editRoom, setEditRoom] = useState(equipment.room || '');
+  const [editRoom, setEditRoom] = useState(() => {
+    const r = (equipment.room || '').trim();
+    return r === 'Chưa phân phòng' ? '' : r;
+  });
   const [editAssignedTechnician, setEditAssignedTechnician] = useState(equipment.assignedTechnician || '');
   const [editManagerInCharge, setEditManagerInCharge] = useState(equipment.managerInCharge || '');
   const [editInstallationDate, setEditInstallationDate] = useState(equipment.installationDate || '');
@@ -124,7 +135,8 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     setEditOriginCountry(equipment.originCountry || '');
     setEditYearOfManufacture(equipment.yearOfManufacture || '');
     setEditSerialNumber(equipment.serialNumber || '');
-    setEditRoom(equipment.room || '');
+    const normalizedRoom = (equipment.room || '').trim();
+    setEditRoom(normalizedRoom === 'Chưa phân phòng' ? '' : normalizedRoom);
     setEditAssignedTechnician(equipment.assignedTechnician || '');
     setEditManagerInCharge(equipment.managerInCharge || '');
     setEditInstallationDate(equipment.installationDate || '');
@@ -194,7 +206,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
       originCountry: editOriginCountry.trim() || undefined,
       yearOfManufacture: editYearOfManufacture ? Number(editYearOfManufacture) : undefined,
       serialNumber: editSerialNumber.trim(),
-      room: editRoom.trim(),
+      room: editRoom.trim() || 'Chưa phân phòng',
       assignedTechnician: editAssignedTechnician.trim(),
       managerInCharge: editManagerInCharge.trim() || undefined,
       installationDate: editInstallationDate || equipment.installationDate,
@@ -222,7 +234,8 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     setEditOriginCountry(equipment.originCountry || '');
     setEditYearOfManufacture(equipment.yearOfManufacture || '');
     setEditSerialNumber(equipment.serialNumber || '');
-    setEditRoom(equipment.room || '');
+    const normalizedRoom = (equipment.room || '').trim();
+    setEditRoom(normalizedRoom === 'Chưa phân phòng' ? '' : normalizedRoom);
     setEditAssignedTechnician(equipment.assignedTechnician || '');
     setEditManagerInCharge(equipment.managerInCharge || '');
     setEditInstallationDate(equipment.installationDate || '');
@@ -450,6 +463,25 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
         );
     }
   };
+
+  const roomOptions: ComboboxOption[] = useMemo(() => {
+    const opts: ComboboxOption[] = roomsList.map((r) => ({
+      value: r.name,
+      label: r.name,
+      badge: r.code || r.departmentSection,
+      subLabel: [r.departmentSection, r.floor, r.status].filter(Boolean).join(' • ')
+    }));
+    const current = editRoom.trim();
+    if (current && current !== 'Chưa phân phòng' && !roomsList.some((r) => r.name === current)) {
+      opts.unshift({
+        value: current,
+        label: current,
+        badge: 'Hiện tại',
+        subLabel: 'Tên phòng đang lưu trước đó'
+      });
+    }
+    return opts;
+  }, [roomsList, editRoom]);
 
   const isNextMaintenanceOverdue = isDatePastVN(equipment.nextMaintenanceDate);
   const radExpirySummary = equipment.radiationSurveyExpiry || equipment.radiationLicenseExpiry;
@@ -831,11 +863,14 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
                       <div>
                         <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Vị trí phòng máy (*):</label>
-                        <input
-                          type="text"
+                        <SearchableCombobox
                           value={editRoom}
-                          onChange={e => setEditRoom(e.target.value)}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                          onChange={setEditRoom}
+                          options={roomOptions}
+                          placeholder="Chọn phòng trong danh sách..."
+                          emptyOptionLabel="-- Bỏ trống (Chưa phân phòng) --"
+                          noResultsLabel="Không tìm thấy phòng phù hợp"
+                          inputClassName="!bg-white dark:!bg-slate-900 !border-slate-200 dark:!border-slate-700 !text-xs !py-2.5 font-semibold"
                         />
                       </div>
                       <div>

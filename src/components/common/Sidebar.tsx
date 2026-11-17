@@ -55,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard CLS', icon: LayoutDashboard, badge: null },
-    { id: 'ai-ecosystem', label: 'Hệ Sinh Thái AI CLS', icon: Sparkles, badge: '4 Trụ Cột' },
+    { id: 'ai-ecosystem', label: 'Trợ Lý Ảo & AI CLS', icon: Sparkles, badge: 'Live + TG' },
     { id: 'reports', label: 'Báo Cáo & Thống Kê', icon: BarChart3, badge: 'Mới' },
     {
       id: 'sync-history',

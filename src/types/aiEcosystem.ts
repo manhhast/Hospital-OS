@@ -149,3 +149,38 @@ export interface PredictiveMaintenanceSummary {
   urgentPartsAlertsCount: number;
   equipmentList: EquipmentHealthRiskItem[];
 }
+
+export interface SmartAssistantMetricChip {
+  label: string;
+  value: string;
+  tone?: 'blue' | 'emerald' | 'amber' | 'rose' | 'indigo' | 'slate';
+}
+
+export interface SmartAssistantMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  timestamp: string;
+  content: string;
+  highlightedMetrics?: SmartAssistantMetricChip[];
+  actionChecklist?: string[];
+  dataSourcesUsed?: string[];
+  suggestedFollowUps?: string[];
+  modelUsed?: string;
+  usedLiveContext?: boolean;
+  aiWarning?: string;
+}
+
+export interface TelegramBotStatus {
+  configured: boolean;
+  enabled: boolean;
+  pollingActive: boolean;
+  botUsername?: string;
+  botFirstName?: string;
+  lastPollAt?: string;
+  lastMessageAt?: string;
+  totalAnswered: number;
+  hasLiveContext: boolean;
+  contextUpdatedAt?: string;
+  lastError?: string;
+}
+
