@@ -7,8 +7,10 @@ import { storageService } from '../../services/storageService';
 import { DepartmentUnit, ParaclinicalRoom, StaffProfile, EquipmentItem } from '../../types/hospital';
 import { RoomModal } from './RoomModal';
 import { DepartmentModal } from './DepartmentModal';
+import { isEquipmentInRoom } from '../../utils/roomDisplay';
 import { RoomStaffTab } from './RoomStaffTab';
 import { RoomEquipmentTab } from './RoomEquipmentTab';
+import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
 
 export const RoomManagementView: React.FC = () => {
   const [departments, setDepartments] = useState<DepartmentUnit[]>([]);
@@ -97,6 +99,15 @@ export const RoomManagementView: React.FC = () => {
     return storageService.subscribe(loadAllData);
   }, []);
 
+  const activeStaffList = useMemo(
+    () => filterActiveStaffProfiles(staffList),
+    [staffList]
+  );
+  const inactiveStaffMatchers = useMemo(
+    () => getInactiveStaffMatchers(staffList),
+    [staffList]
+  );
+
   // Filtered hierarchy groups
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
@@ -111,21 +122,24 @@ export const RoomManagementView: React.FC = () => {
     return departments
       .map(dept => {
         const deptRooms = rooms.filter(r => r.departmentSection === dept.name);
+        const activeDeptMgr = filterActiveStaffDisplayName(dept.managerName, inactiveStaffMatchers.names);
         const deptMatches =
           !normalizedSearch ||
           dept.name.toLowerCase().includes(normalizedSearch) ||
           dept.code.toLowerCase().includes(normalizedSearch) ||
-          (dept.managerName && dept.managerName.toLowerCase().includes(normalizedSearch));
+          (activeDeptMgr && activeDeptMgr.toLowerCase().includes(normalizedSearch));
 
         const matchingRooms = deptMatches
           ? deptRooms
-          : deptRooms.filter(
-              r =>
+          : deptRooms.filter(r => {
+              const activeRoomMgr = filterActiveStaffDisplayName(r.managerInCharge, inactiveStaffMatchers.names);
+              return (
                 r.name.toLowerCase().includes(normalizedSearch) ||
                 r.code.toLowerCase().includes(normalizedSearch) ||
-                (r.managerInCharge || '').toLowerCase().includes(normalizedSearch) ||
+                activeRoomMgr.toLowerCase().includes(normalizedSearch) ||
                 (r.primaryEquipment || '').toLowerCase().includes(normalizedSearch)
-            );
+              );
+            });
 
         const isVisible = !normalizedSearch || deptMatches || matchingRooms.length > 0;
         return {
@@ -136,19 +150,21 @@ export const RoomManagementView: React.FC = () => {
         };
       })
       .filter(group => group.isVisible);
-  }, [departments, rooms, normalizedSearch]);
+  }, [departments, rooms, normalizedSearch, inactiveStaffMatchers]);
 
   const filteredOrphanRooms = useMemo(() => {
     if (!normalizedSearch) return orphanRooms;
-    return orphanRooms.filter(
-      r =>
+    return orphanRooms.filter(r => {
+      const activeRoomMgr = filterActiveStaffDisplayName(r.managerInCharge, inactiveStaffMatchers.names);
+      return (
         r.name.toLowerCase().includes(normalizedSearch) ||
         r.code.toLowerCase().includes(normalizedSearch) ||
         (r.departmentSection && r.departmentSection.toLowerCase().includes(normalizedSearch)) ||
-        (r.managerInCharge || '').toLowerCase().includes(normalizedSearch) ||
+        activeRoomMgr.toLowerCase().includes(normalizedSearch) ||
         (r.primaryEquipment || '').toLowerCase().includes(normalizedSearch)
-    );
-  }, [orphanRooms, normalizedSearch]);
+      );
+    });
+  }, [orphanRooms, normalizedSearch, inactiveStaffMatchers]);
 
   // High-level KPI stats
   const totalDepartments = departments.length;
@@ -162,12 +178,10 @@ export const RoomManagementView: React.FC = () => {
 
   // Staff & Equipment for active Room
   const selectedRoomStaff = selectedRoom
-    ? staffList.filter(s => s.room === selectedRoom.name)
+    ? activeStaffList.filter(s => s.room === selectedRoom.name)
     : [];
   const selectedRoomEquipment = selectedRoom
-    ? equipmentList.filter(
-        e => e.room === selectedRoom.name || e.room.toLowerCase().includes(selectedRoom.code.toLowerCase())
-      )
+    ? equipmentList.filter(e => isEquipmentInRoom(e.room, selectedRoom))
     : [];
 
   // Toggle expand/collapse
@@ -261,10 +275,8 @@ export const RoomManagementView: React.FC = () => {
 
   const renderRoomTreeItem = (room: ParaclinicalRoom) => {
     const isSelected = !selectedDepartment && selectedRoom?.id === room.id;
-    const roomStaffCount = staffList.filter(s => s.room === room.name).length;
-    const roomEqCount = equipmentList.filter(
-      e => e.room === room.name || e.room.toLowerCase().includes(room.code.toLowerCase())
-    ).length;
+    const roomStaffCount = activeStaffList.filter(s => s.room === room.name).length;
+    const roomEqCount = equipmentList.filter(e => isEquipmentInRoom(e.room, room)).length;
 
     return (
       <div
@@ -422,7 +434,7 @@ export const RoomManagementView: React.FC = () => {
           <div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Nhân sự toàn Khoa</p>
             <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {staffList.length} <span className="text-xs text-slate-400 font-normal">hồ sơ</span>
+              {activeStaffList.length} <span className="text-xs text-slate-400 font-normal">hồ sơ</span>
             </h3>
           </div>
         </div>
@@ -678,9 +690,20 @@ export const RoomManagementView: React.FC = () => {
                     {selectedDepartment.name}
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {selectedDepartment.managerName
-                      ? <>Phụ trách bộ phận: <strong className="text-slate-800 dark:text-slate-200">{selectedDepartment.managerName}</strong></>
-                      : 'Chưa chỉ định người phụ trách bộ phận'}
+                    {(() => {
+                      const activeDeptMgr = filterActiveStaffDisplayName(
+                        selectedDepartment.managerName,
+                        inactiveStaffMatchers.names
+                      );
+                      return activeDeptMgr ? (
+                        <>
+                          Phụ trách bộ phận:{' '}
+                          <strong className="text-slate-800 dark:text-slate-200">{activeDeptMgr}</strong>
+                        </>
+                      ) : (
+                        'Chưa chỉ định người phụ trách bộ phận'
+                      );
+                    })()}
                   </p>
                 </div>
 
@@ -724,7 +747,7 @@ export const RoomManagementView: React.FC = () => {
               {/* Child Rooms List inside Selected Department */}
               {(() => {
                 const deptRooms = rooms.filter(r => r.departmentSection === selectedDepartment.name);
-                const deptStaffCount = staffList.filter(s => s.departmentSection === selectedDepartment.name).length;
+                const deptStaffCount = activeStaffList.filter(s => s.departmentSection === selectedDepartment.name).length;
 
                 return (
                   <div className="space-y-4">
@@ -754,7 +777,7 @@ export const RoomManagementView: React.FC = () => {
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {deptRooms.map(room => {
-                          const rStaffCount = staffList.filter(s => s.room === room.name).length;
+                          const rStaffCount = activeStaffList.filter(s => s.room === room.name).length;
                           const rEqCount = equipmentList.filter(
                             e => e.room === room.name || e.room.toLowerCase().includes(room.code.toLowerCase())
                           ).length;
@@ -809,7 +832,10 @@ export const RoomManagementView: React.FC = () => {
                               </div>
 
                               <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Phụ trách: <strong className="text-slate-700 dark:text-slate-200">{room.managerInCharge || 'Chưa chỉ định'}</strong>
+                                Phụ trách:{' '}
+                                <strong className="text-slate-700 dark:text-slate-200">
+                                  {filterActiveStaffDisplayName(room.managerInCharge, inactiveStaffMatchers.names) || 'Chưa chỉ định'}
+                                </strong>
                               </p>
 
                               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
@@ -850,11 +876,16 @@ export const RoomManagementView: React.FC = () => {
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                     Vị trí: {selectedRoom.floor} • Trưởng phòng:{' '}
-                    <strong className="text-slate-800 dark:text-slate-200">{selectedRoom.managerInCharge || 'Chưa chỉ định'}</strong>
-                    {selectedRoom.deputyManager && (
+                    <strong className="text-slate-800 dark:text-slate-200">
+                      {filterActiveStaffDisplayName(selectedRoom.managerInCharge, inactiveStaffMatchers.names) || 'Chưa chỉ định'}
+                    </strong>
+                    {filterActiveStaffDisplayName(selectedRoom.deputyManager, inactiveStaffMatchers.names) && (
                       <span>
                         {' '}
-                        • Phó phụ trách: <strong>{selectedRoom.deputyManager}</strong>
+                        • Phó phụ trách:{' '}
+                        <strong>
+                          {filterActiveStaffDisplayName(selectedRoom.deputyManager, inactiveStaffMatchers.names)}
+                        </strong>
                       </span>
                     )}
                     {selectedRoom.primaryEquipment && selectedRoom.primaryEquipment !== 'Chưa gán máy chính' && (
@@ -1030,7 +1061,7 @@ export const RoomManagementView: React.FC = () => {
               {activeSubTab === 'staff' && (
                 <RoomStaffTab
                   room={selectedRoom}
-                  allStaff={staffList}
+                  allStaff={activeStaffList}
                   allRooms={rooms}
                   onAssignStaff={handleAssignStaff}
                   onRemoveStaff={handleRemoveStaff}
@@ -1067,7 +1098,7 @@ export const RoomManagementView: React.FC = () => {
         onSave={handleSaveDepartment}
         initialDepartment={editingDept}
         existingDepartments={departments}
-        staffList={staffList}
+        staffList={activeStaffList}
       />
 
       {/* MODAL 2: Add / Edit Level 2 Phòng */}
@@ -1081,7 +1112,7 @@ export const RoomManagementView: React.FC = () => {
         initialRoom={editingRoom}
         departments={departments}
         defaultDepartmentSection={defaultRoomDeptSection}
-        staffList={staffList}
+        staffList={activeStaffList}
         equipmentList={equipmentList}
       />
 
@@ -1103,7 +1134,7 @@ export const RoomManagementView: React.FC = () => {
 
             {(() => {
               const childRoomsCount = rooms.filter(r => r.departmentSection === deleteModalDept.name).length;
-              const childStaffCount = staffList.filter(s => s.departmentSection === deleteModalDept.name).length;
+              const childStaffCount = activeStaffList.filter(s => s.departmentSection === deleteModalDept.name).length;
               const otherDepts = departments.filter(d => d.id !== deleteModalDept.id);
 
               return (

@@ -7,6 +7,7 @@ export interface ComboboxOption {
   label: string;
   subLabel?: string;
   badge?: string;
+  closedLabel?: string;
 }
 
 interface SearchableComboboxProps {
@@ -18,6 +19,7 @@ interface SearchableComboboxProps {
   noResultsLabel?: string;
   className?: string;
   inputClassName?: string;
+  badgePosition?: 'left' | 'right';
 }
 
 export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
@@ -28,7 +30,8 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   emptyOptionLabel = '-- Bỏ trống (Chưa chỉ định) --',
   noResultsLabel = 'Không tìm thấy kết quả phù hợp',
   className = '',
-  inputClassName = ''
+  inputClassName = '',
+  badgePosition = 'right'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,7 +146,9 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   const displayValue = isOpen
     ? searchQuery
     : selectedOption
-    ? selectedOption.badge
+    ? selectedOption.closedLabel
+      ? selectedOption.closedLabel
+      : selectedOption.badge
       ? `${selectedOption.label} (${selectedOption.badge})`
       : selectedOption.label
     : value;
@@ -238,10 +243,15 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold truncate flex items-center gap-1.5">
+                      <div className="text-xs font-semibold flex items-center gap-1.5 min-w-0">
+                        {opt.badge && badgePosition === 'left' && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0 whitespace-nowrap">
+                            {opt.badge}
+                          </span>
+                        )}
                         <span className="truncate">{opt.label}</span>
-                        {opt.badge && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
+                        {opt.badge && badgePosition !== 'left' && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0 whitespace-nowrap">
                             {opt.badge}
                           </span>
                         )}

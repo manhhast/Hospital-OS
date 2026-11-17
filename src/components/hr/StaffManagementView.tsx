@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Users, Award, Calendar, BookOpen, CheckCircle2, Clock, AlertCircle, 
@@ -12,6 +12,14 @@ import {
   MedicalCertificate, DepartmentUnit, ParaclinicalRoom, User
 } from '../../types/hospital';
 import { formatDateVN, toInputDateFormat, normalizeFlexibleDateVN, normalizeVietnamesePhone } from '../../utils/dateUtils';
+import { LeaveCalendarTab } from './LeaveCalendarTab';
+import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
+import {
+  canApproveLeaveRequest,
+  filterActiveStaffProfiles,
+  getInactiveStaffMatchers,
+  isStrictAdminUser
+} from '../../utils/staffStatus';
 
 // Helper to parse dates from Excel (can be Date instance, Excel serial number, or string) strictly to dd/mm/yyyy
 const parseExcelDateToDDMMYYYY = (val: any): string => {
@@ -149,11 +157,13 @@ export const StaffManagementView: React.FC = () => {
 
   // Modal States
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveApplicantId, setLeaveApplicantId] = useState('');
   const [leaveType, setLeaveType] = useState<'Phép năm' | 'Nghỉ ốm' | 'Nghỉ thai sản' | 'Học tập' | 'Nghỉ không lương'>('Phép năm');
   const [leaveStart, setLeaveStart] = useState('');
   const [leaveEnd, setLeaveEnd] = useState('');
   const [leaveReason, setLeaveReason] = useState('');
-  const [substituteUser, setSubstituteUser] = useState('ThS. BS. Nguyễn Hoài Nam');
+  const [substituteUser, setSubstituteUser] = useState('');
+  const [leaveFeedbackMsg, setLeaveFeedbackMsg] = useState('');
 
   // Edit Staff Modal (Admin only)
   const [editingStaff, setEditingStaff] = useState<StaffProfile | null>(null);
@@ -318,6 +328,7 @@ export const StaffManagementView: React.FC = () => {
 
   const currentUser = storageService.getCurrentUser();
   const isAdmin = currentUser.role === 'Admin' || currentUser.title?.includes('Trưởng khoa');
+  const isStrictLeaveAdmin = isStrictAdminUser(currentUser);
 
   // Helper function to calculate years of service automatically based on join date (dd/mm/yyyy, mm/yyyy, yyyy, or yyyy-mm-dd)
   const calculateYearsOfService = (joinDateStr?: string, defaultYears: number = 0): number => {
@@ -387,24 +398,148 @@ export const StaffManagementView: React.FC = () => {
     return storageService.subscribe(loadData);
   }, []);
 
+  const getLocalTodayISO = (): string => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const calculateInclusiveDays = (startStr: string, endStr: string): number => {
+    if (!startStr) return 1;
+    const parseLocal = (s: string) => {
+      const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (!m) return null;
+      return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    };
+    const start = parseLocal(startStr);
+    const end = parseLocal(endStr || startStr);
+    if (!start || !end) return 1;
+    const diff = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    return Math.max(1, diff);
+  };
+
+  const computedLeaveDays = useMemo(
+    () => calculateInclusiveDays(leaveStart, leaveEnd),
+    [leaveStart, leaveEnd]
+  );
+
+  const currentStaffProfile = useMemo(
+    () =>
+      profiles.find(
+        p =>
+          p.userId === currentUser.id ||
+          (currentUser.name && p.fullName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      ) || null,
+    [profiles, currentUser.id, currentUser.name]
+  );
+
+  const canApproveLeave = useMemo(
+    () => canApproveLeaveRequest(currentUser, currentStaffProfile),
+    [currentUser, currentStaffProfile]
+  );
+
+  const activeProfiles = useMemo(
+    () => filterActiveStaffProfiles(profiles),
+    [profiles]
+  );
+
+  const inactiveMatchers = useMemo(
+    () => getInactiveStaffMatchers(profiles),
+    [profiles]
+  );
+
+  const activeLeaveRequests = useMemo(
+    () =>
+      leaveRequests.filter(
+        req =>
+          !inactiveMatchers.ids.has(req.userId) &&
+          !inactiveMatchers.names.has((req.userName || '').trim().toLowerCase())
+      ),
+    [leaveRequests, inactiveMatchers]
+  );
+
+  const leaveStaffOptions = useMemo<ComboboxOption[]>(
+    () =>
+      activeProfiles.map(p => ({
+        value: p.userId,
+        label: p.fullName,
+        badge: p.title || 'Nhân viên',
+        subLabel: [p.departmentSection, p.room].filter(Boolean).join(' · ')
+      })),
+    [activeProfiles]
+  );
+
+  const leaveSubstituteOptions = useMemo<ComboboxOption[]>(
+    () =>
+      activeProfiles
+        .filter(p => p.userId !== (leaveApplicantId || currentUser.id))
+        .map(p => ({
+          value: p.fullName,
+          label: p.fullName,
+          badge: p.title || 'Nhân viên',
+          subLabel: [p.departmentSection, p.room].filter(Boolean).join(' · ')
+        })),
+    [activeProfiles, leaveApplicantId, currentUser.id]
+  );
+
+  const openCreateLeaveModal = (prefillDate?: string) => {
+    const baseDate = prefillDate || getLocalTodayISO();
+    if (isStrictLeaveAdmin) {
+      const isCurrentActive = activeProfiles.some(p => p.userId === currentUser.id);
+      setLeaveApplicantId(isCurrentActive ? currentUser.id : activeProfiles[0]?.userId || '');
+    } else {
+      setLeaveApplicantId(currentStaffProfile?.userId || currentUser.id);
+    }
+    setLeaveStart(baseDate);
+    setLeaveEnd(baseDate);
+    setLeaveReason('');
+    setSubstituteUser('');
+    setShowLeaveModal(true);
+  };
+
   const handleApproveLeave = (id: string, status: 'Đã phê duyệt' | 'Từ chối') => {
+    if (!canApproveLeave) {
+      setLeaveFeedbackMsg('Chỉ Admin hoặc Trưởng / Phó khoa mới có quyền phê duyệt đơn đăng ký nghỉ.');
+      setTimeout(() => setLeaveFeedbackMsg(''), 4000);
+      return;
+    }
     storageService.updateLeaveStatus(id, status, storageService.getCurrentUser().name);
+  };
+
+  const handleDeleteLeave = (id: string) => {
+    storageService.deleteLeaveRequest(id);
+    setLeaveFeedbackMsg('Đã xóa đơn đăng ký nghỉ khỏi lịch.');
+    setTimeout(() => setLeaveFeedbackMsg(''), 4000);
   };
 
   const handleCreateLeaveRequest = (e: React.FormEvent) => {
     e.preventDefault();
     const currUser = storageService.getCurrentUser();
+    const ownProfile = profiles.find(
+      p =>
+        p.userId === currUser.id ||
+        (currUser.name && p.fullName.trim().toLowerCase() === currUser.name.trim().toLowerCase())
+    );
+    const selectedStaff = isStrictLeaveAdmin
+      ? activeProfiles.find(p => p.userId === leaveApplicantId)
+      : ownProfile;
+    const normalizedStart = leaveStart || getLocalTodayISO();
+    const normalizedEnd = leaveEnd && leaveEnd >= normalizedStart ? leaveEnd : normalizedStart;
+    const totalDays = calculateInclusiveDays(normalizedStart, normalizedEnd);
+
     const newReq: LeaveRequest = {
       id: `LR-${Date.now()}`,
-      userId: currUser.id,
-      userName: currUser.name,
-      userRole: currUser.title || 'Nhân viên',
+      userId: isStrictLeaveAdmin ? (selectedStaff?.userId || currUser.id) : (ownProfile?.userId || currUser.id),
+      userName: isStrictLeaveAdmin ? (selectedStaff?.fullName || currUser.name) : (ownProfile?.fullName || currUser.name),
+      userRole: isStrictLeaveAdmin ? (selectedStaff?.title || currUser.title || 'Nhân viên') : (ownProfile?.title || currUser.title || 'Nhân viên'),
       leaveType,
-      startDate: leaveStart,
-      endDate: leaveEnd,
-      totalDays: 2,
-      reason: leaveReason,
-      substituteUserName: substituteUser,
+      startDate: normalizedStart,
+      endDate: normalizedEnd,
+      totalDays,
+      reason: leaveReason.trim(),
+      substituteUserName: substituteUser.trim() || undefined,
       status: 'Chờ duyệt',
       createdAt: new Date().toLocaleString('vi-VN')
     };
@@ -412,7 +547,8 @@ export const StaffManagementView: React.FC = () => {
     storageService.saveLeaveRequest(newReq);
     setShowLeaveModal(false);
     setLeaveReason('');
-    alert('Đã gửi đơn xin nghỉ phép thành công. Trưởng khoa sẽ xét duyệt!');
+    setLeaveFeedbackMsg(`Đã đăng ký lịch nghỉ (${totalDays} ngày) cho ${newReq.userName}. Đơn đang chờ Admin hoặc Trưởng / Phó khoa phê duyệt.`);
+    setTimeout(() => setLeaveFeedbackMsg(''), 5000);
   };
 
   // --- Certificate CRUD Handlers ---
@@ -914,7 +1050,7 @@ export const StaffManagementView: React.FC = () => {
             specialty,
             joinDate,
             experienceYears,
-            currentStatus: (rawStatus.includes('thử việc') ? 'Đang thử việc' : rawStatus.includes('thai sản') ? 'Nghỉ thai sản' : rawStatus.includes('không lương') ? 'Nghỉ không lương' : 'Đang làm việc') as EmploymentStatus,
+            currentStatus: (rawStatus.toLowerCase().includes('thử việc') ? 'Đang thử việc' : rawStatus.toLowerCase().includes('thai sản') ? 'Nghỉ thai sản' : rawStatus.toLowerCase().includes('không lương') || rawStatus.toLowerCase().includes('không hưởng lương') ? 'Nghỉ không lương' : (rawStatus.toLowerCase().includes('nghỉ việc') || rawStatus.toLowerCase().includes('kết thúc hợp đồng')) ? 'Đã nghỉ việc' : 'Đang làm việc') as EmploymentStatus,
             certCode,
             isValid,
             errorReason: !isValid ? 'Thiếu họ và tên' : undefined
@@ -1339,11 +1475,11 @@ export const StaffManagementView: React.FC = () => {
             <span>Thêm Nhân Viên</span>
           </button>
           <button
-            onClick={() => setShowLeaveModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs transition-all"
+            onClick={() => openCreateLeaveModal()}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs transition-all cursor-pointer"
           >
             <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Đơn Nghỉ Phép</span>
+            <span>Đăng Ký Nghỉ</span>
           </button>
         </div>
       </div>
@@ -1353,21 +1489,24 @@ export const StaffManagementView: React.FC = () => {
         {/* Dòng 1: Thanh Menu / Tabs Chuyên Mục */}
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60">
           <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar">
-            {/* 1. Lịch Nghỉ Phép (Far Left) */}
+            {/* 1. Lịch Đăng Ký Nghỉ (Far Left) */}
             <button
               onClick={() => setActiveTab('leave')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'leave' 
                   ? 'bg-indigo-600 text-white shadow-sm' 
                   : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700/80'
               }`}
             >
               <Calendar className="w-4 h-4" />
-              <span>Lịch Nghỉ Phép</span>
-              {leaveRequests.filter(l => l.status === 'Chờ duyệt').length > 0 && (
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              <span>Lịch Đăng Ký Nghỉ</span>
+              {activeLeaveRequests.filter(l => l.status === 'Chờ duyệt').length > 0 && (
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold tabular-nums ${
+                  activeTab === 'leave'
+                    ? 'bg-indigo-700 text-amber-200'
+                    : 'bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300'
+                }`}>
+                  {activeLeaveRequests.filter(l => l.status === 'Chờ duyệt').length}
                 </span>
               )}
             </button>
@@ -1425,7 +1564,13 @@ export const StaffManagementView: React.FC = () => {
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
-              placeholder={activeTab === 'profiles' ? "Tìm tên cán bộ, mã NV, chuyên môn, phòng ban..." : "Tìm kiếm thông tin theo từ khóa..."}
+              placeholder={
+                activeTab === 'profiles'
+                  ? 'Tìm tên cán bộ, mã NV, chuyên môn, phòng ban...'
+                  : activeTab === 'leave'
+                  ? 'Tìm tên cán bộ, lý do, loại nghỉ hoặc người trực thay...'
+                  : 'Tìm kiếm thông tin theo từ khóa...'
+              }
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -1518,66 +1663,37 @@ export const StaffManagementView: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab 1 (Far Left): Leave Requests Management */}
+        {/* Tab 1 (Far Left): Leave Registration Calendar (Week / Month view) */}
         {activeTab === 'leave' && (
-          <div className="p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Danh Sách Đơn Xin Nghỉ Phép & Phê Duyệt</h3>
-                <p className="text-xs text-slate-500">Quản lý các loại đơn xin nghỉ phép năm, nghỉ ốm, thai sản và tập huấn chuyên môn.</p>
-              </div>
-              <button
-                onClick={() => setShowLeaveModal(true)}
-                className="px-3.5 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" /> Gửi Đơn Xin Phép
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {leaveRequests.map(leave => (
-                <div key={leave.id} className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 dark:text-white text-sm">{leave.userName}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{leave.userRole}</span>
-                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-0.5 rounded-full">{leave.leaveType}</span>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300">Lý do: <strong>{leave.reason}</strong></p>
-                    <div className="flex flex-wrap gap-4 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                      <span>Thời gian: <strong className="text-slate-800 dark:text-slate-200">{leave.startDate} đến {leave.endDate} ({leave.totalDays} ngày)</strong></span>
-                      {leave.substituteUserName && <span>Người trực thay: <strong className="text-slate-800 dark:text-slate-200">{leave.substituteUserName}</strong></span>}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {leave.status === 'Chờ duyệt' ? (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleApproveLeave(leave.id, 'Đã phê duyệt')}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-all flex items-center gap-1"
-                        >
-                          <Check className="w-3.5 h-3.5" /> Duyệt Phép
-                        </button>
-                        <button
-                          onClick={() => handleApproveLeave(leave.id, 'Từ chối')}
-                          className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-all flex items-center gap-1"
-                        >
-                          <X className="w-3.5 h-3.5" /> Từ Chối
-                        </button>
-                      </div>
-                    ) : (
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        leave.status === 'Đã phê duyệt' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {leave.status}
-                      </span>
-                    )}
-                  </div>
+          <>
+            {leaveFeedbackMsg && (
+              <div className="mx-5 sm:mx-6 mt-5 px-4 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{leaveFeedbackMsg}</span>
                 </div>
-              ))}
-            </div>
-          </div>
+                <button
+                  type="button"
+                  onClick={() => setLeaveFeedbackMsg('')}
+                  className="p-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-200 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <LeaveCalendarTab
+              leaveRequests={leaveRequests}
+              profiles={profiles}
+              searchTerm={searchTerm}
+              isAdmin={isStrictLeaveAdmin}
+              canApproveLeave={canApproveLeave}
+              currentUserId={currentUser.id}
+              onOpenCreateModal={openCreateLeaveModal}
+              onApproveLeave={handleApproveLeave}
+              onDeleteLeave={handleDeleteLeave}
+            />
+          </>
         )}
 
         {/* Tab 2: Staff Profiles (with Filter by Room/Dept, Admin Edit, Status Badges & Career History) */}
@@ -3943,11 +4059,69 @@ export const StaffManagementView: React.FC = () => {
 
       {/* Leave Modal */}
       {showLeaveModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200 dark:border-slate-800 transition-colors">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">📝 Tạo Đơn Xin Nghỉ Phép / Đi Học</h3>
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowLeaveModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200 dark:border-slate-800 transition-colors"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Đăng Ký Lịch Nghỉ / Đi Học
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Bổ sung đơn trực tiếp lên lịch đăng ký nghỉ của khoa
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLeaveModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             
             <form onSubmit={handleCreateLeaveRequest} className="space-y-4 text-xs">
+              {isStrictLeaveAdmin && activeProfiles.length > 0 ? (
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Cán bộ đăng ký nghỉ (Quyền Admin):
+                  </label>
+                  <SearchableCombobox
+                    value={leaveApplicantId}
+                    onChange={setLeaveApplicantId}
+                    options={leaveStaffOptions}
+                    placeholder="Chọn cán bộ trong danh sách..."
+                    emptyOptionLabel={`-- Mặc định (${currentUser.name}) --`}
+                    inputClassName="!text-xs !py-2"
+                  />
+                </div>
+              ) : (
+                <div className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Cán bộ đăng ký nghỉ:
+                  </div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">
+                    {currentStaffProfile?.fullName || currentUser.name}
+                    <span className="font-normal text-slate-500 dark:text-slate-400">
+                      {' '}· {currentStaffProfile?.title || currentUser.title || 'Nhân viên'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Chỉ Admin mới có quyền tạo đăng ký nghỉ cho người khác trong khoa.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Loại nghỉ phép:</label>
                 <select
@@ -3963,26 +4137,39 @@ export const StaffManagementView: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Từ ngày:</label>
-                  <input
-                    type="date"
-                    required
-                    value={leaveStart}
-                    onChange={e => setLeaveStart(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-800 dark:text-slate-100"
-                  />
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Từ ngày:</label>
+                    <input
+                      type="date"
+                      required
+                      value={leaveStart}
+                      onChange={e => {
+                        const nextStart = e.target.value;
+                        setLeaveStart(nextStart);
+                        if (!leaveEnd || nextStart > leaveEnd) {
+                          setLeaveEnd(nextStart);
+                        }
+                      }}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-800 dark:text-slate-100 tabular-nums"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Đến ngày:</label>
+                    <input
+                      type="date"
+                      required
+                      min={leaveStart || undefined}
+                      value={leaveEnd}
+                      onChange={e => setLeaveEnd(e.target.value)}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-800 dark:text-slate-100 tabular-nums"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Đến ngày:</label>
-                  <input
-                    type="date"
-                    required
-                    value={leaveEnd}
-                    onChange={e => setLeaveEnd(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-800 dark:text-slate-100"
-                  />
+                <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-[11px]">
+                  <span className="text-slate-600 dark:text-slate-300">Tổng thời gian đăng ký:</span>
+                  <strong className="text-indigo-700 dark:text-indigo-300 tabular-nums">{computedLeaveDays} ngày</strong>
                 </div>
               </div>
 
@@ -3991,7 +4178,7 @@ export const StaffManagementView: React.FC = () => {
                 <textarea
                   rows={2}
                   required
-                  placeholder="Ghi rõ lý do xin nghỉ phép..."
+                  placeholder="Ghi rõ lý do xin nghỉ hoặc nội dung học tập..."
                   value={leaveReason}
                   onChange={e => setLeaveReason(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
@@ -3999,13 +4186,16 @@ export const StaffManagementView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Người trực thay / Bàn giao ca:</label>
-                <input
-                  type="text"
-                  required
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Người trực thay / Bàn giao ca <span className="font-normal text-slate-400">(Không bắt buộc)</span>:
+                </label>
+                <SearchableCombobox
                   value={substituteUser}
-                  onChange={e => setSubstituteUser(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-slate-800 dark:text-slate-100"
+                  onChange={setSubstituteUser}
+                  options={leaveSubstituteOptions}
+                  placeholder="Tìm đồng nghiệp trực thay hoặc bỏ trống..."
+                  emptyOptionLabel="-- Bỏ trống (Chưa chỉ định người trực thay) --"
+                  inputClassName="!text-xs !py-2"
                 />
               </div>
 
@@ -4019,9 +4209,9 @@ export const StaffManagementView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-sm cursor-pointer"
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-xs cursor-pointer"
                 >
-                  Gửi Đơn Duyệt
+                  Xác Nhận Đăng Ký
                 </button>
               </div>
             </form>
@@ -4070,7 +4260,7 @@ export const StaffManagementView: React.FC = () => {
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
                 >
                   <option value="">-- Chọn cán bộ / nhân viên --</option>
-                  {profiles.map((p, idx) => (
+                  {(!editingCert ? activeProfiles : profiles).map((p, idx) => (
                     <option key={`${p.userId}-${idx}`} value={p.userId}>
                       {p.fullName} ({p.title} - {p.departmentSection})
                     </option>

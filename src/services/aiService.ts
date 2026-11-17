@@ -98,6 +98,27 @@ export const aiService = {
     };
   },
 
+  async detectTelegramChats(botToken: string): Promise<
+    Array<{ chatId: string; title: string; type: string; username?: string; lastSeenAt: string }>
+  > {
+    const res = await fetch('/api/telegram/detect-chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ botToken })
+    });
+    const rawText = await res.text();
+    let json: any = null;
+    try {
+      json = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      throw new Error(`Máy chủ trả về phản hồi không hợp lệ (HTTP ${res.status}). Vui lòng thử lại.`);
+    }
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.error || `Không thể dò danh sách Chat ID từ Telegram (HTTP ${res.status})`);
+    }
+    return Array.isArray(json.data) ? json.data : [];
+  },
+
   async syncContextNow(): Promise<boolean> {
     return syncLiveContextToServer(true);
   },

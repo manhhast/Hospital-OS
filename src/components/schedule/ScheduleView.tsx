@@ -161,7 +161,7 @@ export const ScheduleView: React.FC = () => {
   const loadData = () => {
     setShifts(storageService.getShifts());
     setMeetings(storageService.getMeetings());
-    setUsers(storageService.getUsers());
+    setUsers(storageService.getUsers().filter(u => u.status !== 'Inactive'));
     setWorkTaskRows(storageService.getWorkTaskRows());
   };
 

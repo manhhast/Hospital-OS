@@ -6,18 +6,21 @@ import {
   Network,
   History,
   Code2,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Bot
 } from 'lucide-react';
 import { NotificationLog } from '../../types/hospital';
 import { IntegrationHubView } from '../integration/IntegrationHubView';
 import { NotificationCenterView } from '../notifications/NotificationCenterView';
 import { UserManagementView } from '../users/UserManagementView';
 import { SettingsView } from './SettingsView';
+import { TelegramSettingsView } from './TelegramSettingsView';
 import { AuditLogView } from '../audit/AuditLogView';
 import { GASArchitectureView } from '../gas/GASArchitectureView';
 
 export type ConfigModuleId =
   | 'settings'
+  | 'telegram'
   | 'users'
   | 'notifications'
   | 'integration'
@@ -29,6 +32,7 @@ export const CONFIG_MODULE_IDS: ConfigModuleId[] = [
   'notifications',
   'users',
   'settings',
+  'telegram',
   'audit',
   'gas-architecture'
 ];
@@ -47,6 +51,13 @@ const CONFIG_MENU_ITEMS: ConfigMenuItem[] = [
     label: 'Cấu Hình Hệ Thống',
     description: 'Thông số chung, Google Drive & giao diện',
     icon: Settings
+  },
+  {
+    id: 'telegram',
+    label: 'Cài Đặt Telegram Bot',
+    description: 'Bot Token, Chat ID & hướng dẫn tạo Bot riêng',
+    badge: 'Bot AI',
+    icon: Bot
   },
   {
     id: 'users',
@@ -124,14 +135,14 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
             </div>
           </div>
           <div className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
-            Quản trị viên &middot; 6 phân hệ cấu hình
+            Quản trị viên &middot; {CONFIG_MENU_ITEMS.length} phân hệ cấu hình
           </div>
         </div>
 
         {/* Configuration Navigation Tabs */}
         <nav
           aria-label="Menu cấu hình hệ thống"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-4"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-4"
         >
           {CONFIG_MENU_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -193,8 +204,11 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
             onConfirmAction={onConfirmAction}
             themeMode={themeMode}
             onChangeThemeMode={onChangeThemeMode}
+            onNavigateConfigTab={onSelectTab}
           />
         )}
+
+        {activeTab === 'telegram' && <TelegramSettingsView onShowToast={onShowToast} />}
 
         {activeTab === 'audit' && <AuditLogView />}
 

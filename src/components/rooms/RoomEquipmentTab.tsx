@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Wrench, Plus, ArrowRightLeft, ShieldAlert, CheckCircle2, AlertCircle, 
   Search, X, Calendar, Activity, Cpu, Layers, HardDrive, Eye
 } from 'lucide-react';
-import { ParaclinicalRoom, EquipmentItem } from '../../types/hospital';
+import { ParaclinicalRoom, EquipmentItem, StaffProfile } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import { EquipmentDetailModal } from '../equipment/EquipmentDetailModal';
+import { filterActiveStaffDisplayName, getInactiveStaffMatchers } from '../../utils/staffStatus';
 
 interface RoomEquipmentTabProps {
   room: ParaclinicalRoom;
@@ -28,6 +29,18 @@ export const RoomEquipmentTab: React.FC<RoomEquipmentTabProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
   const [detailEquipment, setDetailEquipment] = useState<EquipmentItem | null>(null);
+  const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>(() => storageService.getStaffProfiles());
+
+  useEffect(() => {
+    return storageService.subscribe(() => {
+      setStaffProfiles(storageService.getStaffProfiles());
+    });
+  }, []);
+
+  const inactiveStaff = useMemo(
+    () => getInactiveStaffMatchers(staffProfiles),
+    [staffProfiles]
+  );
 
   // Equipment located in this room (exact match or includes room name)
   const roomEquipment = allEquipment.filter(e => 
@@ -172,7 +185,11 @@ export const RoomEquipmentTab: React.FC<RoomEquipmentTabProps> = ({
                 <div className="flex items-center space-x-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
                   <div className="text-right hidden lg:block mr-2">
                     <p className="text-[11px] text-slate-500">Người Quản Lý / KTV:</p>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{eq.managerInCharge || eq.assignedTechnician || 'Chưa gán'}</p>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {filterActiveStaffDisplayName(eq.managerInCharge, inactiveStaff.names) ||
+                        filterActiveStaffDisplayName(eq.assignedTechnician, inactiveStaff.names) ||
+                        'Chưa gán'}
+                    </p>
                   </div>
 
                   <button

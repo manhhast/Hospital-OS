@@ -6,13 +6,15 @@ import {
   Gauge, DollarSign, ShieldAlert, Lock, Unlock, Settings, Sliders, BellRing, Send, CheckSquare
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
-import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus, ParaclinicalRoom } from '../../types/hospital';
+import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
+import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
 import { EquipmentDetailModal } from './EquipmentDetailModal';
 import { SafetyInterlockTab } from './SafetyInterlockTab';
 import { OeeReliabilityTab } from './OeeReliabilityTab';
 import { DepreciationUtilizationTab } from './DepreciationUtilizationTab';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
+import { formatRoomStorageValue, resolveRoomDisplay } from '../../utils/roomDisplay';
 import { checkEquipmentSafetyInterlock, calculateEquipmentOEE, calculateEquipmentDepreciation } from '../../utils/equipmentAnalytics';
 import {
   scanEquipmentExpirations,
@@ -27,6 +29,7 @@ import {
 export const EquipmentManagementView: React.FC = () => {
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
   const [roomsList, setRoomsList] = useState<ParaclinicalRoom[]>(() => storageService.getRooms());
+  const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>(() => storageService.getStaffProfiles());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -120,20 +123,46 @@ export const EquipmentManagementView: React.FC = () => {
     const list = storageService.getEquipment();
     setEquipmentList(list);
     setRoomsList(storageService.getRooms());
+    setStaffProfiles(storageService.getStaffProfiles());
     if (detailEquipment) {
       const refreshedItem = list.find(e => e.id === detailEquipment.id);
       if (refreshedItem) setDetailEquipment(refreshedItem);
     }
   };
 
+  const activeStaffProfiles = useMemo(
+    () => filterActiveStaffProfiles(staffProfiles),
+    [staffProfiles]
+  );
+
+  const inactiveStaff = useMemo(
+    () => getInactiveStaffMatchers(staffProfiles),
+    [staffProfiles]
+  );
+
+  const staffComboboxOptions: ComboboxOption[] = useMemo(
+    () =>
+      activeStaffProfiles.map((s) => ({
+        value: s.fullName,
+        label: s.fullName,
+        badge: s.title || 'Nhân viên',
+        subLabel: [s.departmentSection, s.room].filter(Boolean).join(' • ')
+      })),
+    [activeStaffProfiles]
+  );
+
   const roomOptions: ComboboxOption[] = useMemo(
     () =>
-      roomsList.map((r) => ({
-        value: r.name,
-        label: r.name,
-        badge: r.code || r.departmentSection,
-        subLabel: [r.departmentSection, r.floor, r.status].filter(Boolean).join(' • ')
-      })),
+      roomsList.map((r) => {
+        const full = formatRoomStorageValue(r);
+        return {
+          value: full,
+          label: r.name,
+          badge: r.code || undefined,
+          closedLabel: full,
+          subLabel: [r.departmentSection, r.floor, r.status].filter(Boolean).join(' • ')
+        };
+      }),
     [roomsList]
   );
 
@@ -156,12 +185,17 @@ export const EquipmentManagementView: React.FC = () => {
 
   // Filtered equipment
   const filteredList = equipmentList.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (item.assignedTechnician && item.assignedTechnician.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (item.managerInCharge && item.managerInCharge.toLowerCase().includes(searchTerm.toLowerCase()));
+    const resolvedRoom = resolveRoomDisplay(item.room, roomsList);
+    const activeTech = filterActiveStaffDisplayName(item.assignedTechnician, inactiveStaff.names);
+    const activeMgr = filterActiveStaffDisplayName(item.managerInCharge, inactiveStaff.names);
+    const q = searchTerm.toLowerCase();
+    const matchesSearch = item.name.toLowerCase().includes(q) ||
+                          item.code.toLowerCase().includes(q) ||
+                          item.model.toLowerCase().includes(q) ||
+                          item.room.toLowerCase().includes(q) ||
+                          resolvedRoom.fullLabel.toLowerCase().includes(q) ||
+                          (activeTech && activeTech.toLowerCase().includes(q)) ||
+                          (activeMgr && activeMgr.toLowerCase().includes(q));
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesStatus = selectedStatus === 'all' || item.status === selectedStatus;
     let matchesDeadline = true;
@@ -204,7 +238,8 @@ export const EquipmentManagementView: React.FC = () => {
   const handleSendAlertReminder = (alert: EquipmentExpirationAlert) => {
     dispatchEquipmentReminder(alert, 'Telegram');
     setReminderTick(t => t + 1);
-    showQuickToast(`Đã gửi nhắc hạn ${alert.equipmentCode} (${alert.trackLabel}) tới ${alert.assignedTechnician}`);
+    const activeRecipient = filterActiveStaffDisplayName(alert.assignedTechnician, inactiveStaff.names) || 'cán bộ phụ trách';
+    showQuickToast(`Đã gửi nhắc hạn ${alert.equipmentCode} (${alert.trackLabel}) tới ${activeRecipient}`);
   };
 
   const handleBatchRemindExpiring = () => {
@@ -301,8 +336,8 @@ export const EquipmentManagementView: React.FC = () => {
       yearOfManufacture: newEqYear ? parseInt(newEqYear, 10) : new Date().getFullYear(),
       serialNumber: newEqSerial || `SN-${Math.floor(Math.random() * 900000 + 100000)}`,
       room: newEqRoom.trim() || 'Chưa phân phòng',
-      assignedTechnician: newEqTech || storageService.getCurrentUser().name,
-      managerInCharge: newEqManager || 'Ban Chủ Nhiệm Khoa',
+      assignedTechnician: newEqTech.trim(),
+      managerInCharge: newEqManager.trim() || undefined,
       status: 'Hoạt động tốt',
       purchaseDate: newEqPurchaseDate,
       installationDate: newEqInstallDate || newEqPurchaseDate,
@@ -833,21 +868,23 @@ export const EquipmentManagementView: React.FC = () => {
                 <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300 border-collapse">
                   <thead className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold uppercase tracking-wider text-[11px] border-b-2 border-slate-300 dark:border-slate-700">
                     <tr>
-                      <th className="py-3.5 px-4 border-r border-slate-200 dark:border-slate-700/80">
+                      <th className="py-3.5 px-4 border-r border-slate-200 dark:border-slate-700/80 min-w-[215px]">
                         <div className="leading-tight">Mã &amp; Tên<br/>Thiết Bị</div>
                       </th>
-                      <th className="py-3.5 px-3 border-r border-slate-200 dark:border-slate-700/80">Phòng &amp; Bộ Phận</th>
-                      <th className="py-3.5 px-3 border-r border-slate-200 dark:border-slate-700/80">Model / Hãng SX</th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80">
+                      <th className="py-3.5 px-3.5 border-r border-slate-200 dark:border-slate-700/80 min-w-[195px]">
+                        <div className="leading-tight">Phòng &amp;<br/>Bộ Phận</div>
+                      </th>
+                      <th className="py-3.5 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[155px]">Model / Hãng SX</th>
+                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[165px]">
                         <div className="leading-tight">Người<br/>Quản Lý</div>
                       </th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80">
+                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[115px]">
                         <div className="leading-tight">Lịch<br/>Bảo Dưỡng</div>
                       </th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80">
+                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[135px]">
                         <div className="leading-tight">Kiểm Định<br/>&amp; Kiểm Xạ</div>
                       </th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80">
+                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[135px]">
                         <div className="leading-tight">Thời Hạn<br/>Cấp Phép</div>
                       </th>
                       <th className="py-3 px-1 text-center w-12 whitespace-nowrap">
@@ -917,11 +954,29 @@ export const EquipmentManagementView: React.FC = () => {
                             </td>
 
                             {/* Vị trí phòng & bộ phận */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80">
-                              <div className="font-semibold text-slate-800 dark:text-slate-200">{item.room}</div>
-                              <span className="inline-block mt-0.5 px-2 py-0.2 rounded-md text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                                {item.category}
-                              </span>
+                            <td className="py-4 px-3.5 border-r-2 border-slate-200 dark:border-slate-700/80 align-middle">
+                              {(() => {
+                                const roomDisplay = resolveRoomDisplay(item.room, roomsList);
+                                return (
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {roomDisplay.code && (
+                                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap shrink-0">
+                                          {roomDisplay.code}
+                                        </span>
+                                      )}
+                                      <span className="font-bold text-slate-800 dark:text-slate-100 leading-snug">
+                                        {roomDisplay.name}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap">
+                                        {item.category}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </td>
 
                             {/* Model & Hãng */}
@@ -932,15 +987,23 @@ export const EquipmentManagementView: React.FC = () => {
 
                             {/* Người quản lý & KTV */}
                             <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80">
-                              <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-start gap-1 leading-snug">
-                                <User className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                                <span className="break-words">
-                                  {item.managerInCharge || 'Chủ nhiệm khoa'}
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-snug break-words">
-                                KTV: {item.assignedTechnician}
-                              </div>
+                              {(() => {
+                                const activeManager = filterActiveStaffDisplayName(item.managerInCharge, inactiveStaff.names);
+                                const activeTech = filterActiveStaffDisplayName(item.assignedTechnician, inactiveStaff.names);
+                                return (
+                                  <>
+                                    <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-start gap-1 leading-snug">
+                                      <User className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                      <span className="break-words">
+                                        {activeManager || 'Chưa chỉ định'}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-snug break-words">
+                                      KTV: {activeTech || 'Chưa phân công'}
+                                    </div>
+                                  </>
+                                );
+                              })()}
                             </td>
 
                             {/* Lịch Bảo Dưỡng */}
@@ -1211,13 +1274,29 @@ export const EquipmentManagementView: React.FC = () => {
                         </p>
 
                         <div className="mt-4 space-y-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                          <div className="flex justify-between">
-                            <span className="text-slate-400 dark:text-slate-500">Vị trí phòng:</span>
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">{item.room}</span>
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-slate-400 dark:text-slate-500 shrink-0">Vị trí phòng:</span>
+                            {(() => {
+                              const roomDisplay = resolveRoomDisplay(item.room, roomsList);
+                              return (
+                                <span className="font-semibold text-slate-800 dark:text-slate-200 text-right flex items-center justify-end gap-1.5 flex-wrap">
+                                  {roomDisplay.code && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap">
+                                      {roomDisplay.code}
+                                    </span>
+                                  )}
+                                  <span>{roomDisplay.name}</span>
+                                </span>
+                              );
+                            })()}
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400 dark:text-slate-500">Người quản lý:</span>
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">{item.managerInCharge || item.assignedTechnician}</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              {filterActiveStaffDisplayName(item.managerInCharge, inactiveStaff.names) ||
+                                filterActiveStaffDisplayName(item.assignedTechnician, inactiveStaff.names) ||
+                                'Chưa chỉ định'}
+                            </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="font-bold text-slate-600 dark:text-slate-300">Lịch Bảo Dưỡng:</span>
@@ -1377,8 +1456,12 @@ export const EquipmentManagementView: React.FC = () => {
                             {al.expiryDateVN}
                           </td>
                           <td className="py-3 px-4">
-                            <div className="font-medium text-slate-800 dark:text-slate-200">{al.assignedTechnician}</div>
-                            <div className="text-[11px] text-slate-400">{al.managerInCharge}</div>
+                            <div className="font-medium text-slate-800 dark:text-slate-200">
+                              {filterActiveStaffDisplayName(al.assignedTechnician, inactiveStaff.names) || 'Chưa phân công'}
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              {filterActiveStaffDisplayName(al.managerInCharge, inactiveStaff.names) || 'Chưa chỉ định'}
+                            </div>
                             {rInfo && (
                               <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5">
                                 Đã nhắc {rInfo.count} lần ({rInfo.lastRemindedAt})
@@ -1707,6 +1790,7 @@ export const EquipmentManagementView: React.FC = () => {
                         value={newEqRoom}
                         onChange={setNewEqRoom}
                         options={roomOptions}
+                        badgePosition="left"
                         placeholder="Chọn phòng trong danh sách..."
                         emptyOptionLabel="-- Bỏ trống (Chưa phân phòng) --"
                         noResultsLabel="Không tìm thấy phòng phù hợp"
@@ -1716,23 +1800,27 @@ export const EquipmentManagementView: React.FC = () => {
 
                     <div>
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bác sĩ / Người quản lý phụ trách:</label>
-                      <input
-                        type="text"
-                        placeholder="Ví dụ: TS. BS. Phạm Đức Thành"
+                      <SearchableCombobox
                         value={newEqManager}
-                        onChange={e => setNewEqManager(e.target.value)}
-                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        onChange={setNewEqManager}
+                        options={staffComboboxOptions}
+                        placeholder="Tìm bác sĩ / cán bộ quản lý hoặc bỏ trống..."
+                        emptyOptionLabel="-- Bỏ trống (Chưa chỉ định) --"
+                        noResultsLabel="Không tìm thấy nhân viên đang công tác"
+                        inputClassName="!bg-white dark:!bg-slate-900 !border-slate-300 dark:!border-slate-700 !text-xs !py-2.5"
                       />
                     </div>
 
                     <div>
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">KTV vận hành chính:</label>
-                      <input
-                        type="text"
-                        placeholder="Ví dụ: KTV. Vũ Văn Hải"
+                      <SearchableCombobox
                         value={newEqTech}
-                        onChange={e => setNewEqTech(e.target.value)}
-                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                        onChange={setNewEqTech}
+                        options={staffComboboxOptions}
+                        placeholder="Tìm kỹ thuật viên hoặc bỏ trống..."
+                        emptyOptionLabel="-- Bỏ trống (Chưa phân công) --"
+                        noResultsLabel="Không tìm thấy nhân viên đang công tác"
+                        inputClassName="!bg-white dark:!bg-slate-900 !border-slate-300 dark:!border-slate-700 !text-xs !py-2.5"
                       />
                     </div>
 

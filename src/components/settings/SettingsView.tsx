@@ -25,13 +25,15 @@ interface SettingsViewProps {
   onConfirmAction: (title: string, message: string, onConfirm: () => void, isDanger?: boolean) => void;
   themeMode?: 'light' | 'dark' | 'system';
   onChangeThemeMode?: (mode: 'light' | 'dark' | 'system') => void;
+  onNavigateConfigTab?: (tab: 'telegram') => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   onShowToast,
   onConfirmAction,
   themeMode = 'system',
-  onChangeThemeMode
+  onChangeThemeMode,
+  onNavigateConfigTab
 }) => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const s = storageService.getSettings();
@@ -68,9 +70,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('Staff');
 
-  // Telegram Q&A Bot State
+  // Telegram Q&A Bot Status Summary
   const [telegramStatus, setTelegramStatus] = useState<TelegramBotStatus | null>(null);
-  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
 
   useEffect(() => {
     const unsub = firebaseSyncService.subscribe(() => {
@@ -79,45 +80,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     void aiService.getTelegramBotStatus().then((st) => setTelegramStatus(st)).catch(() => {});
     return () => unsub();
   }, []);
-
-  const handleTestTelegramBot = async () => {
-    const token = (settings.telegramBotToken || '').trim();
-    if (!token) {
-      onShowToast('Thiếu Bot Token', 'Vui lòng nhập Telegram Bot Token trước khi kiểm tra kết nối.', 'warning');
-      return;
-    }
-    setIsTestingTelegram(true);
-    try {
-      const normalizedSettings: AppSettings = {
-        ...settings,
-        telegramQaEnabled: settings.telegramQaEnabled !== false
-      };
-      storageService.saveSettings(normalizedSettings);
-      setSettings(normalizedSettings);
-      await aiService.syncContextNow();
-      const res = await aiService.testTelegramBot({
-        botToken: token,
-        defaultChatId: (settings.defaultTelegramChatId || '').trim(),
-        enabled: settings.telegramQaEnabled !== false
-      });
-      if (res.status) {
-        setTelegramStatus(res.status);
-      }
-      const botLabel = res.botUsername ? `@${res.botUsername}` : (res.botFirstName || 'Telegram Bot');
-      const extraMsg = res.messageSent
-        ? ' Đã gửi tin nhắn chào xác nhận vào Default Chat ID và kích hoạt trực hỏi đáp.'
-        : ' Đã kích hoạt Bot trực hỏi đáp tự động.';
-      onShowToast(
-        `Kết nối ${botLabel} thành công`,
-        `Bot đã sẵn sàng tiếp nhận và trả lời câu hỏi từ dữ liệu Khoa CLS.${extraMsg}`,
-        'success'
-      );
-    } catch (err) {
-      onShowToast('Lỗi Telegram Bot', err instanceof Error ? err.message : String(err), 'error');
-    } finally {
-      setIsTestingTelegram(false);
-    }
-  };
 
   const handleCopyHostname = async (hostnameToCopy: string) => {
     try {
@@ -899,96 +861,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Telegram & Drive Config */}
+        {/* Google Drive & Quick Link to Dedicated Telegram Bot Config */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <Key className="w-5 h-5 text-blue-600 mr-2" /> Kết nối Google Drive &amp; Telegram Bot Hỏi Đáp AI
+              <Key className="w-5 h-5 text-blue-600 mr-2" /> 3. Kết nối Google Drive &amp; Bot Telegram
             </h3>
-            <div className="flex items-center gap-2">
-              {telegramStatus && (
-                <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 border ${
-                  telegramStatus.pollingActive && telegramStatus.enabled
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
-                    : telegramStatus.hasToken
-                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
-                    : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                }`}>
-                  <Bot className="w-3.5 h-3.5" />
-                  {telegramStatus.pollingActive && telegramStatus.enabled
-                    ? `Đang trực hỏi đáp${telegramStatus.botUsername ? ` (@${telegramStatus.botUsername})` : ''}`
-                    : telegramStatus.hasToken
-                    ? 'Đã nhập Token (chờ kích hoạt)'
-                    : 'Chưa gắn Bot Token'}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={handleTestTelegramBot}
-                disabled={isTestingTelegram}
-                className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition"
-              >
-                {isTestingTelegram ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                <span>{isTestingTelegram ? 'Đang kiểm tra...' : 'Kiểm tra & Kích hoạt Bot'}</span>
-              </button>
-            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="text-xs space-y-4">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Telegram Bot Token</label>
-              <input
-                type="text"
-                value={settings.telegramBotToken}
-                onChange={(e) => setSettings({ ...settings, telegramBotToken: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono"
-                placeholder="123456789:ABCdefGHIjklMNOpqrs..."
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Default Telegram Chat ID</label>
-              <input
-                type="text"
-                value={settings.defaultTelegramChatId}
-                onChange={(e) => setSettings({ ...settings, defaultTelegramChatId: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono"
-                placeholder="Ví dụ: -1001234567890 hoặc ID cá nhân"
-              />
-            </div>
-
-            <div className="md:col-span-2 p-3.5 rounded-xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.telegramQaEnabled !== false}
-                  onChange={(e) => setSettings({ ...settings, telegramQaEnabled: e.target.checked })}
-                  className="mt-0.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-                />
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-100 block">
-                    Bật Trợ lý Ảo AI tự động trả lời câu hỏi trên Telegram
-                  </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Chat riêng nhắn trực tiếp câu hỏi; trong nhóm dùng lệnh <code className="font-mono font-bold">/hoi</code>, <code className="font-mono font-bold">/tomtat</code>, <code className="font-mono font-bold">/giaoban</code> hoặc tag <code className="font-mono font-bold">@bot</code>.
-                  </span>
-                </div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                Google Drive Folder ID (Lưu trữ Hồ sơ SOP / Văn bản)
               </label>
-
-              {telegramStatus && (
-                <div className="text-[11px] text-slate-600 dark:text-slate-300 shrink-0 text-right">
-                  <div>Đã trả lời: <strong>{telegramStatus.totalQuestionsAnswered || 0}</strong> câu</div>
-                  {telegramStatus.lastError && (
-                    <div className="text-rose-600 dark:text-rose-400 font-medium max-w-xs truncate" title={telegramStatus.lastError}>
-                      Lỗi: {telegramStatus.lastError}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Google Drive Folder ID (Lưu trữ Hồ sơ SOP / Văn bản)</label>
               <input
                 type="text"
                 value={settings.googleDriveFolderId}
@@ -999,7 +884,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-slate-800 dark:text-slate-100"
                 placeholder="Nhập Folder ID hoặc dán liên kết Google Drive Folder"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Dán ID hoặc URL thư mục Google Drive (tự động trích xuất Folder ID).</p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Dán ID hoặc URL thư mục Google Drive (tự động trích xuất Folder ID).
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Bot className="w-5 h-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-slate-800 dark:text-slate-100 flex flex-wrap items-center gap-2">
+                    <span>Cài Đặt Telegram Bot Hỏi Đáp AI &amp; Cảnh Báo</span>
+                    {telegramStatus && (
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                          telegramStatus.pollingActive && telegramStatus.enabled
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                            : telegramStatus.configured
+                            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                            : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                        }`}
+                      >
+                        {telegramStatus.pollingActive && telegramStatus.enabled
+                          ? `Đang hoạt động${telegramStatus.botUsername ? ` (@${telegramStatus.botUsername})` : ''}`
+                          : telegramStatus.configured
+                          ? 'Đã nhập Token'
+                          : 'Chưa cấu hình'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Cấu hình Bot Token, dò Chat ID tự động và xem hướng dẫn tạo Bot Telegram riêng cho ứng dụng tại tab chuyên biệt.
+                  </p>
+                </div>
+              </div>
+
+              {onNavigateConfigTab && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateConfigTab('telegram')}
+                  className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition-colors shrink-0 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Mở Cài Đặt Telegram Bot</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

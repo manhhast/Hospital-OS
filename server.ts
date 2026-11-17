@@ -91,6 +91,22 @@ app.post("/api/telegram/test", async (req, res) => {
   }
 });
 
+app.post("/api/telegram/detect-chats", async (req, res) => {
+  try {
+    const { botToken } = req.body || {};
+    const chats = await telegramManager.detectRecentChats(botToken);
+    res.json({
+      success: true,
+      data: chats,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error?.message || "Không thể dò Chat ID từ Telegram",
+    });
+  }
+});
+
 app.post("/api/telegram/webhook", async (req, res) => {
   try {
     await telegramManager.handleIncomingUpdate(req.body);

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   ShieldAlert, AlertTriangle, Send, Lock, Unlock, CheckCircle2, 
   Clock, FileWarning, Bell, User, MapPin, Eye, ExternalLink, Printer, Check, Copy, RefreshCw, Sparkles
 } from 'lucide-react';
-import { EquipmentItem, SafetyViolationItem } from '../../types/hospital';
+import { EquipmentItem, SafetyViolationItem, StaffProfile } from '../../types/hospital';
 import { 
   checkEquipmentSafetyInterlock, 
   dispatchSafetyInterlockAlert, 
@@ -11,6 +11,7 @@ import {
 } from '../../utils/equipmentAnalytics';
 import { formatDateVN, formatDateTimeVN, getNowVNString } from '../../utils/dateUtils';
 import { storageService } from '../../services/storageService';
+import { filterActiveStaffDisplayName, getInactiveStaffMatchers } from '../../utils/staffStatus';
 
 interface SafetyInterlockTabProps {
   equipmentList: EquipmentItem[];
@@ -30,6 +31,16 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
   const [alertSuccessInfo, setAlertSuccessInfo] = useState<{ telegramMsg: string; timestamp: string } | null>(null);
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL');
+  const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>(() => storageService.getStaffProfiles());
+
+  useEffect(() => {
+    const unsub = storageService.subscribe(() => {
+      setStaffProfiles(storageService.getStaffProfiles());
+    });
+    return () => unsub();
+  }, []);
+
+  const inactiveStaff = useMemo(() => getInactiveStaffMatchers(staffProfiles), [staffProfiles]);
 
   // Calculate real-time cross-validation violations
   const violations = checkEquipmentSafetyInterlock(equipmentList);
@@ -224,7 +235,7 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
                       <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
                         <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Phụ Trách & Chỉ Đạo</div>
                         <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">
-                          {violation.assignedTechnician} &bull; {violation.managerInCharge}
+                          {filterActiveStaffDisplayName(violation.assignedTechnician, inactiveStaff.names) || 'Chưa phân công'} &bull; {filterActiveStaffDisplayName(violation.managerInCharge, inactiveStaff.names) || 'Chưa chỉ định'}
                         </div>
                       </div>
                     </div>
@@ -397,8 +408,8 @@ ${selectedViolationForAlert.description}
 - Hôm nay: ${selectedViolationForAlert.activeCasesToday} ca
 - Tháng này: ${selectedViolationForAlert.monthlyCases} ca
 
-👤 Người phụ trách: ${selectedViolationForAlert.assignedTechnician}
-👨‍⚕️ Trưởng khoa chỉ đạo: ${selectedViolationForAlert.managerInCharge}
+👤 Người phụ trách: ${filterActiveStaffDisplayName(selectedViolationForAlert.assignedTechnician, inactiveStaff.names) || 'Chưa phân công'}
+👨‍⚕️ Trưởng khoa chỉ đạo: ${filterActiveStaffDisplayName(selectedViolationForAlert.managerInCharge, inactiveStaff.names) || 'Chưa chỉ định'}
 
 🛑 Khuyến nghị hành động ngay:
 1. Kích hoạt chế độ Khóa khẩn cấp (Safety Lockout Tagout - LOTO).

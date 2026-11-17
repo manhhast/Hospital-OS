@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Building2, X, AlertTriangle } from 'lucide-react';
 import { DepartmentUnit, EquipmentItem, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
+import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
 
 interface RoomModalProps {
   isOpen: boolean;
@@ -47,6 +48,15 @@ export const RoomModal: React.FC<RoomModalProps> = ({
   const [description, setDescription] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  const activeStaffList = useMemo(
+    () => filterActiveStaffProfiles(staffList),
+    [staffList]
+  );
+  const inactiveStaffMatchers = useMemo(
+    () => getInactiveStaffMatchers(staffList),
+    [staffList]
+  );
+
   useEffect(() => {
     if (!isOpen) return;
     setErrorMsg('');
@@ -56,8 +66,18 @@ export const RoomModal: React.FC<RoomModalProps> = ({
       setName(initialRoom.name || '');
       setDepartmentSection(initialRoom.departmentSection || fallbackDept);
       setFloor(initialRoom.floor || 'Tầng 1 - Khu Cận Lâm Sàng');
-      setManagerInCharge(normalizeNullablePlaceholder(initialRoom.managerInCharge));
-      setDeputyManager(normalizeNullablePlaceholder(initialRoom.deputyManager));
+      setManagerInCharge(
+        filterActiveStaffDisplayName(
+          normalizeNullablePlaceholder(initialRoom.managerInCharge),
+          inactiveStaffMatchers.names
+        )
+      );
+      setDeputyManager(
+        filterActiveStaffDisplayName(
+          normalizeNullablePlaceholder(initialRoom.deputyManager),
+          inactiveStaffMatchers.names
+        )
+      );
       setPrimaryEquipment(normalizeNullablePlaceholder(initialRoom.primaryEquipment));
       setPhoneExtension(initialRoom.phoneExtension || '');
       setMaxCapacityCasesPerDay(initialRoom.maxCapacityCasesPerDay || 40);
@@ -76,17 +96,17 @@ export const RoomModal: React.FC<RoomModalProps> = ({
       setStatus('Đang hoạt động');
       setDescription('');
     }
-  }, [initialRoom, departments, defaultDepartmentSection, isOpen]);
+  }, [initialRoom, departments, defaultDepartmentSection, isOpen, inactiveStaffMatchers]);
 
   const staffOptions: ComboboxOption[] = useMemo(
     () =>
-      staffList.map(s => ({
+      activeStaffList.map(s => ({
         value: s.fullName,
         label: s.fullName,
         badge: s.title || 'Nhân viên',
         subLabel: [s.departmentSection, s.room].filter(Boolean).join(' • ')
       })),
-    [staffList]
+    [activeStaffList]
   );
 
   const equipmentOptions: ComboboxOption[] = useMemo(

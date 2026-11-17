@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, Plus, UserPlus, ArrowRightLeft, UserMinus, Shield, Phone, Mail, 
   Search, CheckCircle2, UserCheck, Star, Award, ChevronRight, X
 } from 'lucide-react';
 import { ParaclinicalRoom, StaffProfile } from '../../types/hospital';
+import { filterActiveStaffProfiles } from '../../utils/staffStatus';
 
 interface RoomStaffTabProps {
   room: ParaclinicalRoom;
@@ -28,11 +29,13 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
   const [staffSearchTerm, setStaffSearchTerm] = useState('');
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
 
-  // Filter staff currently assigned to this room
-  const assignedStaff = allStaff.filter(s => s.room === room.name);
+  const activeStaff = useMemo(() => filterActiveStaffProfiles(allStaff), [allStaff]);
 
-  // Available staff to assign (not already in this room)
-  const availableStaff = allStaff.filter(s => s.room !== room.name).filter(s => 
+  // Filter active staff currently assigned to this room
+  const assignedStaff = activeStaff.filter(s => s.room === room.name);
+
+  // Available active staff to assign (not already in this room)
+  const availableStaff = activeStaff.filter(s => s.room !== room.name).filter(s => 
     s.fullName.toLowerCase().includes(staffSearchTerm.toLowerCase()) ||
     (s.specialty && s.specialty.toLowerCase().includes(staffSearchTerm.toLowerCase())) ||
     (s.title && s.title.toLowerCase().includes(staffSearchTerm.toLowerCase())) ||

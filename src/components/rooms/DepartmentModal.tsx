@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Layers, X, AlertTriangle } from 'lucide-react';
 import { DepartmentUnit, StaffProfile } from '../../types/hospital';
+import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
 
 interface DepartmentModalProps {
   isOpen: boolean;
@@ -27,13 +28,24 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
   const [description, setDescription] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  const activeStaffList = useMemo(
+    () => filterActiveStaffProfiles(staffList),
+    [staffList]
+  );
+  const inactiveStaffMatchers = useMemo(
+    () => getInactiveStaffMatchers(staffList),
+    [staffList]
+  );
+
   useEffect(() => {
     if (!isOpen) return;
     setErrorMsg('');
     if (initialDepartment) {
       setCode(initialDepartment.code || '');
       setName(initialDepartment.name || '');
-      setManagerName(initialDepartment.managerName || '');
+      setManagerName(
+        filterActiveStaffDisplayName(initialDepartment.managerName, inactiveStaffMatchers.names)
+      );
       setDescription(initialDepartment.description || '');
     } else {
       const nextNum = existingDepartments.length + 1;
@@ -42,7 +54,7 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
       setManagerName('');
       setDescription('');
     }
-  }, [initialDepartment, existingDepartments.length, isOpen]);
+  }, [initialDepartment, existingDepartments.length, isOpen, inactiveStaffMatchers]);
 
   if (!isOpen) return null;
 
@@ -169,7 +181,7 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
               className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
             >
               <option value="">-- Chọn người phụ trách bộ phận (tùy chọn) --</option>
-              {staffList.map(s => (
+              {activeStaffList.map(s => (
                 <option key={s.userId} value={s.fullName}>
                   {s.fullName} ({s.title || 'Nhân viên'})
                 </option>

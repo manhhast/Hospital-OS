@@ -174,7 +174,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md tabular-nums ${
                     isConfigActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                   }`}>
-                    6 mục
+                    {CONFIG_MODULE_IDS.length} mục
                   </span>
                 )}
               </button>
@@ -182,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold rounded-lg border border-slate-700 shadow-2xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-50 flex items-center gap-2 transform translate-x-1 group-hover:translate-x-0">
                 <div className="absolute right-full top-1/2 -translate-y-1/2 -mr-1 border-4 border-transparent border-r-slate-900 dark:border-r-slate-800"></div>
                 <Settings className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span>Menu Cấu Hình (API, Thông báo, Phân quyền, Hệ thống, Audit, GAS)</span>
+                <span>Menu Cấu Hình (Hệ thống, Telegram Bot, API, Thông báo, Phân quyền, Audit, GAS)</span>
               </div>
             </div>
           </div>

@@ -12,6 +12,7 @@ import {
   initialMeetings, initialIntegrationEndpoints, initialIntegrationPayloads, ADMIN_DEFAULT_AVATAR
 } from './mockData';
 import * as sampleDemoData from './sampleDemoData';
+import { isResignedOrEndedStaff } from '../utils/staffStatus';
 
 const PRODUCTION_MODE_KEY = 'cls_workhub_prod_clean_state_v2';
 
@@ -1406,7 +1407,9 @@ class HospitalStorageService {
       if (staffRaw) {
         const staffList: StaffProfile[] = JSON.parse(staffRaw);
         for (const s of staffList) {
-          if (!users.some(u => u.id === s.userId || u.name === s.fullName)) {
+          const isInactive = isResignedOrEndedStaff(s);
+          const existingIdx = users.findIndex(u => u.id === s.userId || u.name === s.fullName);
+          if (existingIdx < 0) {
             users.push({
               id: s.userId,
               name: s.fullName,
@@ -1416,9 +1419,14 @@ class HospitalStorageService {
               department: s.departmentSection || 'Khoa Cận Lâm Sàng',
               phone: s.phone,
               avatar: s.avatar || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
-              status: 'Active',
+              status: isInactive ? 'Inactive' : 'Active',
               password: '123456'
             });
+          } else if (users[existingIdx].id !== 'USR-ADMIN' && users[existingIdx].role !== 'Admin') {
+            users[existingIdx] = {
+              ...users[existingIdx],
+              status: isInactive ? 'Inactive' : users[existingIdx].status
+            };
           }
         }
       }
@@ -2057,15 +2065,138 @@ class HospitalStorageService {
     }
   }
 
+  private clearResignedStaffAssignments(resignedProfiles: StaffProfile[]): void {
+    const resignedNames = new Set(
+      resignedProfiles
+        .map(p => (p.fullName || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const resignedIds = new Set(
+      resignedProfiles
+        .map(p => (p.userId || '').trim())
+        .filter(Boolean)
+    );
+    if (resignedNames.size === 0 && resignedIds.size === 0) return;
+
+    const isMatchName = (val?: string) => {
+      const t = (val || '').trim().toLowerCase();
+      return Boolean(t) && resignedNames.has(t);
+    };
+
+    // 1. Clear room leaders standing on rooms
+    const rooms = this.getRooms();
+    let roomsChanged = false;
+    const nextRooms = rooms.map(r => {
+      const clearMgr = isMatchName(r.managerInCharge);
+      const clearDep = isMatchName(r.deputyManager);
+      if (!clearMgr && !clearDep) return r;
+      roomsChanged = true;
+      return {
+        ...r,
+        managerInCharge: clearMgr ? '' : r.managerInCharge,
+        deputyManager: clearDep ? '' : r.deputyManager
+      };
+    });
+    if (roomsChanged) {
+      localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(nextRooms));
+    }
+
+    // 2. Clear department manager standing on departments
+    const departments = this.getDepartments();
+    let deptsChanged = false;
+    const nextDepts = departments.map(d => {
+      if (!isMatchName(d.managerName)) return d;
+      deptsChanged = true;
+      return { ...d, managerName: undefined };
+    });
+    if (deptsChanged) {
+      localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(nextDepts));
+    }
+
+    // 3. Clear equipment manager / assigned technician
+    const equipment = this.getEquipment();
+    let eqChanged = false;
+    const nextEq = equipment.map(eq => {
+      const clearMgr = isMatchName(eq.managerInCharge);
+      const clearTech = isMatchName(eq.assignedTechnician);
+      if (!clearMgr && !clearTech) return eq;
+      eqChanged = true;
+      return {
+        ...eq,
+        managerInCharge: clearMgr ? undefined : eq.managerInCharge,
+        assignedTechnician: clearTech ? '' : eq.assignedTechnician
+      };
+    });
+    if (eqChanged) {
+      localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(nextEq));
+    }
+
+    // 4. Mark corresponding user account Inactive
+    try {
+      const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
+      if (rawUsers) {
+        const users: User[] = JSON.parse(rawUsers);
+        let usersChanged = false;
+        const nextUsers = users.map(u => {
+          if (
+            (resignedIds.has(u.id) || isMatchName(u.name)) &&
+            u.id !== 'USR-ADMIN' &&
+            u.role !== 'Admin' &&
+            u.status !== 'Inactive'
+          ) {
+            usersChanged = true;
+            return { ...u, status: 'Inactive' as const };
+          }
+          return u;
+        });
+        if (usersChanged) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
+        }
+      }
+    } catch (e) {
+      // ignore user sync error
+    }
+  }
+
   public saveStaffProfile(profile: StaffProfile): StaffProfile {
     const list = this.getStaffProfiles();
     const idx = list.findIndex(s => s.userId === profile.userId);
+    const prevProfile = idx >= 0 ? list[idx] : undefined;
     if (idx >= 0) {
       list[idx] = profile;
     } else {
       list.unshift(profile);
     }
     localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
+    if (isResignedOrEndedStaff(profile)) {
+      this.clearResignedStaffAssignments([profile]);
+    } else if (prevProfile && isResignedOrEndedStaff(prevProfile)) {
+      try {
+        const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
+        if (rawUsers) {
+          const users: User[] = JSON.parse(rawUsers);
+          const targetName = (profile.fullName || '').trim().toLowerCase();
+          let usersChanged = false;
+          const nextUsers = users.map(u => {
+            if (
+              (u.id === profile.userId || (targetName && u.name.trim().toLowerCase() === targetName)) &&
+              u.id !== 'USR-ADMIN' &&
+              u.role !== 'Admin' &&
+              u.status === 'Inactive'
+            ) {
+              usersChanged = true;
+              return { ...u, status: 'Active' as const };
+            }
+            return u;
+          });
+          if (usersChanged) {
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
+          }
+        }
+      } catch (e) {
+        // ignore user sync error
+      }
+    }
     this.logAudit('SAVE_STAFF_PROFILE', 'HR', undefined, profile);
     this.notify();
     return profile;
@@ -2082,6 +2213,10 @@ class HospitalStorageService {
       }
     }
     localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
+    const resigned = newProfiles.filter(isResignedOrEndedStaff);
+    if (resigned.length > 0) {
+      this.clearResignedStaffAssignments(resigned);
+    }
     this.logAudit('BATCH_IMPORT_STAFF', 'HR', undefined, { count: newProfiles.length });
     this.notify();
   }
@@ -2130,6 +2265,17 @@ class HospitalStorageService {
     this.logAudit('UPDATE_LEAVE_STATUS', 'HR', undefined, req);
     this.notify();
     return req;
+  }
+
+  public deleteLeaveRequest(id: string): boolean {
+    const list = this.getLeaveRequests();
+    const target = list.find(l => l.id === id);
+    if (!target) return false;
+    const next = list.filter(l => l.id !== id);
+    localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(next));
+    this.logAudit('DELETE_LEAVE_REQUEST', 'HR', target);
+    this.notify();
+    return true;
   }
 
   public getTrainingCourses(): TrainingCourse[] {

@@ -40,6 +40,37 @@ class TelegramAssistantManager {
   private contextUpdatedAt: string | undefined;
   private chatHistories = new Map<string, Array<{ sender: "user" | "assistant"; content: string }>>();
   private processedUpdateIds = new Set<number>();
+  private recentChats = new Map<
+    string,
+    { chatId: string; title: string; type: string; username?: string; lastSeenAt: string }
+  >();
+
+  private normalizeBotToken(raw?: string): string {
+    return String(raw || "")
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .replace(/^bot(?=\d+:)/i, "")
+      .trim();
+  }
+
+  private recordChatFromMessage(message: any) {
+    const chat = message?.chat;
+    if (!chat?.id) return;
+    const chatId = String(chat.id);
+    const type = String(chat.type || "private");
+    const title =
+      chat.title ||
+      [chat.first_name, chat.last_name].filter(Boolean).join(" ") ||
+      chat.username ||
+      `Chat ${chatId}`;
+    this.recentChats.set(chatId, {
+      chatId,
+      title,
+      type,
+      username: chat.username,
+      lastSeenAt: new Date().toISOString(),
+    });
+  }
 
   public updateLiveContext(ctx: any) {
     if (ctx && typeof ctx === "object") {
@@ -53,8 +84,8 @@ class TelegramAssistantManager {
   }
 
   public configure(cfg: TelegramConfigInput) {
-    const incomingToken = (cfg.botToken || "").trim();
-    const effectiveToken = incomingToken || (process.env.TELEGRAM_BOT_TOKEN || "").trim();
+    const incomingToken = this.normalizeBotToken(cfg.botToken);
+    const effectiveToken = incomingToken || this.normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN);
     const nextChatId = (cfg.defaultChatId || "").trim();
     const nextEnabled = Boolean(cfg.enabled && effectiveToken);
 
@@ -70,6 +101,7 @@ class TelegramAssistantManager {
       this.botFirstName = undefined;
       this.lastUpdateOffset = 0;
       this.lastError = undefined;
+      this.recentChats.clear();
     }
 
     if (!this.enabled) {
@@ -173,7 +205,7 @@ class TelegramAssistantManager {
   }
 
   public async testConnection(tokenInput?: string, testChatId?: string) {
-    const token = (tokenInput || this.botToken || "").trim();
+    const token = this.normalizeBotToken(tokenInput) || this.botToken;
     if (!token) {
       throw new Error("Vui lòng nhập Telegram Bot Token trước khi kiểm tra.");
     }
@@ -182,6 +214,16 @@ class TelegramAssistantManager {
     this.botUsername = me.username;
     this.botFirstName = me.first_name;
     this.lastError = undefined;
+
+    // Register helpful slash commands on the bot menu
+    await this.telegramApiCall(token, "setMyCommands", {
+      commands: [
+        { command: "tomtat", description: "Tóm tắt nhanh giao ban toàn khoa" },
+        { command: "giaoban", description: "Báo cáo số ca, thiết bị & lịch trực hôm nay" },
+        { command: "hoi", description: "Hỏi Trợ lý AI trong nhóm chat" },
+        { command: "help", description: "Xem hướng dẫn sử dụng trợ lý" },
+      ],
+    }).catch(() => {});
 
     let messageSent = false;
     const targetChatId = (testChatId || this.defaultChatId || "").trim();
@@ -206,6 +248,105 @@ class TelegramAssistantManager {
     };
   }
 
+  public async detectRecentChats(tokenInput?: string) {
+    const token = this.normalizeBotToken(tokenInput) || this.botToken;
+    if (!token) {
+      throw new Error("Vui lòng nhập Telegram Bot Token trước khi dò Chat ID.");
+    }
+
+    const isSameConfiguredBot = token === this.botToken;
+    if (isSameConfiguredBot && this.pollingActive && this.recentChats.size > 0) {
+      return Array.from(this.recentChats.values()).sort((a, b) =>
+        b.lastSeenAt.localeCompare(a.lastSeenAt)
+      );
+    }
+
+    // Validate token first so invalid token errors are crystal clear
+    try {
+      const me = await this.telegramApiCall(token, "getMe");
+      if (isSameConfiguredBot) {
+        this.botUsername = me.username;
+        this.botFirstName = me.first_name;
+      }
+    } catch (err: any) {
+      const code = err?.statusCode;
+      if (code === 401 || code === 404) {
+        throw new Error("Telegram Bot Token không hợp lệ (lỗi 401/404). Vui lòng sao chép đúng Token từ @BotFather.");
+      }
+      throw new Error(`Không thể kết nối Telegram với Bot Token này: ${err?.message || "Lỗi mạng"}`);
+    }
+
+    const wasPollingSameToken = isSameConfiguredBot && this.pollingActive;
+    if (wasPollingSameToken) {
+      this.stopPolling();
+      await new Promise((r) => setTimeout(r, 350));
+    }
+
+    try {
+      // Clear webhook if one was previously configured on this bot
+      await this.telegramApiCall(token, "deleteWebhook", {
+        drop_pending_updates: false,
+      }).catch(() => {});
+
+      let updates: any[] = [];
+      try {
+        updates = await this.telegramApiCall(token, "getUpdates", {
+          limit: 50,
+          timeout: 0,
+          allowed_updates: ["message", "edited_message", "channel_post", "my_chat_member", "chat_member"],
+        });
+      } catch (err: any) {
+        if (err?.statusCode === 409) {
+          // Wait briefly for aborted long-poll connection on Telegram edge to settle, then retry once
+          await new Promise((r) => setTimeout(r, 1200));
+          try {
+            updates = await this.telegramApiCall(token, "getUpdates", {
+              limit: 50,
+              timeout: 0,
+              allowed_updates: ["message", "edited_message", "channel_post", "my_chat_member", "chat_member"],
+            });
+          } catch (retryErr: any) {
+            if (isSameConfiguredBot && this.recentChats.size > 0) {
+              return Array.from(this.recentChats.values()).sort((a, b) =>
+                b.lastSeenAt.localeCompare(a.lastSeenAt)
+              );
+            }
+            if (retryErr?.statusCode === 409) {
+              throw new Error(
+                "Bot Token này đang có một kết nối lấy tin (getUpdates) khác đang chạy cùng lúc (lỗi 409 Conflict). Hãy đóng ứng dụng/tab khác đang dùng chung Bot Token hoặc thử lại sau vài giây."
+              );
+            }
+            throw retryErr;
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      if (Array.isArray(updates)) {
+        for (const upd of updates) {
+          const chatHolder =
+            upd?.message ||
+            upd?.edited_message ||
+            upd?.channel_post ||
+            upd?.my_chat_member ||
+            upd?.chat_member;
+          if (chatHolder?.chat) {
+            this.recordChatFromMessage(chatHolder);
+          }
+        }
+      }
+    } finally {
+      if (wasPollingSameToken && this.enabled && this.botToken) {
+        this.startPolling();
+      }
+    }
+
+    return Array.from(this.recentChats.values()).sort((a, b) =>
+      b.lastSeenAt.localeCompare(a.lastSeenAt)
+    );
+  }
+
   public async handleIncomingUpdate(update: any): Promise<void> {
     if (!update || typeof update !== "object") return;
     const updateId = Number(update.update_id);
@@ -216,6 +357,16 @@ class TelegramAssistantManager {
         const first = this.processedUpdateIds.values().next().value;
         if (first !== undefined) this.processedUpdateIds.delete(first);
       }
+    }
+
+    const anyChatHolder =
+      update.message ||
+      update.edited_message ||
+      update.channel_post ||
+      update.my_chat_member ||
+      update.chat_member;
+    if (anyChatHolder?.chat) {
+      this.recordChatFromMessage(anyChatHolder);
     }
 
     const message = update.message || update.edited_message;
@@ -364,7 +515,9 @@ class TelegramAssistantManager {
 
           const url = `https://api.telegram.org/bot${this.botToken}/getUpdates?offset=${
             this.lastUpdateOffset
-          }&timeout=20&allowed_updates=${encodeURIComponent(JSON.stringify(["message"]))}`;
+          }&timeout=20&allowed_updates=${encodeURIComponent(
+            JSON.stringify(["message", "edited_message", "channel_post", "my_chat_member"])
+          )}`;
 
           const res = await fetch(url, { signal: this.pollAbortController.signal });
           const payload: any = await res.json();

@@ -4,10 +4,12 @@ import {
   Calendar, User, MapPin, FileText, Cpu, Zap, Award, AlertCircle, 
   Plus, History, Printer, Check, Edit3, Save, Trash2, RotateCcw, AlertOctagon
 } from 'lucide-react';
-import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog, ParaclinicalRoom } from '../../types/hospital';
+import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
+import { formatRoomStorageValue, resolveRoomDisplay } from '../../utils/roomDisplay';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
+import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
 
 interface EquipmentDetailModalProps {
   equipment: EquipmentItem;
@@ -32,12 +34,35 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [roomsList, setRoomsList] = useState<ParaclinicalRoom[]>(() => storageService.getRooms());
+  const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>(() => storageService.getStaffProfiles());
 
   useEffect(() => {
     return storageService.subscribe(() => {
       setRoomsList(storageService.getRooms());
+      setStaffProfiles(storageService.getStaffProfiles());
     });
   }, []);
+
+  const activeStaffProfiles = useMemo(
+    () => filterActiveStaffProfiles(staffProfiles),
+    [staffProfiles]
+  );
+
+  const inactiveStaff = useMemo(
+    () => getInactiveStaffMatchers(staffProfiles),
+    [staffProfiles]
+  );
+
+  const staffOptions: ComboboxOption[] = useMemo(
+    () =>
+      activeStaffProfiles.map((s) => ({
+        value: s.fullName,
+        label: s.fullName,
+        badge: s.title || 'Nhân viên',
+        subLabel: [s.departmentSection, s.room].filter(Boolean).join(' • ')
+      })),
+    [activeStaffProfiles]
+  );
 
   // Tab 1: Profile form state
   const [editCode, setEditCode] = useState(equipment.code || '');
@@ -49,11 +74,25 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [editYearOfManufacture, setEditYearOfManufacture] = useState<number | string>(equipment.yearOfManufacture || '');
   const [editSerialNumber, setEditSerialNumber] = useState(equipment.serialNumber || '');
   const [editRoom, setEditRoom] = useState(() => {
-    const r = (equipment.room || '').trim();
-    return r === 'Chưa phân phòng' ? '' : r;
+    const initialRooms = storageService.getRooms();
+    const resolved = resolveRoomDisplay(equipment.room, initialRooms);
+    if (!equipment.room || equipment.room === 'Chưa phân phòng' || equipment.room === 'Kho thiết bị / Chưa phân phòng') {
+      return '';
+    }
+    return resolved.matchedRoom ? formatRoomStorageValue(resolved.matchedRoom) : (equipment.room || '').trim();
   });
-  const [editAssignedTechnician, setEditAssignedTechnician] = useState(equipment.assignedTechnician || '');
-  const [editManagerInCharge, setEditManagerInCharge] = useState(equipment.managerInCharge || '');
+  const [editAssignedTechnician, setEditAssignedTechnician] = useState(() =>
+    filterActiveStaffDisplayName(
+      equipment.assignedTechnician,
+      getInactiveStaffMatchers(storageService.getStaffProfiles()).names
+    )
+  );
+  const [editManagerInCharge, setEditManagerInCharge] = useState(() =>
+    filterActiveStaffDisplayName(
+      equipment.managerInCharge,
+      getInactiveStaffMatchers(storageService.getStaffProfiles()).names
+    )
+  );
   const [editInstallationDate, setEditInstallationDate] = useState(equipment.installationDate || '');
   const [editPurchaseDate, setEditPurchaseDate] = useState(equipment.purchaseDate || '');
   const [editPurchasePrice, setEditPurchasePrice] = useState<string>(equipment.purchasePrice ? String(equipment.purchasePrice) : '');
@@ -135,10 +174,21 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     setEditOriginCountry(equipment.originCountry || '');
     setEditYearOfManufacture(equipment.yearOfManufacture || '');
     setEditSerialNumber(equipment.serialNumber || '');
-    const normalizedRoom = (equipment.room || '').trim();
-    setEditRoom(normalizedRoom === 'Chưa phân phòng' ? '' : normalizedRoom);
-    setEditAssignedTechnician(equipment.assignedTechnician || '');
-    setEditManagerInCharge(equipment.managerInCharge || '');
+    const latestRooms = storageService.getRooms();
+    const resolvedRoom = resolveRoomDisplay(equipment.room, latestRooms);
+    const normalizedRoom =
+      !equipment.room || equipment.room === 'Chưa phân phòng' || equipment.room === 'Kho thiết bị / Chưa phân phòng'
+        ? ''
+        : resolvedRoom.matchedRoom
+        ? formatRoomStorageValue(resolvedRoom.matchedRoom)
+        : (equipment.room || '').trim();
+    setEditRoom(normalizedRoom);
+    setEditAssignedTechnician(
+      filterActiveStaffDisplayName(equipment.assignedTechnician, inactiveStaff.names)
+    );
+    setEditManagerInCharge(
+      filterActiveStaffDisplayName(equipment.managerInCharge, inactiveStaff.names)
+    );
     setEditInstallationDate(equipment.installationDate || '');
     setEditPurchaseDate(equipment.purchaseDate || '');
     setEditPurchasePrice(equipment.purchasePrice ? String(equipment.purchasePrice) : '');
@@ -234,10 +284,20 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     setEditOriginCountry(equipment.originCountry || '');
     setEditYearOfManufacture(equipment.yearOfManufacture || '');
     setEditSerialNumber(equipment.serialNumber || '');
-    const normalizedRoom = (equipment.room || '').trim();
-    setEditRoom(normalizedRoom === 'Chưa phân phòng' ? '' : normalizedRoom);
-    setEditAssignedTechnician(equipment.assignedTechnician || '');
-    setEditManagerInCharge(equipment.managerInCharge || '');
+    const resolvedRoom = resolveRoomDisplay(equipment.room, roomsList);
+    const normalizedRoom =
+      !equipment.room || equipment.room === 'Chưa phân phòng' || equipment.room === 'Kho thiết bị / Chưa phân phòng'
+        ? ''
+        : resolvedRoom.matchedRoom
+        ? formatRoomStorageValue(resolvedRoom.matchedRoom)
+        : (equipment.room || '').trim();
+    setEditRoom(normalizedRoom);
+    setEditAssignedTechnician(
+      filterActiveStaffDisplayName(equipment.assignedTechnician, inactiveStaff.names)
+    );
+    setEditManagerInCharge(
+      filterActiveStaffDisplayName(equipment.managerInCharge, inactiveStaff.names)
+    );
     setEditInstallationDate(equipment.installationDate || '');
     setEditPurchaseDate(equipment.purchaseDate || '');
     setEditPurchasePrice(equipment.purchasePrice ? String(equipment.purchasePrice) : '');
@@ -464,20 +524,34 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     }
   };
 
+  const headerRoomDisplay = useMemo(
+    () => resolveRoomDisplay(equipment.room, roomsList),
+    [equipment.room, roomsList]
+  );
+
   const roomOptions: ComboboxOption[] = useMemo(() => {
-    const opts: ComboboxOption[] = roomsList.map((r) => ({
-      value: r.name,
-      label: r.name,
-      badge: r.code || r.departmentSection,
-      subLabel: [r.departmentSection, r.floor, r.status].filter(Boolean).join(' • ')
-    }));
+    const opts: ComboboxOption[] = roomsList.map((r) => {
+      const full = formatRoomStorageValue(r);
+      return {
+        value: full,
+        label: r.name,
+        badge: r.code || undefined,
+        closedLabel: full,
+        subLabel: [r.departmentSection, r.floor, r.status].filter(Boolean).join(' • ')
+      };
+    });
     const current = editRoom.trim();
-    if (current && current !== 'Chưa phân phòng' && !roomsList.some((r) => r.name === current)) {
+    if (
+      current &&
+      current !== 'Chưa phân phòng' &&
+      !opts.some((opt) => opt.value.toLowerCase() === current.toLowerCase())
+    ) {
       opts.unshift({
         value: current,
         label: current,
         badge: 'Hiện tại',
-        subLabel: 'Tên phòng đang lưu trước đó'
+        closedLabel: current,
+        subLabel: 'Vị trí phòng đang lưu trước đó'
       });
     }
     return opts;
@@ -594,9 +668,16 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <span className="text-[11px] text-slate-400 dark:text-slate-400 font-medium flex items-center gap-1">
               <MapPin className="w-3 h-3 text-indigo-500" /> Vị trí phòng máy
             </span>
-            <p className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 truncate" title={equipment.room}>
-              {equipment.room}
-            </p>
+            <div className="mt-1 flex items-center gap-1.5 min-w-0" title={headerRoomDisplay.fullLabel}>
+              {headerRoomDisplay.code && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                  {headerRoomDisplay.code}
+                </span>
+              )}
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                {headerRoomDisplay.name}
+              </p>
+            </div>
           </div>
 
           <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 shadow-xs">
@@ -867,6 +948,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                           value={editRoom}
                           onChange={setEditRoom}
                           options={roomOptions}
+                          badgePosition="left"
                           placeholder="Chọn phòng trong danh sách..."
                           emptyOptionLabel="-- Bỏ trống (Chưa phân phòng) --"
                           noResultsLabel="Không tìm thấy phòng phù hợp"
@@ -875,20 +957,26 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                       </div>
                       <div>
                         <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Bác sĩ / Cán bộ quản lý:</label>
-                        <input
-                          type="text"
+                        <SearchableCombobox
                           value={editManagerInCharge}
-                          onChange={e => setEditManagerInCharge(e.target.value)}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                          onChange={setEditManagerInCharge}
+                          options={staffOptions}
+                          placeholder="Chọn bác sĩ / cán bộ quản lý..."
+                          emptyOptionLabel="-- Bỏ trống (Chưa chỉ định) --"
+                          noResultsLabel="Không tìm thấy nhân viên đang công tác"
+                          inputClassName="!bg-white dark:!bg-slate-900 !border-slate-200 dark:!border-slate-700 !text-xs !py-2.5 font-semibold"
                         />
                       </div>
                       <div>
                         <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kỹ thuật viên vận hành chính:</label>
-                        <input
-                          type="text"
+                        <SearchableCombobox
                           value={editAssignedTechnician}
-                          onChange={e => setEditAssignedTechnician(e.target.value)}
-                          className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                          onChange={setEditAssignedTechnician}
+                          options={staffOptions}
+                          placeholder="Chọn kỹ thuật viên vận hành..."
+                          emptyOptionLabel="-- Bỏ trống (Chưa phân công) --"
+                          noResultsLabel="Không tìm thấy nhân viên đang công tác"
+                          inputClassName="!bg-white dark:!bg-slate-900 !border-slate-200 dark:!border-slate-700 !text-xs !py-2.5 font-semibold"
                         />
                       </div>
                       <div>
@@ -1043,12 +1131,29 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                         </p>
                       </div>
                       <div>
+                        <span className="text-slate-400 dark:text-slate-500 font-medium">Vị trí phòng đặt máy:</span>
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          {headerRoomDisplay.code && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                              {headerRoomDisplay.code}
+                            </span>
+                          )}
+                          <span className="font-bold text-slate-800 dark:text-slate-200">
+                            {headerRoomDisplay.name}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
                         <span className="text-slate-400 dark:text-slate-500 font-medium">Bác sĩ / Cán bộ quản lý:</span>
-                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{equipment.managerInCharge || 'Chủ nhiệm khoa'}</p>
+                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                          {filterActiveStaffDisplayName(equipment.managerInCharge, inactiveStaff.names) || 'Chưa chỉ định'}
+                        </p>
                       </div>
                       <div>
                         <span className="text-slate-400 dark:text-slate-500 font-medium">Kỹ thuật viên vận hành chính:</span>
-                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{equipment.assignedTechnician}</p>
+                        <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                          {filterActiveStaffDisplayName(equipment.assignedTechnician, inactiveStaff.names) || 'Chưa phân công'}
+                        </p>
                       </div>
                       <div>
                         <span className="text-slate-400 dark:text-slate-500 font-medium">Nguyên giá đầu tư / mua sắm:</span>
