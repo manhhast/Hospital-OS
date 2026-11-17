@@ -523,7 +523,10 @@ class FirebaseSyncService {
           const snap = await getDoc(docRef);
           if (snap.exists()) {
             const data = snap.data() as { items?: Record<string, unknown>[] };
-            if (Array.isArray(data.items) && data.items.length > 0) {
+            if (
+              Array.isArray(data.items) &&
+              (data.items.length > 0 || bucketKey === 'sync_history' || bucketKey === 'notifications')
+            ) {
               storageService.applyRemoteBucketData(bucketKey, data.items);
             }
             syncedCount++;

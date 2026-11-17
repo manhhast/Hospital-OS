@@ -629,10 +629,23 @@ export interface ReportSheetYearConfig {
   updatedAt?: string;
 }
 
+export type AssistantMemoryCategory = 'fact' | 'preference' | 'rule' | 'correction';
+
+export interface AssistantMemoryItem {
+  id: string;
+  category: AssistantMemoryCategory;
+  content: string;
+  source: 'auto' | 'user' | 'feedback' | 'telegram';
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface AppSettings {
   telegramBotToken: string;
   defaultTelegramChatId: string;
   telegramQaEnabled?: boolean;
+  aiWebSearchEnabled?: boolean;
+  assistantMemories?: AssistantMemoryItem[];
   googleDriveFolderId: string;
   // 1. Google Sheet Báo Cáo Số Ca (Case Reports Data)
   reportSheetYear?: number;

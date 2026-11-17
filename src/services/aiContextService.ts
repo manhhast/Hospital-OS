@@ -1,4 +1,5 @@
 import { storageService } from './storageService';
+import type { AssistantMemoryItem } from '../types/hospital';
 import {
   getKnownReportYears,
   REPORT_MONTHS,
@@ -257,6 +258,10 @@ export interface LiveHospitalContextSnapshot {
       sheetNd: number | string;
     }>;
   };
+  assistantMemory?: {
+    webSearchEnabled: boolean;
+    memories: AssistantMemoryItem[];
+  };
 }
 
 const WEEKDAY_NAMES_VI = [
@@ -466,7 +471,7 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
   }
 
   allRecordedDays.sort((a, b) => b.dateIso.localeCompare(a.dateIso));
-  const recentRecordedDays = allRecordedDays.slice(0, 15);
+  const recentRecordedDays = allRecordedDays.slice(0, 45);
   const latestRecordedDay = recentRecordedDays[0] || null;
   const previousRecordedDay = recentRecordedDays[1] || null;
 
@@ -795,6 +800,10 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
         summary: e.summary
       })),
       pendingDiscrepancies: pendingDiscrepancies.slice(0, 20)
+    },
+    assistantMemory: {
+      webSearchEnabled: storageService.getSettings().aiWebSearchEnabled !== false,
+      memories: storageService.getAssistantMemories().slice(0, 60)
     }
   };
 }
@@ -831,6 +840,8 @@ export async function syncLiveContextToServer(force = false): Promise<boolean> {
       sh: liveContext.shifts.todayAndUpcoming.length,
       doc: liveContext.documents.totalCount,
       sy: liveContext.syncHistory.pendingDiscrepanciesCount,
+      mem: (liveContext.assistantMemory?.memories || []).map(m => m.id).join(','),
+      web: liveContext.assistantMemory?.webSearchEnabled !== false,
       tg: botToken ? `${botToken.slice(-6)}_${enabled}_${defaultChatId}` : 'none'
     });
 
@@ -846,6 +857,30 @@ export async function syncLiveContextToServer(force = false): Promise<boolean> {
 
     if (res.ok) {
       lastSyncPayloadHash = quickSignature;
+      try {
+        const json = await res.json();
+        const tgMemories = Array.isArray(json?.telegramLearnedMemories)
+          ? json.telegramLearnedMemories
+          : [];
+        if (tgMemories.length > 0) {
+          const existingSet = new Set(
+            storageService.getAssistantMemories().map((m) => m.content.trim().toLowerCase())
+          );
+          for (const tm of tgMemories) {
+            const clean = String(tm?.content || '').trim();
+            if (clean && !existingSet.has(clean.toLowerCase())) {
+              existingSet.add(clean.toLowerCase());
+              storageService.addAssistantMemory({
+                content: clean,
+                category: tm.category || 'fact',
+                source: 'telegram'
+              });
+            }
+          }
+        }
+      } catch {
+        // ignore parse edge cases
+      }
       return true;
     }
     return false;

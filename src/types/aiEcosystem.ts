@@ -156,6 +156,11 @@ export interface SmartAssistantMetricChip {
   tone?: 'blue' | 'emerald' | 'amber' | 'rose' | 'indigo' | 'slate';
 }
 
+export interface SmartAssistantWebSource {
+  title: string;
+  uri: string;
+}
+
 export interface SmartAssistantMessage {
   id: string;
   sender: 'user' | 'assistant';
@@ -164,6 +169,11 @@ export interface SmartAssistantMessage {
   highlightedMetrics?: SmartAssistantMetricChip[];
   actionChecklist?: string[];
   dataSourcesUsed?: string[];
+  webSources?: SmartAssistantWebSource[];
+  searchQueries?: string[];
+  usedWebSearch?: boolean;
+  newlyLearnedNote?: string;
+  feedback?: 'up' | 'down';
   suggestedFollowUps?: string[];
   modelUsed?: string;
   usedLiveContext?: boolean;

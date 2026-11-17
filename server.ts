@@ -47,6 +47,7 @@ app.post("/api/assistant/sync-context", (req, res) => {
     res.json({
       success: true,
       telegram: telegramManager.getStatus(),
+      telegramLearnedMemories: telegramManager.getLearnedMemories(),
     });
   } catch (error: any) {
     res.status(500).json({
@@ -121,7 +122,7 @@ app.post("/api/telegram/webhook", async (req, res) => {
 // ==========================================
 app.post("/api/ai/assistant-chat", async (req, res) => {
   try {
-    const { question, history, liveContext, userName } = req.body || {};
+    const { question, history, liveContext, userName, learnedMemories, useWebSearch } = req.body || {};
     if (!question || !String(question).trim()) {
       return res.status(400).json({ success: false, error: "Vui lòng nhập câu hỏi." });
     }
@@ -134,6 +135,8 @@ app.post("/api/ai/assistant-chat", async (req, res) => {
       question: String(question).trim(),
       history: Array.isArray(history) ? history : [],
       liveContext: effectiveContext,
+      learnedMemories: Array.isArray(learnedMemories) ? learnedMemories : undefined,
+      useWebSearch: typeof useWebSearch === "boolean" ? useWebSearch : undefined,
       userName: userName || "Cán bộ Khoa CLS",
       channel: "web",
     });

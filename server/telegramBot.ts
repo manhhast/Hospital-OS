@@ -1,4 +1,7 @@
-import { askHospitalAssistant, buildDeterministicAssistantAnswer } from "./assistantEngine";
+import {
+  askHospitalAssistant,
+  type LearnedMemoryEntry,
+} from "./assistantEngine";
 
 export interface TelegramConfigInput {
   botToken: string;
@@ -39,6 +42,7 @@ class TelegramAssistantManager {
   private liveContext: any = null;
   private contextUpdatedAt: string | undefined;
   private chatHistories = new Map<string, Array<{ sender: "user" | "assistant"; content: string }>>();
+  private telegramLearnedMemories: LearnedMemoryEntry[] = [];
   private processedUpdateIds = new Set<number>();
   private recentChats = new Map<
     string,
@@ -81,6 +85,44 @@ class TelegramAssistantManager {
 
   public getLiveContext() {
     return this.liveContext;
+  }
+
+  public getLearnedMemories(): LearnedMemoryEntry[] {
+    return this.telegramLearnedMemories;
+  }
+
+  private addLearnedMemory(entry: LearnedMemoryEntry) {
+    const clean = (entry.content || "").trim().replace(/\s+/g, " ");
+    if (!clean || clean.length < 3) return;
+    const normalized = clean.toLowerCase();
+    if (this.telegramLearnedMemories.some((m) => m.content.trim().toLowerCase() === normalized)) {
+      return;
+    }
+    this.telegramLearnedMemories = [
+      {
+        id: `TGMEM-${Date.now().toString().slice(-6)}`,
+        category: entry.category || "fact",
+        content: clean.slice(0, 400),
+        source: "telegram" as const,
+        createdAt: new Date().toLocaleString("sv-SE").replace("T", " ").slice(0, 16),
+      },
+      ...this.telegramLearnedMemories,
+    ].slice(0, 40);
+  }
+
+  private getMergedMemories(): LearnedMemoryEntry[] {
+    const fromApp: LearnedMemoryEntry[] = Array.isArray(this.liveContext?.assistantMemory?.memories)
+      ? this.liveContext.assistantMemory.memories
+      : [];
+    const seen = new Set<string>();
+    const merged: LearnedMemoryEntry[] = [];
+    for (const item of [...this.telegramLearnedMemories, ...fromApp]) {
+      const key = String(item?.content || "").trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+    return merged.slice(0, 50);
   }
 
   public configure(cfg: TelegramConfigInput) {
@@ -156,9 +198,31 @@ class TelegramAssistantManager {
   }
 
   private formatMarkdownToTelegramHtml(text: string): string {
-    // Convert **bold** safely while escaping HTML entities
-    const escaped = this.escapeHtml(text);
-    return escaped.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    // Extract safe markdown links [title](https://...) before escaping
+    const linkPlaceholders: Array<{ token: string; html: string }> = [];
+    const withLinkTokens = String(text || "").replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      (_m, label, url) => {
+        const token = `@@TGLINK_${linkPlaceholders.length}@@`;
+        const safeUrl = url.replace(/"/g, "&quot;");
+        linkPlaceholders.push({
+          token,
+          html: `<a href="${safeUrl}">${this.escapeHtml(label)}</a>`,
+        });
+        return token;
+      }
+    );
+
+    let formatted = this.escapeHtml(withLinkTokens)
+      .replace(/^###\s+(.+)$/gm, "<b>$1</b>")
+      .replace(/^##\s+(.+)$/gm, "<b>$1</b>")
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>");
+
+    for (const lp of linkPlaceholders) {
+      formatted = formatted.replace(lp.token, lp.html);
+    }
+    return formatted;
   }
 
   private splitTelegramMessage(text: string, maxLen = 3800): string[] {
@@ -194,10 +258,10 @@ class TelegramAssistantManager {
           disable_web_page_preview: true,
         });
       } catch {
-        // Fallback plain text if any HTML tag edge case happens
+        // Fallback plain text if any HTML tag spans chunk boundary
         await this.telegramApiCall(token, "sendMessage", {
           chat_id: chatId,
-          text: chunk.replace(/<\/?b>/g, ""),
+          text: chunk.replace(/<\/?(b|i|code|a)[^>]*>/g, ""),
           disable_web_page_preview: true,
         });
       }
@@ -215,12 +279,12 @@ class TelegramAssistantManager {
     this.botFirstName = me.first_name;
     this.lastError = undefined;
 
-    // Register helpful slash commands on the bot menu
     await this.telegramApiCall(token, "setMyCommands", {
       commands: [
         { command: "tomtat", description: "Tóm tắt nhanh giao ban toàn khoa" },
         { command: "giaoban", description: "Báo cáo số ca, thiết bị & lịch trực hôm nay" },
-        { command: "hoi", description: "Hỏi Trợ lý AI trong nhóm chat" },
+        { command: "hoi", description: "Hỏi Trợ lý AI (dữ liệu app + Internet)" },
+        { command: "nho", description: "Dạy Trợ lý ghi nhớ quy ước hoặc kiến thức mới" },
         { command: "help", description: "Xem hướng dẫn sử dụng trợ lý" },
       ],
     }).catch(() => {});
@@ -229,12 +293,12 @@ class TelegramAssistantManager {
     const targetChatId = (testChatId || this.defaultChatId || "").trim();
     if (targetChatId) {
       const ctxStatus = this.liveContext
-        ? `Đã kết nối dữ liệu thực tế (${this.liveContext?.caseReports?.monthlyTotals?.length || 0} tháng báo cáo, ${this.liveContext?.equipment?.totalCount || 0} thiết bị, ${this.liveContext?.rooms?.roomsCount || 0} phòng).`
-        : "Đang chờ đồng bộ ảnh dữ liệu mới nhất từ trình duyệt.";
+        ? `Đã kết nối dữ liệu thực tế (${this.liveContext?.caseReports?.monthlyTotals?.length || 0} tháng báo cáo, ${this.liveContext?.equipment?.totalCount || 0} thiết bị, ${this.liveContext?.rooms?.roomsCount || 0} phòng) + tra cứu Internet.`
+        : "Đã sẵn sàng tra cứu Internet và đang chờ đồng bộ ảnh dữ liệu từ trình duyệt.";
 
       await this.sendMessage(
         targetChatId,
-        `🤖 **Trợ Lý Ảo CLS WorkHub (@${me.username}) đã sẵn sàng!**\n${ctxStatus}\n\nBạn có thể nhắn trực tiếp câu hỏi tại đây (VD: "Số ca ngày gần nhất?", "Máy nào sắp hết hạn bảo trì?", "Hôm nay ai trực?").`,
+        `🤖 **Trợ Lý Ảo CLS WorkHub (@${me.username}) đã sẵn sàng!**\n${ctxStatus}\n\nBạn có thể hỏi bất kỳ điều gì từ số liệu khoa đến kiến thức y khoa / thời sự (VD: "Báo cáo chi tiết số liệu ngày 16?", "Máy nào sắp hết hạn bảo trì?", "Quy định mới về kiểm chuẩn xét nghiệm?").\nHoặc dùng /nho <nội dung> để dạy tôi ghi nhớ quy ước của khoa.`,
         token
       );
       messageSent = true;
@@ -261,7 +325,6 @@ class TelegramAssistantManager {
       );
     }
 
-    // Validate token first so invalid token errors are crystal clear
     try {
       const me = await this.telegramApiCall(token, "getMe");
       if (isSameConfiguredBot) {
@@ -271,7 +334,9 @@ class TelegramAssistantManager {
     } catch (err: any) {
       const code = err?.statusCode;
       if (code === 401 || code === 404) {
-        throw new Error("Telegram Bot Token không hợp lệ (lỗi 401/404). Vui lòng sao chép đúng Token từ @BotFather.");
+        throw new Error(
+          "Telegram Bot Token không hợp lệ (lỗi 401/404). Vui lòng sao chép đúng Token từ @BotFather."
+        );
       }
       throw new Error(`Không thể kết nối Telegram với Bot Token này: ${err?.message || "Lỗi mạng"}`);
     }
@@ -279,11 +344,10 @@ class TelegramAssistantManager {
     const wasPollingSameToken = isSameConfiguredBot && this.pollingActive;
     if (wasPollingSameToken) {
       this.stopPolling();
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 400));
     }
 
     try {
-      // Clear webhook if one was previously configured on this bot
       await this.telegramApiCall(token, "deleteWebhook", {
         drop_pending_updates: false,
       }).catch(() => {});
@@ -297,7 +361,6 @@ class TelegramAssistantManager {
         });
       } catch (err: any) {
         if (err?.statusCode === 409) {
-          // Wait briefly for aborted long-poll connection on Telegram edge to settle, then retry once
           await new Promise((r) => setTimeout(r, 1200));
           try {
             updates = await this.telegramApiCall(token, "getUpdates", {
@@ -381,7 +444,6 @@ class TelegramAssistantManager {
     const rawText = String(message.text || "").trim();
     if (!chatId || !rawText) return;
 
-    // In group chats, respond only when addressed via command (/hoi, /ask, /tomtat, /giaoban, /help, /start) or @mention or reply to bot
     const isCommand = rawText.startsWith("/");
     const botMention = this.botUsername ? `@${this.botUsername.toLowerCase()}` : "";
     const mentionsBot = botMention ? rawText.toLowerCase().includes(botMention) : false;
@@ -411,17 +473,35 @@ class TelegramAssistantManager {
 
       if (lower.startsWith("/start") || lower.startsWith("/help")) {
         const helpMsg =
-          `🏥 **Trợ Lý Ảo Khoa Cận Lâm Sàng (CLS WorkHub)**\n` +
-          `Tôi tổng hợp trực tiếp toàn bộ dữ liệu đang có trong ứng dụng để giải đáp cho bạn.\n\n` +
+          `🏥 **Trợ Lý Ảo Thông Minh Khoa Cận Lâm Sàng (CLS WorkHub)**\n` +
+          `Tôi kết nối trực tiếp dữ liệu khoa (số ca, máy móc, lịch trực, nhân sự, SOP) **và tra cứu Internet trực tiếp**, đồng thời ghi nhớ các quy ước bạn dạy.\n\n` +
           `📌 **Lệnh nhanh:**\n` +
-          `• /tomtat hoặc /giaoban — Tóm tắt nhanh số ca, thiết bị, công việc\n` +
-          `• /hoi <câu hỏi> — Hỏi trong nhóm chat\n\n` +
-          `💬 **Hoặc nhắn câu hỏi tự nhiên (chat riêng):**\n` +
-          `• "Số ca ngày gần nhất và tổng kết tháng này?"\n` +
+          `• /tomtat hoặc /giaoban — Tóm tắt giao ban toàn khoa\n` +
+          `• /hoi <câu hỏi> — Hỏi Trợ lý trong nhóm chat\n` +
+          `• /nho <quy ước/kiến thức> — Dạy Trợ lý ghi nhớ lâu dài\n\n` +
+          `💬 **Hoặc nhắn tự nhiên (chat riêng):**\n` +
+          `• "Báo cáo chi tiết số liệu ngày 16"\n` +
           `• "Máy nào sắp đến hạn bảo trì hoặc kiểm chuẩn?"\n` +
-          `• "Hôm nay có ai trực và công việc nào cần xử lý gấp?"\n` +
-          `• "Tiêu chuẩn thời gian trả kết quả Troponin khẩn theo ISO 15189?"`;
+          `• "Hướng dẫn mới của Bộ Y tế về kiểm chuẩn xét nghiệm?"`;
         await this.sendMessage(chatId, helpMsg);
+        this.totalAnswered += 1;
+        return;
+      }
+
+      if (lower.startsWith("/nho ") || lower.startsWith("/remember ")) {
+        const memo = cleanText.replace(/^\/(nho|remember)\s+/i, "").trim();
+        if (!memo) {
+          await this.sendMessage(
+            chatId,
+            "Vui lòng nhập nội dung cần tôi ghi nhớ sau lệnh, ví dụ: `/nho Phòng SA-02 ưu tiên ca cấp cứu trước 9h sáng`."
+          );
+          return;
+        }
+        this.addLearnedMemory({ content: memo, category: "rule", source: "telegram" });
+        await this.sendMessage(
+          chatId,
+          `✅ **Đã ghi nhớ!** Tôi sẽ áp dụng lưu ý này cho các lần tư vấn và báo cáo sau:\n• "${memo}"`
+        );
         this.totalAnswered += 1;
         return;
       }
@@ -430,47 +510,72 @@ class TelegramAssistantManager {
       if (lower.startsWith("/tomtat") || lower.startsWith("/giaoban")) {
         question =
           "Hãy tóm tắt nhanh tình hình toàn khoa hiện tại: số liệu ca gần nhất, tình trạng thiết bị cảnh báo, phòng quá tải, lịch trực hôm nay và công việc cần xử lý.";
-      } else if (lower.startsWith("/hoi ") || lower.startsWith("/ask ")) {
-        question = cleanText.replace(/^\/(hoi|ask)\s+/i, "").trim();
-      } else if (lower.startsWith("/hoi@") || lower.startsWith("/ask@")) {
-        question = cleanText.replace(/^\/(hoi|ask)@\S+\s*/i, "").trim();
+      } else if (lower.startsWith("/hoi ") || lower.startsWith("/ask ") || lower.startsWith("/web ")) {
+        question = cleanText.replace(/^\/(hoi|ask|web)\s+/i, "").trim();
+      } else if (lower.startsWith("/hoi@") || lower.startsWith("/ask@") || lower.startsWith("/web@")) {
+        question = cleanText.replace(/^\/(hoi|ask|web)@\S+\s*/i, "").trim();
       }
 
       if (!question) {
-        await this.sendMessage(chatId, "Vui lòng nhập nội dung câu hỏi sau lệnh, ví dụ: /hoi Hôm nay có bao nhiêu ca?");
+        await this.sendMessage(chatId, "Vui lòng nhập câu hỏi sau lệnh, ví dụ: `/hoi Hôm nay có bao nhiêu ca?`");
         return;
       }
 
       const historyKey = String(chatId);
       const prevHistory = this.chatHistories.get(historyKey) || [];
 
-      const result = this.liveContext
-        ? await askHospitalAssistant({
-            question,
-            history: prevHistory,
-            liveContext: this.liveContext,
-            userName: senderName,
-            channel: "telegram",
-          })
-        : buildDeterministicAssistantAnswer(question, null);
+      const result = await askHospitalAssistant({
+        question,
+        history: prevHistory,
+        liveContext: this.liveContext,
+        learnedMemories: this.getMergedMemories(),
+        useWebSearch: this.liveContext?.assistantMemory?.webSearchEnabled !== false,
+        userName: senderName,
+        channel: "telegram",
+      });
+
+      if (result.newlyLearnedMemory) {
+        this.addLearnedMemory({
+          ...result.newlyLearnedMemory,
+          source: "telegram",
+        });
+      }
 
       const updatedHistory = [
         ...prevHistory,
         { sender: "user" as const, content: question },
         { sender: "assistant" as const, content: result.answer },
-      ].slice(-6);
+      ].slice(-8);
       this.chatHistories.set(historyKey, updatedHistory);
+
+      const webLinksBlock =
+        result.webSources && result.webSources.length > 0
+          ? `\n\n🌐 **Tham khảo Internet:**\n` +
+            result.webSources
+              .slice(0, 4)
+              .map((w) => `• [${w.title}](${w.uri})`)
+              .join("\n")
+          : "";
 
       const sourcesLine =
         result.dataSourcesUsed.length > 0
-          ? `\n\n📂 _Nguồn dữ liệu: ${result.dataSourcesUsed.join(", ")}_`
+          ? `\n\n📂 Nguồn: ${result.dataSourcesUsed.join(", ")}`
           : "";
 
-      await this.sendMessage(chatId, `${result.answer}${sourcesLine}`);
+      const learnedBanner = result.newlyLearnedMemory
+        ? `\n\n🧠 _Đã ghi nhớ thêm: "${result.newlyLearnedMemory.content}"_`
+        : "";
+
+      await this.sendMessage(chatId, `${result.answer}${webLinksBlock}${learnedBanner}${sourcesLine}`);
       this.totalAnswered += 1;
       this.lastError = undefined;
     } catch (err: any) {
+      console.error("[TelegramBot] handleIncomingUpdate error:", err);
       this.lastError = err?.message || "Lỗi xử lý tin nhắn Telegram";
+      await this.sendMessage(
+        chatId,
+        `Xin lỗi ${senderName}, tôi vừa gặp sự cố kỹ thuật tạm thời khi xử lý yêu cầu (${this.lastError}). Bạn vui lòng thử gửi lại câu hỏi sau ít giây nhé.`
+      ).catch(() => {});
     }
   }
 
@@ -498,7 +603,6 @@ class TelegramAssistantManager {
         this.botFirstName = me.first_name;
         this.lastError = undefined;
 
-        // Clear any stale webhook before switching to getUpdates polling
         await this.telegramApiCall(this.botToken, "deleteWebhook", {
           drop_pending_updates: false,
         }).catch(() => {});
@@ -507,6 +611,8 @@ class TelegramAssistantManager {
         this.pollingActive = false;
         return;
       }
+
+      let consecutiveConflicts = 0;
 
       while (myGen === this.pollLoopGeneration && this.enabled && this.botToken) {
         try {
@@ -526,15 +632,21 @@ class TelegramAssistantManager {
 
           if (!res.ok || !payload?.ok) {
             if (payload?.error_code === 409) {
-              this.lastError = "Bot đang chạy ở một phiên/webhook khác (409 Conflict).";
-              this.pollingActive = false;
-              break;
+              consecutiveConflicts += 1;
+              this.lastError = `Đang có phiên getUpdates khác trùng Token (thử kết nối lại lần ${consecutiveConflicts})...`;
+              await this.telegramApiCall(this.botToken, "deleteWebhook", {
+                drop_pending_updates: false,
+              }).catch(() => {});
+              const waitMs = Math.min(12000, 2500 * consecutiveConflicts);
+              await new Promise((r) => setTimeout(r, waitMs));
+              continue;
             }
             this.lastError = payload?.description || `Telegram Poll HTTP ${res.status}`;
             await new Promise((r) => setTimeout(r, 4000));
             continue;
           }
 
+          consecutiveConflicts = 0;
           this.lastError = undefined;
           const updates = Array.isArray(payload.result) ? payload.result : [];
           for (const upd of updates) {

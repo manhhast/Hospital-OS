@@ -3,7 +3,7 @@ import {
   ShiftDuty, WorkTaskRow, WeeklyMeeting, ChatChannelMessage, ChatGroupChannel, DepartmentAnnouncement, MessageType, ShareCardData,
   EquipmentItem, EquipmentDurationDefaults, DepartmentUnit, ParaclinicalRoom, RoomReservation, StaffProfile, LeaveRequest, TrainingCourse,
   MeetingItem, MeetingMinutes, MeetingActionItem, IntegrationEndpoint, IntegrationPayloadSample, MaintenanceLog, RepairLog,
-  SyncHistoryEntry
+  SyncHistoryEntry, SyncHistoryStatus, AssistantMemoryItem, AssistantMemoryCategory
 } from '../types/hospital';
 import { 
   initialTasks, initialDocuments, initialUsers, initialNotifications, initialAuditLogs, initialSettings,
@@ -1255,6 +1255,20 @@ class HospitalStorageService {
     return newNotif;
   }
 
+  public deleteNotification(notifId: string): void {
+    const next = this.getNotifications().filter((n) => n.id !== notifId);
+    this.safeSetItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(next));
+    this.notify();
+  }
+
+  public clearNotifications(): void {
+    this.safeSetItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
+    this.logAudit('CLEAR_NOTIFICATIONS', 'System', undefined, {
+      note: 'Đã xóa toàn bộ lịch sử phát thông báo.'
+    });
+    this.notify();
+  }
+
   // --- Settings ---
   public getSettings(): AppSettings {
     try {
@@ -1269,6 +1283,74 @@ class HospitalStorageService {
     const old = this.getSettings();
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     this.logAudit('UPDATE_SETTINGS', 'Setting', old, settings);
+    this.notify();
+  }
+
+  // --- AI Assistant Learned Memory (Synced with Cloud Settings) ---
+  public getAssistantMemories(): AssistantMemoryItem[] {
+    const settings = this.getSettings();
+    return Array.isArray(settings.assistantMemories) ? settings.assistantMemories : [];
+  }
+
+  public addAssistantMemory(params: {
+    content: string;
+    category?: AssistantMemoryCategory;
+    source?: AssistantMemoryItem['source'];
+  }): AssistantMemoryItem[] {
+    const clean = (params.content || '').trim().replace(/\s+/g, ' ');
+    if (!clean || clean.length < 3) return this.getAssistantMemories();
+
+    const settings = this.getSettings();
+    const current = Array.isArray(settings.assistantMemories) ? settings.assistantMemories : [];
+    const normalizedNew = clean.toLowerCase();
+    const existingIdx = current.findIndex((m) => m.content.trim().toLowerCase() === normalizedNew);
+    const nowStr = new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16);
+
+    let next: AssistantMemoryItem[];
+    if (existingIdx >= 0) {
+      const updated: AssistantMemoryItem = {
+        ...current[existingIdx],
+        category: params.category || current[existingIdx].category,
+        updatedAt: nowStr
+      };
+      next = [updated, ...current.filter((_, idx) => idx !== existingIdx)].slice(0, 60);
+    } else {
+      const created: AssistantMemoryItem = {
+        id: this.nextUniqueId('AIMEM'),
+        category: params.category || 'fact',
+        content: clean.slice(0, 400),
+        source: params.source || 'auto',
+        createdAt: nowStr
+      };
+      next = [created, ...current].slice(0, 60);
+    }
+
+    localStorage.setItem(
+      STORAGE_KEYS.SETTINGS,
+      JSON.stringify({ ...settings, assistantMemories: next })
+    );
+    this.notify();
+    return next;
+  }
+
+  public deleteAssistantMemory(id: string): AssistantMemoryItem[] {
+    const settings = this.getSettings();
+    const current = Array.isArray(settings.assistantMemories) ? settings.assistantMemories : [];
+    const next = current.filter((m) => m.id !== id);
+    localStorage.setItem(
+      STORAGE_KEYS.SETTINGS,
+      JSON.stringify({ ...settings, assistantMemories: next })
+    );
+    this.notify();
+    return next;
+  }
+
+  public clearAssistantMemories(): void {
+    const settings = this.getSettings();
+    localStorage.setItem(
+      STORAGE_KEYS.SETTINGS,
+      JSON.stringify({ ...settings, assistantMemories: [] })
+    );
     this.notify();
   }
 
@@ -2502,6 +2584,34 @@ class HospitalStorageService {
             : entry.status
       };
     });
+    this.safeSetItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify(next));
+    this.notify();
+    return next;
+  }
+
+  public deleteSyncHistoryEntry(entryId: string): SyncHistoryEntry[] {
+    const current = this.getSyncHistory();
+    const next = current.filter((entry) => entry.id !== entryId);
+    this.safeSetItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify(next));
+    this.notify();
+    return next;
+  }
+
+  public deleteSyncHistoryEntries(entryIds: string[]): SyncHistoryEntry[] {
+    const idSet = new Set(entryIds);
+    const current = this.getSyncHistory();
+    const next = current.filter((entry) => !idSet.has(entry.id));
+    this.safeSetItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify(next));
+    this.notify();
+    return next;
+  }
+
+  public clearSyncHistory(statusFilter?: SyncHistoryStatus | 'all'): SyncHistoryEntry[] {
+    const current = this.getSyncHistory();
+    const next =
+      !statusFilter || statusFilter === 'all'
+        ? []
+        : current.filter((entry) => entry.status !== statusFilter);
     this.safeSetItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify(next));
     this.notify();
     return next;

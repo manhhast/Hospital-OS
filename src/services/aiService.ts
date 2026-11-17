@@ -15,10 +15,17 @@ export const aiService = {
    */
   async askSmartAssistant(
     question: string,
-    history: SmartAssistantMessage[] = []
+    history: SmartAssistantMessage[] = [],
+    options?: { useWebSearch?: boolean }
   ): Promise<SmartAssistantMessage> {
     const liveContext = buildLiveHospitalContext();
     const currentUser = storageService.getCurrentUser();
+    const settings = storageService.getSettings();
+    const learnedMemories = storageService.getAssistantMemories();
+    const useWebSearch =
+      options?.useWebSearch !== undefined
+        ? options.useWebSearch
+        : settings.aiWebSearchEnabled !== false;
 
     const response = await fetch('/api/ai/assistant-chat', {
       method: 'POST',
@@ -27,6 +34,8 @@ export const aiService = {
         question,
         history: history.slice(-8).map(m => ({ sender: m.sender, content: m.content })),
         liveContext,
+        learnedMemories,
+        useWebSearch,
         userName: currentUser?.name || 'Cán bộ Khoa CLS'
       })
     });
@@ -37,6 +46,16 @@ export const aiService = {
     }
 
     const d = json.data;
+    let newlyLearnedNote: string | undefined;
+    if (d.newlyLearnedMemory && d.newlyLearnedMemory.content) {
+      storageService.addAssistantMemory({
+        content: d.newlyLearnedMemory.content,
+        category: d.newlyLearnedMemory.category || 'fact',
+        source: 'auto'
+      });
+      newlyLearnedNote = d.newlyLearnedMemory.content;
+    }
+
     return {
       id: `ast-${Date.now()}`,
       sender: 'assistant',
@@ -45,6 +64,10 @@ export const aiService = {
       highlightedMetrics: d.highlightedMetrics || [],
       actionChecklist: d.actionChecklist || [],
       dataSourcesUsed: d.dataSourcesUsed || [],
+      webSources: Array.isArray(d.webSources) ? d.webSources : [],
+      searchQueries: Array.isArray(d.searchQueries) ? d.searchQueries : [],
+      usedWebSearch: Boolean(d.usedWebSearch),
+      newlyLearnedNote,
       suggestedFollowUps: d.suggestedFollowUps || [],
       modelUsed: d.modelUsed || json.source || 'gemini-4-hydrogen',
       usedLiveContext: Boolean(d.usedLiveContext),

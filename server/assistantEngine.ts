@@ -25,6 +25,19 @@ export function getGeminiClient(): GoogleGenAI | null {
   return cachedClient;
 }
 
+export interface WebGroundingSource {
+  title: string;
+  uri: string;
+}
+
+export interface LearnedMemoryEntry {
+  id?: string;
+  category: "fact" | "preference" | "rule" | "correction";
+  content: string;
+  source?: "auto" | "user" | "feedback" | "telegram";
+  createdAt?: string;
+}
+
 export async function generateGeminiResponse(
   ai: GoogleGenAI,
   options: {
@@ -32,12 +45,26 @@ export async function generateGeminiResponse(
     systemInstruction: string;
     responseMimeType?: string;
     thinkingLevel?: ThinkingLevel;
+    useGoogleSearch?: boolean;
   }
-): Promise<{ text: string; model: string }> {
-  const candidates = [VALID_PRIMARY_MODEL, VALID_FALLBACK_MODEL];
+): Promise<{
+  text: string;
+  model: string;
+  webSources: WebGroundingSource[];
+  searchQueries: string[];
+}> {
+  const attempts: Array<{ model: string; withSearch: boolean }> = [];
+  const allowSearch = Boolean(options.useGoogleSearch) && !options.responseMimeType;
+
+  if (allowSearch) {
+    attempts.push({ model: VALID_PRIMARY_MODEL, withSearch: true });
+  }
+  attempts.push({ model: VALID_PRIMARY_MODEL, withSearch: false });
+  attempts.push({ model: VALID_FALLBACK_MODEL, withSearch: false });
+
   let lastError: any = null;
 
-  for (const model of candidates) {
+  for (const attempt of attempts) {
     try {
       const config: Record<string, any> = {
         systemInstruction: options.systemInstruction,
@@ -45,19 +72,43 @@ export async function generateGeminiResponse(
       if (options.responseMimeType) {
         config.responseMimeType = options.responseMimeType;
       }
-      if (options.thinkingLevel && model === VALID_PRIMARY_MODEL) {
+      if (options.thinkingLevel && attempt.model === VALID_PRIMARY_MODEL) {
         config.thinkingConfig = { thinkingLevel: options.thinkingLevel };
+      }
+      if (attempt.withSearch) {
+        config.tools = [{ googleSearch: {} }];
       }
 
       const response = await ai.models.generateContent({
-        model,
+        model: attempt.model,
         contents: options.contents,
         config,
       });
 
       const text = response?.text;
       if (text && text.trim().length > 0) {
-        return { text, model };
+        const gm: any = response.candidates?.[0]?.groundingMetadata;
+        const rawChunks: any[] = Array.isArray(gm?.groundingChunks) ? gm.groundingChunks : [];
+        const seenUris = new Set<string>();
+        const webSources: WebGroundingSource[] = [];
+        for (const chunk of rawChunks) {
+          const uri = chunk?.web?.uri ? String(chunk.web.uri).trim() : "";
+          const title = chunk?.web?.title ? String(chunk.web.title).trim() : "";
+          if (uri && !seenUris.has(uri)) {
+            seenUris.add(uri);
+            webSources.push({ title: title || uri, uri });
+          }
+        }
+        const searchQueries: string[] = Array.isArray(gm?.webSearchQueries)
+          ? gm.webSearchQueries.map((q: any) => String(q).trim()).filter(Boolean)
+          : [];
+
+        return {
+          text,
+          model: attempt.model,
+          webSources: webSources.slice(0, 8),
+          searchQueries: searchQueries.slice(0, 5),
+        };
       }
     } catch (err: any) {
       lastError = err;
@@ -78,6 +129,10 @@ export interface AssistantChatResult {
   highlightedMetrics: AssistantHighlightMetric[];
   actionChecklist: string[];
   dataSourcesUsed: string[];
+  webSources: WebGroundingSource[];
+  searchQueries: string[];
+  usedWebSearch: boolean;
+  newlyLearnedMemory?: LearnedMemoryEntry;
   suggestedFollowUps: string[];
   modelUsed: string;
   usedLiveContext: boolean;
@@ -107,7 +162,62 @@ KHO QUY TRÌNH THAO TÁC CHUẨN (SOP) & ISO 15189:2022 KHOA CẬN LÂM SÀNG:
    - Chạy 2 mức lúc 07:00 hàng ngày. Cảnh báo: 1-2s. Vi phạm dừng máy: 1-3s, 2-2s, R-4s, 4-1s, 10x.
 `;
 
-function formatLiveContextDigest(liveContext: any): string {
+function normalizeText(str: string): string {
+  return (str || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
+
+function findMatchingRecordedDays(question: string, liveContext: any): any[] {
+  const days: any[] = liveContext?.caseReports?.recentRecordedDays || [];
+  if (!Array.isArray(days) || days.length === 0) return [];
+
+  const q = normalizeText(question);
+
+  // Full date like 16/11/2026 or 16/11 or 16-11
+  const fullMatch = q.match(/(?:ngay\s*)?(\d{1,2})\s*[\/\-]\s*(\d{1,2})(?:\s*[\/\-]\s*(\d{2,4}))?/);
+  if (fullMatch) {
+    const targetDay = parseInt(fullMatch[1], 10);
+    const targetMonth = parseInt(fullMatch[2], 10);
+    let targetYear = fullMatch[3] ? parseInt(fullMatch[3], 10) : undefined;
+    if (targetYear && targetYear < 100) targetYear += 2000;
+
+    const exact = days.filter(
+      (d) =>
+        d.day === targetDay &&
+        d.monthNumber === targetMonth &&
+        (!targetYear || d.year === targetYear)
+    );
+    if (exact.length > 0) return exact;
+  }
+
+  // Day mention like "ngay 16", "ngay 5 thang 11"
+  const dayMatch = q.match(/ngay\s+(\d{1,2})(?:\s*(?:thang|\/)\s*(\d{1,2}))?/);
+  if (dayMatch) {
+    const targetDay = parseInt(dayMatch[1], 10);
+    const targetMonth = dayMatch[2] ? parseInt(dayMatch[2], 10) : undefined;
+    const exact = days.filter(
+      (d) => d.day === targetDay && (!targetMonth || d.monthNumber === targetMonth)
+    );
+    if (exact.length > 0) return exact;
+  }
+
+  if (q.includes("hom qua") && days[1]) {
+    return [days[1]];
+  }
+  if (q.includes("hom nay") || q.includes("gan nhat") || q.includes("moi nhat")) {
+    const todayIso = liveContext?.currentDateIso;
+    const todayDay = days.find((d) => d.dateIso === todayIso);
+    return todayDay ? [todayDay] : days[0] ? [days[0]] : [];
+  }
+
+  return [];
+}
+
+function formatLiveContextDigest(liveContext: any, question = ""): string {
   if (!liveContext) {
     return "Chưa nhận được ảnh chụp dữ liệu trực tiếp từ trình duyệt ứng dụng.";
   }
@@ -122,11 +232,14 @@ function formatLiveContextDigest(liveContext: any): string {
   const doc = liveContext.documents || {};
   const sy = liveContext.syncHistory || {};
 
+  const matchedRequestedDays = question ? findMatchingRecordedDays(question, liveContext) : [];
+
   return JSON.stringify(
     {
       currentDateIso: liveContext.currentDateIso,
       generatedAt: liveContext.generatedAt,
       currentUser: liveContext.currentUser,
+      matchedRequestedDays: matchedRequestedDays.length > 0 ? matchedRequestedDays : undefined,
       caseReports: {
         activeYear: cr.activeYear,
         knownYears: cr.knownYears,
@@ -134,15 +247,15 @@ function formatLiveContextDigest(liveContext: any): string {
         monthlyTotals: cr.monthlyTotals,
         latestRecordedDay: cr.latestRecordedDay,
         previousRecordedDay: cr.previousRecordedDay,
-        recentRecordedDays: (cr.recentRecordedDays || []).slice(0, 10),
-        topServicesActiveYear: (cr.topServicesActiveYear || []).slice(0, 12),
+        recentRecordedDays: (cr.recentRecordedDays || []).slice(0, 35),
+        topServicesActiveYear: (cr.topServicesActiveYear || []).slice(0, 15),
         weekdayAverages: cr.weekdayAverages,
       },
       equipment: {
         totalCount: eq.totalCount,
         statusCounts: eq.statusCounts,
         alertItems: eq.alertItems,
-        items: (eq.items || []).slice(0, 40),
+        items: (eq.items || []).slice(0, 45),
       },
       rooms: {
         departmentsCount: rm.departmentsCount,
@@ -152,19 +265,19 @@ function formatLiveContextDigest(liveContext: any): string {
       },
       staff: {
         totalCount: st.totalCount,
-        items: (st.items || []).slice(0, 60),
+        items: (st.items || []).slice(0, 65),
         pendingLeaveRequests: st.pendingLeaveRequests,
         expiringCertificates: st.expiringCertificates,
       },
       shifts: {
         pendingSwapCount: sh.pendingSwapCount,
-        todayAndUpcoming: (sh.todayAndUpcoming || []).slice(0, 35),
+        todayAndUpcoming: (sh.todayAndUpcoming || []).slice(0, 40),
       },
       tasks: {
         totalCount: tk.totalCount,
         byStatus: tk.byStatus,
         overdueCount: tk.overdueCount,
-        activeItems: (tk.activeItems || []).slice(0, 30),
+        activeItems: (tk.activeItems || []).slice(0, 35),
       },
       meetingsAndAnnouncements: {
         items: (mt.items || []).slice(0, 10),
@@ -174,7 +287,7 @@ function formatLiveContextDigest(liveContext: any): string {
       documentsAndSOPs: {
         totalCount: doc.totalCount,
         expiredCount: doc.expiredCount,
-        items: (doc.items || []).slice(0, 30),
+        items: (doc.items || []).slice(0, 35),
       },
       syncHistory: sy,
     },
@@ -183,13 +296,36 @@ function formatLiveContextDigest(liveContext: any): string {
   );
 }
 
-function normalizeText(str: string): string {
-  return (str || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase();
+function formatDayDetailText(dayObj: any, prevDayObj?: any): string {
+  const catLines = (dayObj.byCategory || [])
+    .map(
+      (c: any) =>
+        `  • ${c.category}: **${Number(c.total || 0).toLocaleString("vi-VN")} ca** (BHYT: ${c.bh}, Nhân dân: ${c.nd})`
+    )
+    .join("\n");
+
+  const topSvcLines = (dayObj.topServices || [])
+    .slice(0, 8)
+    .map(
+      (s: any) =>
+        `  • ${s.name} (${s.category}): **${Number(s.total || 0).toLocaleString("vi-VN")} ca** (BH: ${s.bh} / ND: ${s.nd})`
+    )
+    .join("\n");
+
+  let diffNote = "";
+  if (prevDayObj && prevDayObj.dateIso !== dayObj.dateIso) {
+    const diff = dayObj.totalCases - prevDayObj.totalCases;
+    const sign = diff >= 0 ? "+" : "";
+    diffNote = ` (${sign}${diff} ca so với ${prevDayObj.dateLabel}: ${prevDayObj.totalCases.toLocaleString("vi-VN")} ca)`;
+  }
+
+  return (
+    `📊 **Báo cáo chi tiết ngày ${dayObj.dayOfWeek ? `${dayObj.dayOfWeek}, ` : ""}${dayObj.dateLabel}:**\n` +
+    `- Tổng số ca thực hiện: **${Number(dayObj.totalCases || 0).toLocaleString("vi-VN")} ca**${diffNote}\n` +
+    `- Cơ cấu đối tượng: BHYT **${dayObj.bhytCases}** ca • Nhân dân **${dayObj.nhanDanCases}** ca\n` +
+    (catLines ? `\n**Phân bổ theo bộ phận:**\n${catLines}` : "") +
+    (topSvcLines ? `\n\n**Các kỹ thuật nổi bật trong ngày:**\n${topSvcLines}` : "")
+  );
 }
 
 export function buildDeterministicAssistantAnswer(
@@ -202,12 +338,15 @@ export function buildDeterministicAssistantAnswer(
   if (!liveContext) {
     return {
       answer:
-        "Hiện máy chủ chưa nhận được dữ liệu đồng bộ từ ứng dụng web. Vui lòng mở ứng dụng CLS WorkHub trên trình duyệt để đồng bộ dữ liệu trực tiếp, sau đó đặt câu hỏi lại.",
+        "Chào bạn, hiện máy chủ trợ lý chưa nhận được bản đồng bộ dữ liệu mới nhất từ trình duyệt ứng dụng.\n\nBạn vui lòng mở lại trang web CLS WorkHub (hoặc bấm **Đồng bộ dữ liệu**) trong vài giây để tôi nạp đầy đủ số liệu ca bệnh, thiết bị và lịch trực rồi phản hồi ngay nhé.",
       highlightedMetrics: [],
-      actionChecklist: ["Mở ứng dụng CLS WorkHub để tự động đẩy dữ liệu lên máy chủ trợ lý."],
+      actionChecklist: ["Mở ứng dụng CLS WorkHub trên trình duyệt để đồng bộ dữ liệu trực tiếp."],
       dataSourcesUsed: [],
+      webSources: [],
+      searchQueries: [],
+      usedWebSearch: false,
       suggestedFollowUps: [
-        "Tổng số ca bệnh gần nhất là bao nhiêu?",
+        "Tổng hợp số ca ngày gần nhất?",
         "Danh sách máy móc đang cần bảo trì hoặc sắp hết hạn hiệu chuẩn?",
       ],
       modelUsed: "live-data-engine",
@@ -231,8 +370,11 @@ export function buildDeterministicAssistantAnswer(
   const actions: string[] = [];
   const sources: string[] = [];
 
+  const matchedDays = findMatchingRecordedDays(question, liveContext);
+
   const asksAboutCases =
-    /(so ca|luot|kham|sieu am|noi soi|x quang|x-quang|dien tim|xet nghiem|bhyt|nhan dan|bao cao|giao ban|thang|nam|hom qua|hom nay|tong quan)/.test(
+    matchedDays.length > 0 ||
+    /(so ca|so lieu|luot|kham|sieu am|noi soi|x quang|x-quang|dien tim|xet nghiem|bhyt|nhan dan|bao cao|giao ban|thang|nam|hom qua|hom nay|tong quan|ngay\s+\d)/.test(
       q
     );
   const asksAboutEquipment =
@@ -259,46 +401,37 @@ export function buildDeterministicAssistantAnswer(
 
   if (asksAboutCases || includeOverview) {
     sources.push("Báo cáo số ca Google Sheet");
-    const latest = cr.latestRecordedDay;
-    const prev = cr.previousRecordedDay;
+    const targetDay = matchedDays[0] || cr.latestRecordedDay;
+    const allDays: any[] = cr.recentRecordedDays || [];
+    const targetIdx = targetDay ? allDays.findIndex((d) => d.dateIso === targetDay.dateIso) : -1;
+    const prevOfTarget = targetIdx >= 0 ? allDays[targetIdx + 1] : cr.previousRecordedDay;
+
     const activeYTotal = (cr.yearlyTotals || []).find((y: any) => y.year === cr.activeYear);
     const monthsInActiveYear = (cr.monthlyTotals || []).filter((m: any) => m.year === cr.activeYear);
 
-    if (latest) {
+    if (targetDay) {
       metrics.push({
-        label: `Ngày gần nhất (${latest.dateLabel})`,
-        value: `${latest.totalCases.toLocaleString("vi-VN")} ca`,
+        label: `Ngày ${targetDay.dateLabel}`,
+        value: `${Number(targetDay.totalCases || 0).toLocaleString("vi-VN")} ca`,
         tone: "blue",
       });
       metrics.push({
         label: "BHYT / Nhân dân",
-        value: `${latest.bhytCases} / ${latest.nhanDanCases}`,
+        value: `${targetDay.bhytCases} / ${targetDay.nhanDanCases}`,
         tone: "emerald",
       });
 
-      const catLines = (latest.byCategory || [])
-        .map((c: any) => `  • ${c.category}: ${c.total} ca (BH: ${c.bh}, ND: ${c.nd})`)
-        .join("\n");
-
-      let diffNote = "";
-      if (prev) {
-        const diff = latest.totalCases - prev.totalCases;
-        const sign = diff >= 0 ? "+" : "";
-        diffNote = ` (${sign}${diff} ca so với ngày ${prev.dateLabel}: ${prev.totalCases} ca)`;
-      }
-
-      parts.push(
-        `📊 **Số liệu ca thực hiện gần nhất (${latest.dayOfWeek}, ${latest.dateLabel}):**\n` +
-          `- Tổng cộng: **${latest.totalCases.toLocaleString("vi-VN")} ca**${diffNote} (BHYT: ${latest.bhytCases}, Nhân dân: ${latest.nhanDanCases}).\n` +
-          (catLines ? `${catLines}` : "")
-      );
+      parts.push(formatDayDetailText(targetDay, prevOfTarget));
     } else {
       parts.push(
-        `📊 **Báo cáo số ca:** Hiện chưa có ngày nào có số liệu dương trong năm ${cr.activeYear || "hiện tại"}.`
+        `📊 **Báo cáo số ca:** Hiện chưa có ngày nào khớp yêu cầu trong bộ nhớ năm ${cr.activeYear || "hiện tại"}.`
       );
+      if (cr.latestRecordedDay) {
+        parts.push(`Ngày có số liệu gần nhất hiện có:\n${formatDayDetailText(cr.latestRecordedDay)}`);
+      }
     }
 
-    if (monthsInActiveYear.length > 0) {
+    if (!matchedDays.length && monthsInActiveYear.length > 0) {
       const mLines = monthsInActiveYear
         .map(
           (m: any) =>
@@ -467,6 +600,9 @@ export function buildDeterministicAssistantAnswer(
     highlightedMetrics: metrics.slice(0, 4),
     actionChecklist: actions.slice(0, 5),
     dataSourcesUsed: Array.from(new Set(sources)),
+    webSources: [],
+    searchQueries: [],
+    usedWebSearch: false,
     suggestedFollowUps: [
       "Tóm tắt số liệu ngày gần nhất và so sánh với tháng này?",
       "Thiết bị nào sắp đến hạn bảo trì hoặc hiệu chuẩn?",
@@ -478,100 +614,192 @@ export function buildDeterministicAssistantAnswer(
   };
 }
 
+function parseAssistantResponseWithMeta(
+  rawText: string,
+  webSources: WebGroundingSource[],
+  searchQueries: string[],
+  modelUsed: string,
+  usedLiveContext: boolean
+): AssistantChatResult {
+  let cleanAnswer = rawText.trim();
+  let meta: any = null;
+
+  const metaRegex = /<assistant_meta>([\s\S]*?)<\/assistant_meta>/i;
+  const match = cleanAnswer.match(metaRegex);
+  if (match && match[1]) {
+    const jsonCandidate = match[1]
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/```$/i, "")
+      .trim();
+    try {
+      meta = JSON.parse(jsonCandidate);
+    } catch {
+      meta = null;
+    }
+    cleanAnswer = cleanAnswer.replace(metaRegex, "").trim();
+  }
+
+  const dataSourcesUsed: string[] = Array.isArray(meta?.dataSourcesUsed)
+    ? meta.dataSourcesUsed.map((s: any) => String(s).trim()).filter(Boolean)
+    : [];
+
+  const usedWebSearch = webSources.length > 0 || searchQueries.length > 0;
+  if (usedWebSearch && !dataSourcesUsed.some((s) => s.toLowerCase().includes("internet") || s.toLowerCase().includes("google search"))) {
+    dataSourcesUsed.push("Internet (Google Search)");
+  }
+
+  let newlyLearnedMemory: LearnedMemoryEntry | undefined;
+  if (meta?.learnedInsight && typeof meta.learnedInsight === "object" && meta.learnedInsight.content) {
+    const cat = ["fact", "preference", "rule", "correction"].includes(meta.learnedInsight.category)
+      ? meta.learnedInsight.category
+      : "fact";
+    newlyLearnedMemory = {
+      category: cat,
+      content: String(meta.learnedInsight.content).trim().slice(0, 400),
+    };
+  }
+
+  return {
+    answer: cleanAnswer,
+    highlightedMetrics: Array.isArray(meta?.highlightedMetrics) ? meta.highlightedMetrics.slice(0, 4) : [],
+    actionChecklist: Array.isArray(meta?.actionChecklist) ? meta.actionChecklist.slice(0, 6) : [],
+    dataSourcesUsed,
+    webSources,
+    searchQueries,
+    usedWebSearch,
+    newlyLearnedMemory,
+    suggestedFollowUps: Array.isArray(meta?.suggestedFollowUps) ? meta.suggestedFollowUps.slice(0, 3) : [],
+    modelUsed,
+    usedLiveContext,
+  };
+}
+
 export async function askHospitalAssistant(params: {
   question: string;
   history?: Array<{ sender: "user" | "assistant"; content: string }>;
   liveContext: any;
+  learnedMemories?: LearnedMemoryEntry[];
+  useWebSearch?: boolean;
   userName?: string;
   channel?: "web" | "telegram";
 }): Promise<AssistantChatResult> {
-  const { question, history = [], liveContext, userName = "Cán bộ Khoa CLS", channel = "web" } = params;
+  const {
+    question,
+    history = [],
+    liveContext,
+    learnedMemories,
+    useWebSearch,
+    userName = "Cán bộ Khoa CLS",
+    channel = "web",
+  } = params;
+
   const ai = getGeminiClient();
 
   if (!ai) {
     return buildDeterministicAssistantAnswer(
       question,
       liveContext,
-      "Chưa cấu hình GEMINI_API_KEY trên máy chủ nên trợ lý đang tổng hợp trực tiếp từ dữ liệu ứng dụng."
+      "Chưa cấu hình GEMINI_API_KEY trên máy chủ nên trợ lý đang tổng hợp trực tiếp từ dữ liệu ứng dụng (chưa kích hoạt trả lời nâng cao và tra cứu Internet)."
     );
   }
 
-  const contextDigest = formatLiveContextDigest(liveContext);
+  const effectiveMemories: LearnedMemoryEntry[] =
+    Array.isArray(learnedMemories) && learnedMemories.length > 0
+      ? learnedMemories
+      : Array.isArray(liveContext?.assistantMemory?.memories)
+      ? liveContext.assistantMemory.memories
+      : [];
+
+  const effectiveWebSearch =
+    useWebSearch !== undefined
+      ? useWebSearch
+      : liveContext?.assistantMemory?.webSearchEnabled !== false;
+
+  const contextDigest = formatLiveContextDigest(liveContext, question);
   const recentHistoryText = (history || [])
-    .slice(-6)
+    .slice(-8)
     .map((m) => `${m.sender === "user" ? "Người dùng" : "Trợ lý"}: ${m.content}`)
     .join("\n");
 
+  const memoriesText =
+    effectiveMemories.length > 0
+      ? effectiveMemories
+          .slice(0, 40)
+          .map((m, idx) => `${idx + 1}. [${m.category.toUpperCase()}] ${m.content}`)
+          .join("\n")
+      : "Chưa có ghi nhớ tùy chỉnh nào.";
+
   const channelGuidance =
     channel === "telegram"
-      ? "Người dùng đang hỏi qua Telegram Bot. Hãy trả lời súc tích, rõ ràng, dễ đọc trên điện thoại, dùng gạch đầu dòng gọn gàng, đưa số liệu cụ thể ngay ở đầu câu trả lời."
-      : "Người dùng đang hỏi trên giao diện web CLS WorkHub. Hãy trình bày khoa học, rành mạch, chuyên nghiệp.";
+      ? "Người dùng đang trao đổi qua Telegram Bot. Hãy giao tiếp tự nhiên, gần gũi như một trợ lý điều hành tận tâm trên điện thoại: trả lời thẳng trọng tâm ngay đoạn mở đầu, dùng gạch đầu dòng rõ ràng, dễ lướt nhanh, không rườm rà."
+      : "Người dùng đang trao đổi trực tiếp trên CLS WorkHub. Hãy trình bày như một trợ lý chuyên môn cấp cao: ấm áp, linh hoạt, mạch lạc, có phân tích điểm đáng chú ý và gợi mở hướng xử lý thực tế.";
 
-  const systemInstruction = `Bạn là Trợ Lý Ảo Thông Minh của Khoa Cận Lâm Sàng (CLS WorkHub AI Assistant).
+  const systemInstruction = `Bạn là **Trợ Lý Chuyên Môn & Điều Hành Thông Minh** của Khoa Cận Lâm Sàng (CLS WorkHub Assistant).
 ${channelGuidance}
 
-NGUYÊN TẮC BẮT BUỘC:
-1. Tổng hợp và trả lời DỰA TRÊN DỮ LIỆU THỰC TẾ ĐANG CÓ TRONG ỨNG DỤNG dưới đây (và Kho SOP ISO 15189 khi câu hỏi liên quan quy trình chuyên môn).
-2. TUYỆT ĐỐI KHÔNG tự bịa ra số liệu, tên nhân viên, tên máy hoặc ngày không tồn tại trong dữ liệu.
-3. Nếu ngày/tháng hoặc hạng mục người dùng hỏi chưa có dữ liệu, hãy nói rõ "Hiện chưa có dữ liệu ghi nhận cho..." và chủ động cung cấp số liệu gần nhất hiện có (ví dụ: ngày latestRecordedDay hoặc các tháng đã có dữ liệu).
-4. Khi trả lời về số ca, hãy nêu rõ ngày/tháng, tổng số ca, BHYT vs Nhân dân và các bộ phận (Siêu Âm, Nội Soi, X quang, Điện tim & LHN, Xét nghiệm) nếu có trong dữ liệu.
-5. Khi trả lời về thiết bị, phòng, nhân sự, lịch trực, công việc, hãy nêu đúng mã/tên/trạng thái/hạn chót thực tế.
+PHONG CÁCH GIAO TIẾP NHÂN TÍNH HÓA & CHUYÊN NGHIỆP:
+- Giao tiếp tự nhiên, lịch sự, thấu hiểu ngữ cảnh (xưng "tôi" và gọi tên hoặc "bạn/anh/chị" phù hợp với người hỏi: ${userName}).
+- KHÔNG sao chép máy móc nguyên cấu trúc JSON hay đọc liệt kê khô khan; hãy tổng hợp, so sánh, rút ra nhận định hữu ích (ví dụ: ngày này tăng/giảm so với ngày trước ra sao, bộ phận nào chiếm tỷ trọng chính, có máy hay đầu việc nào cần lưu ý không).
+- Nếu người dùng chào hỏi, tâm sự, hoặc hỏi kiến thức mở ngoài phạm vi bệnh viện, hãy trò chuyện tự nhiên, duyên dáng và trả lời đầy đủ.
+
+NGUỒN DỮ LIỆU KẾT HỢP (NỘI BỘ ỨNG DỤNG + INTERNET):
+1. **Dữ liệu nội bộ ứng dụng CLS WorkHub** (ưu tiên tuyệt đối cho mọi câu hỏi về số liệu khoa, ngày/tháng báo cáo, máy móc, phòng ban, nhân sự, lịch trực, công việc, lịch sử đồng bộ, tài liệu ISO/SOP):
+   - TUYỆT ĐỐI KHÔNG tự bịa số liệu nội bộ, tên nhân viên, tên máy hoặc ngày không có trong dữ liệu.
+   - Chú ý trường \`matchedRequestedDays\` và \`recentRecordedDays\` khi người dùng hỏi ngày cụ thể (ví dụ "ngày 16"). Nếu ngày được hỏi chưa có dữ liệu trong ứng dụng, hãy nói rõ và chủ động cung cấp ngày gần nhất hiện có.
+2. **Tri thức & Tra cứu Internet (Google Search)**:
+   - ${
+     effectiveWebSearch
+       ? "Bạn ĐƯỢC BẬT công cụ Google Search (`googleSearch`). Với MỌI câu hỏi chuyên môn y khoa mới, văn bản Bộ Y tế, tiêu chuẩn ISO/JCI, hướng dẫn chẩn đoán/xét nghiệm, công nghệ, thời sự, thời tiết, hoặc câu hỏi tổng quát bất kỳ mà dữ liệu nội bộ chưa bao phủ, hãy chủ động dùng Google Search để tra cứu thông tin chính xác, cập nhật nhất và lồng ghép mạch lạc với dữ liệu nội bộ (nếu liên quan)."
+       : "Chế độ tra cứu Internet đang tạm tắt; chỉ sử dụng dữ liệu nội bộ và tri thức sẵn có, đồng thời nêu rõ nếu cần tra cứu trực tuyến mới nhất."
+   }
+   - Luôn phân biệt rạch ròi giữa **số liệu nội bộ khoa** và **thông tin tham khảo từ Internet**.
+
+KHẢ NĂNG HỌC HỎI & GHI NHỚ DÀI HẠN:
+- Dưới đây là những kiến thức, quy ước, sở thích trình bày và chỉnh sửa mà Khoa đã dạy bạn — hãy áp dụng nhất quán:
+${memoriesText}
+- Nếu trong câu hỏi hiện tại người dùng chủ động dạy bạn một quy ước mới, nhắc bạn sửa lỗi, hoặc yêu cầu ghi nhớ (VD: "nhớ giúp tôi...", "từ nay...", "lưu ý rằng...", "đúng ra phải là..."), hãy xác nhận tự nhiên trong câu trả lời VÀ ghi tóm tắt 1 câu ngắn gọn vào trường \`learnedInsight\` trong \`<assistant_meta>\`. Nếu không có nội dung mới cần học, để \`"learnedInsight": null\`.
 
 DỮ LIỆU TRỰC TIẾP CỦA ỨNG DỤNG (JSON):
 ${contextDigest}
 
 ${BUILTIN_SOP_KB}
 
-Trả về JSON chuẩn theo cấu trúc sau (không bọc markdown code fence):
+ĐỊNH DẠNG ĐẦU RA:
+1. Trước tiên, viết phần trả lời hoàn chỉnh bằng Tiếng Việt (Markdown tự nhiên với **chữ đậm**, gạch đầu dòng gọn đẹp).
+2. Ngay ở cuối cùng (sau câu trả lời), luôn gắn thêm khối metadata JSON hợp lệ nằm giữa cặp thẻ sau (KHÔNG giải thích thêm ngoài thẻ):
+<assistant_meta>
 {
-  "answer": "Câu trả lời chi tiết, mạch lạc bằng tiếng Việt cho người dùng...",
   "highlightedMetrics": [
-    { "label": "Nhãn ngắn", "value": "Giá trị nổi bật", "tone": "blue|emerald|amber|rose|indigo|slate" }
+    { "label": "Nhãn ngắn tối đa 4 từ", "value": "Giá trị nổi bật", "tone": "blue|emerald|amber|rose|indigo|slate" }
   ],
-  "actionChecklist": [
-    "Khuyến nghị hoặc việc cần làm nếu phù hợp (có thể để mảng rỗng [])"
-  ],
-  "dataSourcesUsed": [
-    "Tên các phân hệ dữ liệu đã dùng để trả lời, ví dụ: Báo cáo số ca Google Sheet, Thiết bị, Lịch trực..."
-  ],
-  "suggestedFollowUps": [
-    "2-3 câu hỏi gợi ý tiếp theo phù hợp ngữ cảnh"
-  ]
-}`;
+  "actionChecklist": ["Khuyến nghị thực tế nếu cần, hoặc []"],
+  "dataSourcesUsed": ["Tên nguồn dữ liệu nội bộ hoặc tri thức đã dùng"],
+  "suggestedFollowUps": ["2-3 câu hỏi gợi ý tiếp theo tự nhiên, sát ngữ cảnh"],
+  "learnedInsight": null
+}
+</assistant_meta>
+(Khi có kiến thức cần ghi nhớ mới từ người dùng, thay \`null\` bằng \`{"category":"fact|preference|rule|correction","content":"Nội dung 1 câu ngắn gọn cần nhớ"}\`).`;
 
   const promptContent = recentHistoryText
-    ? `LỊCH SỬ HỘI THOẠI GẦN ĐÂY:\n${recentHistoryText}\n\nCÂU HỎI MỚI CỦA ${userName}: "${question}"`
-    : `CÂU HỎI CỦA ${userName}: "${question}"`;
+    ? `LỊCH SỬ HỘI THOẠI GẦN ĐÂY:\n${recentHistoryText}\n\nTIN NHẮN MỚI CỦA ${userName}: "${question}"`
+    : `TIN NHẮN CỦA ${userName}: "${question}"`;
 
   try {
-    const { text, model } = await generateGeminiResponse(ai, {
+    const { text, model, webSources, searchQueries } = await generateGeminiResponse(ai, {
       contents: promptContent,
       systemInstruction,
-      responseMimeType: "application/json",
       thinkingLevel: ThinkingLevel.MEDIUM,
+      useGoogleSearch: effectiveWebSearch,
     });
 
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed.answer === "string" && parsed.answer.trim()) {
-      return {
-        answer: parsed.answer.trim(),
-        highlightedMetrics: Array.isArray(parsed.highlightedMetrics)
-          ? parsed.highlightedMetrics.slice(0, 4)
-          : [],
-        actionChecklist: Array.isArray(parsed.actionChecklist)
-          ? parsed.actionChecklist.slice(0, 6)
-          : [],
-        dataSourcesUsed: Array.isArray(parsed.dataSourcesUsed)
-          ? parsed.dataSourcesUsed
-          : [],
-        suggestedFollowUps: Array.isArray(parsed.suggestedFollowUps)
-          ? parsed.suggestedFollowUps.slice(0, 3)
-          : [],
-        modelUsed: model,
-        usedLiveContext: Boolean(liveContext),
-      };
-    }
-    throw new Error("Phản hồi JSON từ Gemini thiếu trường answer.");
+    return parseAssistantResponseWithMeta(
+      text,
+      webSources,
+      searchQueries,
+      model,
+      Boolean(liveContext)
+    );
   } catch (err: any) {
     return buildDeterministicAssistantAnswer(
       question,

@@ -14,8 +14,10 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { storageService } from '../../services/storageService';
 import { reportArchiveService } from '../../services/reportArchiveService';
 import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
@@ -62,6 +64,10 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
   });
   const [isRunningThreeDay, setIsRunningThreeDay] = useState<boolean>(false);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
+  const [confirmClearModal, setConfirmClearModal] = useState<{
+    mode: 'all' | 'filtered';
+    count: number;
+  } | null>(null);
 
   useEffect(() => {
     const unsubStorage = storageService.subscribe(() => {
@@ -234,6 +240,53 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
     } finally {
       setResolvingKey(null);
     }
+  };
+
+  const hasActiveFilter = filterStatus !== 'all' || searchTerm.trim().length > 0;
+
+  const handleRequestClearHistory = () => {
+    if (entries.length === 0) return;
+    if (hasActiveFilter && filteredEntries.length > 0 && filteredEntries.length < entries.length) {
+      setConfirmClearModal({ mode: 'filtered', count: filteredEntries.length });
+    } else {
+      setConfirmClearModal({ mode: 'all', count: entries.length });
+    }
+  };
+
+  const handleConfirmClearHistory = () => {
+    if (!confirmClearModal) return;
+    if (confirmClearModal.mode === 'filtered') {
+      const targetIds = filteredEntries.map((e) => e.id);
+      storageService.deleteSyncHistoryEntries(targetIds);
+      onShowToast?.(
+        'Đã xóa lịch sử theo bộ lọc',
+        `Đã xóa ${targetIds.length} bản ghi lịch sử thông báo & đồng bộ phù hợp.`,
+        'success'
+      );
+    } else {
+      const totalDeleted = entries.length;
+      storageService.clearSyncHistory('all');
+      setExpandedIds({});
+      onShowToast?.(
+        'Đã xóa toàn bộ lịch sử',
+        `Đã xóa ${totalDeleted} bản ghi khỏi lịch sử thông báo & đồng bộ.`,
+        'success'
+      );
+    }
+    setConfirmClearModal(null);
+  };
+
+  const handleDeleteSingleEntry = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    entry: SyncHistoryEntry
+  ) => {
+    e.stopPropagation();
+    storageService.deleteSyncHistoryEntry(entry.id);
+    onShowToast?.(
+      'Đã xóa bản ghi lịch sử',
+      `Đã xóa thông báo lúc ${entry.displayTime}.`,
+      'info'
+    );
   };
 
   const triggerLabel = (trigger: SyncHistoryEntry['trigger']) => {
@@ -426,15 +479,38 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
           ))}
         </div>
 
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Tìm kỹ thuật, ngày hoặc nội dung..."
-            className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl outline-none text-slate-800 dark:text-slate-100 w-full md:w-64"
-          />
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="relative flex-1 sm:flex-initial">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Tìm kỹ thuật, ngày hoặc nội dung..."
+              className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl outline-none text-slate-800 dark:text-slate-100 w-full md:w-64"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleRequestClearHistory}
+            disabled={entries.length === 0 || (hasActiveFilter && filteredEntries.length === 0)}
+            title={
+              entries.length === 0
+                ? 'Không có lịch sử để xóa'
+                : hasActiveFilter && filteredEntries.length < entries.length
+                  ? `Xóa ${filteredEntries.length} bản ghi đang lọc`
+                  : `Xóa toàn bộ ${entries.length} bản ghi lịch sử`
+            }
+            className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>
+              {hasActiveFilter && filteredEntries.length > 0 && filteredEntries.length < entries.length
+                ? `Xóa lịch sử (${filteredEntries.length})`
+                : 'Xóa lịch sử'}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -468,11 +544,18 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                 className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden"
               >
                 {/* Row Summary Header */}
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() =>
                     setExpandedIds((prev) => ({ ...prev, [entry.id]: !prev[entry.id] }))
                   }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setExpandedIds((prev) => ({ ...prev, [entry.id]: !prev[entry.id] }));
+                    }
+                  }}
                   className="w-full p-4 text-left flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
                 >
                   <div className="space-y-1.5 min-w-0">
@@ -511,13 +594,22 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                         {isExpanded ? 'Thu gọn chi tiết' : `Xem chi tiết (${discrepancies.length + autoSamples.length})`}
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteSingleEntry(e, entry)}
+                      title="Xóa bản ghi này"
+                      aria-label="Xóa bản ghi này"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                     {isExpanded ? (
                       <ChevronUp className="w-4 h-4 text-slate-400" />
                     ) : (
                       <ChevronDown className="w-4 h-4 text-slate-400" />
                     )}
                   </div>
-                </button>
+                </div>
 
                 {/* Expanded Details */}
                 {isExpanded && (
@@ -721,6 +813,24 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
           })}
         </div>
       )}
+      <ConfirmModal
+        isOpen={Boolean(confirmClearModal)}
+        title={
+          confirmClearModal?.mode === 'filtered'
+            ? 'Xóa lịch sử đang lọc?'
+            : 'Xóa toàn bộ lịch sử thông báo?'
+        }
+        message={
+          confirmClearModal?.mode === 'filtered'
+            ? `Bạn có chắc chắn muốn xóa ${confirmClearModal.count} bản ghi lịch sử thông báo & đồng bộ đang hiển thị theo bộ lọc hiện tại? Thao tác này cũng sẽ đồng bộ lên Firebase.`
+            : `Bạn có chắc chắn muốn xóa toàn bộ ${confirmClearModal?.count || 0} bản ghi trong lịch sử thông báo & đồng bộ? Số liệu báo cáo đã lưu trên hệ thống sẽ không bị ảnh hưởng.`
+        }
+        confirmText="Xóa lịch sử"
+        cancelText="Hủy bỏ"
+        isDanger
+        onConfirm={handleConfirmClearHistory}
+        onCancel={() => setConfirmClearModal(null)}
+      />
     </div>
   );
 };

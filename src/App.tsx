@@ -27,7 +27,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { storageService } from './services/storageService';
 import { firebaseSyncService } from './services/firebaseSyncService';
 import { runThreeDaySmartSync } from './services/googleSheetReportService';
-import { scheduleLiveContextSync } from './services/aiContextService';
+import { scheduleLiveContextSync, syncLiveContextToServer } from './services/aiContextService';
 import { REPORT_ARCHIVE_UPDATED_EVENT } from './services/reportArchiveService';
 import { ToastMessage, TaskItem, DocumentItem, NotificationLog, User } from './types/hospital';
 
@@ -150,12 +150,47 @@ export default function App() {
     };
   }, []);
 
-  // Re-sync live hospital context when authenticated state becomes active
+  // Re-sync live hospital context when authenticated state becomes active & keep Telegram bridge alive across server restarts
   useEffect(() => {
     if (isAuthenticated) {
       scheduleLiveContextSync(400);
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const verifyAndResyncBridge = async () => {
+      const settings = storageService.getSettings();
+      const hasToken = (settings.telegramBotToken || '').trim().length > 10;
+      const qaEnabled = settings.telegramQaEnabled !== false;
+      try {
+        const res = await fetch('/api/telegram/status');
+        if (!res.ok) return;
+        const json = await res.json();
+        const st = json?.data;
+        if (!st) return;
+        const needsContext = !st.hasLiveContext;
+        const needsBot = hasToken && qaEnabled && (!st.configured || !st.pollingActive);
+        if (needsContext || needsBot) {
+          await syncLiveContextToServer(true);
+        }
+      } catch {
+        // ignore transient offline checks
+      }
+    };
+
+    const handleFocus = () => {
+      void verifyAndResyncBridge();
+    };
+    window.addEventListener('focus', handleFocus);
+    const intervalId = window.setInterval(() => {
+      void verifyAndResyncBridge();
+    }, 35000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   // Automatic 3-day smart sync on app startup (after Firebase initial hydration settles)
   useEffect(() => {

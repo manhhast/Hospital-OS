@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Bell, Send, BellRing, Clock, Wrench, CheckCircle2 } from 'lucide-react';
+import { Bell, Send, BellRing, Clock, Wrench, CheckCircle2, Trash2 } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { NotificationLog, NotificationChannel, EquipmentItem, TaskItem } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import {
@@ -36,6 +37,7 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
   const [channel, setChannel] = useState<NotificationChannel>('Telegram');
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(() => storageService.getEquipment());
   const [taskList, setTaskList] = useState<TaskItem[]>(() => storageService.getTasks());
+  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const syncData = () => {
@@ -126,6 +128,24 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
       `Đã gửi ${urgentEqAlerts.length} cảnh báo thiết bị và ${urgentTaskAlerts.length} nhắc việc qua ${channel}`,
       'success'
     );
+  };
+
+  const handleConfirmClearNotifications = () => {
+    const total = notifications.length;
+    storageService.clearNotifications();
+    onNotificationsUpdated();
+    setIsConfirmClearOpen(false);
+    onShowToast(
+      'Đã xóa lịch sử thông báo',
+      `Đã dọn sạch ${total} bản ghi lịch sử phát thông báo.`,
+      'success'
+    );
+  };
+
+  const handleDeleteNotification = (id: string) => {
+    storageService.deleteNotification(id);
+    onNotificationsUpdated();
+    onShowToast('Đã xóa thông báo', 'Đã xóa mục thông báo khỏi lịch sử.', 'info');
   };
 
   return (
@@ -365,43 +385,84 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
 
       {/* Notification Logs History Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
-        <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Lịch sử phát thông báo</h3>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200">
-            <thead className="bg-slate-50 dark:bg-slate-800 uppercase font-bold text-[10px] text-slate-400">
-              <tr>
-                <th className="p-3">Mã</th>
-                <th className="p-3">Người nhận</th>
-                <th className="p-3">Kênh</th>
-                <th className="p-3">Tiêu đề</th>
-                <th className="p-3">Thời gian</th>
-                <th className="p-3">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {notifications.map((log, idx) => (
-                <tr key={`${log.id}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                  <td className="p-3 font-mono text-slate-400">{log.id}</td>
-                  <td className="p-3 font-medium">{log.recipient}</td>
-                  <td className="p-3">
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold rounded-md">
-                      {log.channel}
-                    </span>
-                  </td>
-                  <td className="p-3">{log.title}</td>
-                  <td className="p-3 text-slate-400 tabular-nums">{log.sentAt}</td>
-                  <td className="p-3">
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold rounded-md">
-                      {log.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+            Lịch sử phát thông báo ({notifications.length})
+          </h3>
+          <button
+            type="button"
+            disabled={notifications.length === 0}
+            onClick={() => setIsConfirmClearOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Xóa lịch sử thông báo</span>
+          </button>
         </div>
+
+        {notifications.length === 0 ? (
+          <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
+            Chưa có lịch sử phát thông báo nào.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200">
+              <thead className="bg-slate-50 dark:bg-slate-800 uppercase font-bold text-[10px] text-slate-400">
+                <tr>
+                  <th className="p-3">Mã</th>
+                  <th className="p-3">Người nhận</th>
+                  <th className="p-3">Kênh</th>
+                  <th className="p-3">Tiêu đề</th>
+                  <th className="p-3">Thời gian</th>
+                  <th className="p-3">Trạng thái</th>
+                  <th className="p-3 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {notifications.map((log, idx) => (
+                  <tr key={`${log.id}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                    <td className="p-3 font-mono text-slate-400">{log.id}</td>
+                    <td className="p-3 font-medium">{log.recipient}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold rounded-md">
+                        {log.channel}
+                      </span>
+                    </td>
+                    <td className="p-3">{log.title}</td>
+                    <td className="p-3 text-slate-400 tabular-nums">{log.sentAt}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold rounded-md">
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteNotification(log.id)}
+                        title="Xóa thông báo này"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      <ConfirmModal
+        isOpen={isConfirmClearOpen}
+        title="Xóa toàn bộ lịch sử thông báo?"
+        message={`Bạn có chắc chắn muốn xóa tất cả ${notifications.length} bản ghi trong lịch sử phát thông báo?`}
+        confirmText="Xóa lịch sử"
+        cancelText="Hủy bỏ"
+        isDanger
+        onConfirm={handleConfirmClearNotifications}
+        onCancel={() => setIsConfirmClearOpen(false)}
+      />
     </div>
   );
 };
