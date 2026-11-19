@@ -1209,7 +1209,7 @@ export const DiscussionView: React.FC = () => {
 
             <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-900 dark:text-emerald-200 space-y-3">
               <h3 className="font-extrabold text-sm">Tình Trạng Lưu Trữ & Security Audit Log</h3>
-              <p>Mọi dữ liệu tin nhắn, tệp đính kèm SOP và thẻ công việc đều được mã hóa lưu trữ local và có cấu trúc tương thích chuẩn Google Sheet API & Firestore.</p>
+              <p>Mọi dữ liệu tin nhắn, tệp đính kèm SOP và thẻ công việc đều được lưu trữ an toàn và đồng bộ chuẩn PostgreSQL, Google Sheet &amp; Google Drive API.</p>
               
               <div className="pt-2 flex items-center space-x-3">
                 <button 

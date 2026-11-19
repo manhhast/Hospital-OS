@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ISOCopilotChatMessage, SOPReference } from '../../types/aiEcosystem';
 import { aiService } from '../../services/aiService';
+import { MarkdownContent } from '../common/MarkdownContent';
 
 interface IsoCopilotTabProps {
   onShowToast?: (title: string, message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
@@ -163,7 +164,7 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
                 )}
 
                 <div
-                  className={`max-w-2xl rounded-2xl p-4 space-y-3 ${
+                  className={`max-w-3xl min-w-0 rounded-2xl p-4 space-y-3 ${
                     isUser
                       ? 'bg-blue-600 text-white rounded-tr-none'
                       : 'bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700/80 rounded-tl-none'
@@ -192,9 +193,13 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
                   </div>
 
                   {/* Message Content */}
-                  <div className="text-xs leading-relaxed whitespace-pre-line font-medium">
-                    {msg.content}
-                  </div>
+                  {isUser ? (
+                    <div className="text-xs leading-relaxed whitespace-pre-line font-medium">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <MarkdownContent content={msg.content} />
+                  )}
 
                   {/* Action Checklist (If provided by RAG) */}
                   {msg.actionChecklist && msg.actionChecklist.length > 0 && (

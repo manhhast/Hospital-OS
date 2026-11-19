@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { CloudOff, RefreshCw, X } from 'lucide-react';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { ToastContainer } from './components/common/ToastContainer';
@@ -25,10 +27,11 @@ import { AIEcosystemView } from './components/ai/AIEcosystemView';
 import { AuthModal } from './components/auth/AuthModal';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { storageService } from './services/storageService';
-import { firebaseSyncService } from './services/firebaseSyncService';
+import { postgresSyncService, type PostgresSyncState } from './services/postgresSyncService';
 import { runThreeDaySmartSync } from './services/googleSheetReportService';
 import { scheduleLiveContextSync, syncLiveContextToServer } from './services/aiContextService';
 import { REPORT_ARCHIVE_UPDATED_EVENT } from './services/reportArchiveService';
+import { resolveEffectiveUserAccess } from './utils/rbac';
 import { ToastMessage, TaskItem, DocumentItem, NotificationLog, User } from './types/hospital';
 
 const ADMIN_ONLY_MODULES: string[] = CONFIG_MODULE_IDS;
@@ -126,10 +129,12 @@ export default function App() {
   const [tasks, setTasks] = useState<TaskItem[]>(storageService.getTasks());
   const [documents, setDocuments] = useState<DocumentItem[]>(storageService.getDocuments());
   const [notifications, setNotifications] = useState<NotificationLog[]>(storageService.getNotifications());
+  const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
+  const [isCloudBannerDismissed, setIsCloudBannerDismissed] = useState(false);
 
-  // Storage & Firebase cloud sync lifecycle
+  // Storage & PostgreSQL server sync lifecycle
   useEffect(() => {
-    firebaseSyncService.init();
+    void postgresSyncService.init();
     scheduleLiveContextSync(600);
     const unsubscribe = storageService.subscribe(() => {
       setTasks(storageService.getTasks());
@@ -137,7 +142,21 @@ export default function App() {
       setNotifications(storageService.getNotifications());
       setCurrentUser(storageService.getCurrentUser());
       setIsAuthenticated(storageService.isAuthenticated());
+      if (storageService.getIsApplyingRemote()) {
+        const remoteTheme = storageService.getSettings().theme;
+        if (remoteTheme === 'light' || remoteTheme === 'dark' || remoteTheme === 'system') {
+          setThemeMode(remoteTheme);
+          localStorage.setItem('theme_mode', remoteTheme);
+        }
+      }
       scheduleLiveContextSync(1200);
+    });
+    const unsubPg = postgresSyncService.subscribe(() => {
+      const next = postgresSyncService.getState();
+      setPgState(next);
+      if (next.status === 'error') {
+        setIsCloudBannerDismissed(false);
+      }
     });
     const handleReportArchiveUpdated = () => {
       scheduleLiveContextSync(900);
@@ -145,8 +164,9 @@ export default function App() {
     window.addEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
     return () => {
       unsubscribe();
+      unsubPg();
       window.removeEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
-      firebaseSyncService.destroy();
+      postgresSyncService.destroy();
     };
   }, []);
 
@@ -169,7 +189,10 @@ export default function App() {
         const st = json?.data;
         if (!st) return;
         const needsContext = !st.hasLiveContext;
-        const needsBot = hasToken && qaEnabled && (!st.configured || !st.pollingActive);
+        const blockedByGuard = Boolean(
+          st.conflictDetected || st.pausedByUser || st.standbyMode || st.webhookUrl
+        );
+        const needsBot = hasToken && qaEnabled && (!st.configured || (!st.pollingActive && !blockedByGuard));
         if (needsContext || needsBot) {
           await syncLiveContextToServer(true);
         }
@@ -192,7 +215,7 @@ export default function App() {
     };
   }, []);
 
-  // Automatic 3-day smart sync on app startup (after Firebase initial hydration settles)
+  // Automatic 3-day smart sync on app startup (after initial PostgreSQL hydration settles if configured)
   useEffect(() => {
     if (!isAuthenticated || startupThreeDayDoneRef.current) return;
 
@@ -210,20 +233,20 @@ export default function App() {
       if (outcome.alertDiscrepancies.length > 0) {
         showToast(
           'Cảnh báo sai lệch 3 ngày gần nhất',
-          `Phát hiện ${outcome.alertDiscrepancies.length} mục sai lệch giữa Firebase và Google Sheet (đã giữ nguyên dữ liệu & lưu vào Lịch sử đồng bộ).`,
+          `Phát hiện ${outcome.alertDiscrepancies.length} mục sai lệch giữa Hệ thống và Google Sheet (đã giữ nguyên dữ liệu & lưu vào Lịch sử đồng bộ).`,
           'warning'
         );
       } else if (outcome.autoWrittenCount > 0) {
         showToast(
           'Đồng bộ tự động 3 ngày gần nhất',
-          `Đã rà soát và tự động ghi mới ${outcome.autoWrittenCount} ô từ Google Sheet lên Firebase.`,
+          `Đã rà soát và tự động ghi mới ${outcome.autoWrittenCount} ô từ Google Sheet vào Hệ thống.`,
           'success'
         );
       }
     };
 
-    const currentCloud = firebaseSyncService.getState();
-    if (currentCloud.status !== 'connecting' && currentCloud.status !== 'syncing') {
+    const currentPg = postgresSyncService.getState();
+    if (currentPg.status !== 'checking' && currentPg.status !== 'syncing') {
       const quickTimer = window.setTimeout(() => {
         void executeStartupThreeDaySync();
       }, 900);
@@ -233,29 +256,41 @@ export default function App() {
       };
     }
 
-    const unsubCloud = firebaseSyncService.subscribe(() => {
-      const nextCloud = firebaseSyncService.getState();
-      if (nextCloud.status !== 'connecting' && nextCloud.status !== 'syncing') {
-        unsubCloud();
+    const unsubPg = postgresSyncService.subscribe(() => {
+      const nextPg = postgresSyncService.getState();
+      if (nextPg.status !== 'checking' && nextPg.status !== 'syncing') {
+        unsubPg();
         void executeStartupThreeDaySync();
       }
     });
 
     fallbackTimer = window.setTimeout(() => {
-      unsubCloud();
+      unsubPg();
       void executeStartupThreeDaySync();
     }, 5500);
 
     return () => {
       cancelled = true;
-      unsubCloud();
+      unsubPg();
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
     };
   }, [isAuthenticated]);
 
-  // Admin access guard: If non-admin attempts to view admin-only modules, redirect to dashboard
+  // Admin / delegated RBAC access guard
+  const canOpenAdminModule = (mod: string) => {
+    if (!ADMIN_ONLY_MODULES.includes(mod)) return true;
+    const access = resolveEffectiveUserAccess(
+      currentUser,
+      storageService.getStaffProfiles(),
+      storageService.getDepartments(),
+      storageService.getRooms()
+    );
+    if (access.isSystemAdmin) return true;
+    return mod === 'users' && access.permissions.canConfigureRBAC;
+  };
+
   useEffect(() => {
-    if (currentUser?.role !== 'Admin' && ADMIN_ONLY_MODULES.includes(activeModule)) {
+    if (!canOpenAdminModule(activeModule)) {
       setActiveModule('dashboard');
     }
   }, [activeModule, currentUser]);
@@ -283,7 +318,7 @@ export default function App() {
 
   // Navigate from Search
   const handleNavigateWithSearch = (module: string, targetId?: string, extraData?: any) => {
-    if (currentUser?.role !== 'Admin' && ADMIN_ONLY_MODULES.includes(module)) {
+    if (!canOpenAdminModule(module)) {
       showToast('Phân quyền hạn chế', 'Chức năng này chỉ dành riêng cho tài khoản Quản trị viên (Admin).', 'warning');
       return;
     }
@@ -391,7 +426,37 @@ export default function App() {
           onShowToast={showToast}
         />
 
+        {pgState.configured && pgState.status === 'error' && !isCloudBannerDismissed && (
+          <div className="px-4 md:px-6 py-2 border-b text-xs flex flex-wrap items-center justify-between gap-2 bg-rose-50 dark:bg-rose-950/35 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <CloudOff className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                <strong>Lỗi đồng bộ PostgreSQL:</strong> {pgState.errorMessage || 'Không thể kết nối tới cơ sở dữ liệu máy chủ.'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => void postgresSyncService.refreshServerStatus()}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Thử lại</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCloudBannerDismissed(true)}
+                className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                title="Ẩn thông báo này"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+          <ErrorBoundary fallbackTitle="Không thể hiển thị phân hệ này">
           {activeModule === 'dashboard' && (
             <DashboardView
               tasks={tasks}
@@ -497,6 +562,7 @@ export default function App() {
               onChangeThemeMode={handleThemeModeChange}
             />
           )}
+          </ErrorBoundary>
         </main>
       </div>
 

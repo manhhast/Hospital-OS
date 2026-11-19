@@ -1,5 +1,35 @@
 export type UserRole = 'Admin' | 'Manager' | 'Doctor' | 'Staff';
-export type CLSTitle = 'Quản trị ứng dụng' | 'Quản trị hệ thống' | 'Trưởng khoa' | 'Phó khoa' | 'Điều dưỡng trưởng' | 'Nhân viên' | (string & {});
+export type ManagementTier = 'admin' | 'department_head' | 'section_head' | 'room_head' | 'staff';
+export type CLSTitle =
+  | 'Quản trị ứng dụng'
+  | 'Quản trị hệ thống'
+  | 'Trưởng khoa'
+  | 'Phó khoa'
+  | 'Trưởng bộ phận'
+  | 'Trưởng phòng'
+  | 'KTV trưởng'
+  | 'Điều dưỡng trưởng'
+  | 'Bác sĩ'
+  | 'Kỹ thuật viên'
+  | 'Nhân viên'
+  | (string & {});
+
+export interface UserPermissionOverrides {
+  canCreateStaff?: boolean;
+  canEditStaff?: boolean;
+  canDeleteStaff?: boolean;
+  canManageCertificates?: boolean;
+  canCreateEquipment?: boolean;
+  canEditEquipment?: boolean;
+  canDeleteEquipment?: boolean;
+  canLogMaintenanceRepair?: boolean;
+  canReportEquipmentIssue?: boolean;
+  canLockoutEquipment?: boolean;
+  canManageRoomsDepartments?: boolean;
+  canApproveLeave?: boolean;
+  canConfigureRBAC?: boolean;
+  allowCrossScopeEdit?: boolean;
+}
 
 export interface User {
   id: string;
@@ -16,6 +46,10 @@ export interface User {
   resetRequested?: boolean;
   resetRequestNote?: string;
   room?: string; // e.g. "Phòng Xét nghiệm Tầng 2"
+  managementLevel?: ManagementTier;
+  managedDepartments?: string[];
+  managedRooms?: string[];
+  permissionOverrides?: UserPermissionOverrides;
 }
 
 export type TaskPriority = 'Thấp' | 'Trung bình' | 'Cao' | 'Khẩn cấp';
@@ -450,6 +484,10 @@ export interface StaffProfile {
   leaveBalanceDays: number;
   currentStatus?: EmploymentStatus;
   statusHistory?: WorkStatusHistoryItem[];
+  managementLevel?: ManagementTier;
+  managedDepartments?: string[];
+  managedRooms?: string[];
+  permissionOverrides?: UserPermissionOverrides;
 }
 
 // --- Meeting Management & Action Items ---
@@ -738,7 +776,11 @@ export interface SyncHistoryEntry {
   autoWrittenCount: number;
   discrepancyCount: number;
   updatedFromSheetCount: number;
-  savedOnFirebase: boolean;
+  savedToDatabase?: boolean;
+  databaseNote?: string;
+  /** @deprecated Legacy alias kept optional for older local records */
+  savedOnFirebase?: boolean;
+  /** @deprecated Legacy alias kept optional for older local records */
   firebaseNote?: string;
   performedBy: string;
   summary: string;

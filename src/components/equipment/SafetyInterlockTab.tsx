@@ -3,7 +3,7 @@ import {
   ShieldAlert, AlertTriangle, Send, Lock, Unlock, CheckCircle2, 
   Clock, FileWarning, Bell, User, MapPin, Eye, ExternalLink, Printer, Check, Copy, RefreshCw, Sparkles
 } from 'lucide-react';
-import { EquipmentItem, SafetyViolationItem, StaffProfile } from '../../types/hospital';
+import { DepartmentUnit, EquipmentItem, ParaclinicalRoom, SafetyViolationItem, StaffProfile } from '../../types/hospital';
 import { 
   checkEquipmentSafetyInterlock, 
   dispatchSafetyInterlockAlert, 
@@ -12,6 +12,7 @@ import {
 import { formatDateVN, formatDateTimeVN, getNowVNString } from '../../utils/dateUtils';
 import { storageService } from '../../services/storageService';
 import { filterActiveStaffDisplayName, getInactiveStaffMatchers } from '../../utils/staffStatus';
+import { resolveEffectiveUserAccess, canManageEquipmentTarget } from '../../utils/rbac';
 
 interface SafetyInterlockTabProps {
   equipmentList: EquipmentItem[];
@@ -32,13 +33,25 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL');
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>(() => storageService.getStaffProfiles());
+  const [rooms, setRooms] = useState<ParaclinicalRoom[]>(() => storageService.getRooms());
+  const [departments, setDepartments] = useState<DepartmentUnit[]>(() => storageService.getDepartments());
+  const [allUsers, setAllUsers] = useState(() => storageService.getUsers());
 
   useEffect(() => {
     const unsub = storageService.subscribe(() => {
       setStaffProfiles(storageService.getStaffProfiles());
+      setRooms(storageService.getRooms());
+      setDepartments(storageService.getDepartments());
+      setAllUsers(storageService.getUsers());
     });
     return () => unsub();
   }, []);
+
+  const currentUser = storageService.getCurrentUser();
+  const actorAccess = useMemo(
+    () => resolveEffectiveUserAccess(currentUser, staffProfiles, departments, rooms),
+    [currentUser, staffProfiles, departments, rooms, allUsers]
+  );
 
   const inactiveStaff = useMemo(() => getInactiveStaffMatchers(staffProfiles), [staffProfiles]);
 
@@ -66,6 +79,10 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
   };
 
   const handleToggleLockout = (equipmentId: string, currentLockout?: boolean, reason?: string) => {
+    const eq = equipmentList.find(e => e.id === equipmentId);
+    if (!canManageEquipmentTarget(actorAccess, 'lockout', eq, rooms, departments)) {
+      return;
+    }
     toggleSafetyLockout(equipmentId, !currentLockout, reason);
     onRefresh();
   };
@@ -251,26 +268,32 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
                       <span>Gửi Cảnh Báo Khẩn Telegram/Email</span>
                     </button>
 
-                    <button
-                      onClick={() => handleToggleLockout(violation.equipmentId, isLocked, violation.title)}
-                      className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 border ${
-                        isLocked
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                          : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 border-slate-900 shadow-sm'
-                      }`}
-                    >
-                      {isLocked ? (
-                        <>
-                          <Unlock className="w-4 h-4 text-emerald-600" />
-                          <span>Mở Khóa Vận Hành Lại</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-4 h-4 text-amber-400" />
-                          <span>Khóa Khẩn Cấp (LOTO)</span>
-                        </>
-                      )}
-                    </button>
+                    {canManageEquipmentTarget(actorAccess, 'lockout', matchedEquipment, rooms, departments) ? (
+                      <button
+                        onClick={() => handleToggleLockout(violation.equipmentId, isLocked, violation.title)}
+                        className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 border ${
+                          isLocked
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                            : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 border-slate-900 shadow-sm'
+                        }`}
+                      >
+                        {isLocked ? (
+                          <>
+                            <Unlock className="w-4 h-4 text-emerald-600" />
+                            <span>Mở Khóa Vận Hành Lại</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-4 h-4 text-amber-400" />
+                            <span>Khóa Khẩn Cấp (LOTO)</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="w-full py-2 px-3 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5" /> Chỉ quản lý trong phạm vi được khóa LOTO
+                      </span>
+                    )}
 
                     {matchedEquipment && (
                       <button

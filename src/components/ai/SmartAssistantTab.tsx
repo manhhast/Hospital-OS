@@ -28,6 +28,7 @@ import { aiService } from '../../services/aiService';
 import { buildLiveHospitalContext, LiveHospitalContextSnapshot } from '../../services/aiContextService';
 import { storageService } from '../../services/storageService';
 import { REPORT_ARCHIVE_UPDATED_EVENT } from '../../services/reportArchiveService';
+import { MarkdownContent } from '../common/MarkdownContent';
 
 interface SmartAssistantTabProps {
   onShowToast?: (title: string, message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
@@ -65,91 +66,6 @@ const buildWelcomeMessage = (
     ]
   };
 };
-
-function renderInlineMarkdown(text: string): React.ReactNode[] {
-  const tokens: React.ReactNode[] = [];
-  const pattern = /(\*\*[^*]+\*\*|`[^`\n]+`|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let keyIdx = 0;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      tokens.push(text.slice(lastIndex, match.index));
-    }
-    const raw = match[0];
-    if (raw.startsWith('**') && raw.endsWith('**')) {
-      tokens.push(
-        <strong key={`b-${keyIdx++}`} className="font-bold">
-          {raw.slice(2, -2)}
-        </strong>
-      );
-    } else if (raw.startsWith('`') && raw.endsWith('`')) {
-      tokens.push(
-        <code
-          key={`c-${keyIdx++}`}
-          className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px]"
-        >
-          {raw.slice(1, -1)}
-        </code>
-      );
-    } else {
-      const linkMatch = raw.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
-      if (linkMatch) {
-        tokens.push(
-          <a
-            key={`l-${keyIdx++}`}
-            href={linkMatch[2]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline decoration-blue-400 text-blue-600 dark:text-blue-400 hover:text-blue-700 font-semibold inline-flex items-center gap-0.5"
-          >
-            <span>{linkMatch[1]}</span>
-            <ExternalLink className="w-3 h-3 inline" />
-          </a>
-        );
-      } else {
-        tokens.push(raw);
-      }
-    }
-    lastIndex = pattern.lastIndex;
-  }
-
-  if (lastIndex < text.length) {
-    tokens.push(text.slice(lastIndex));
-  }
-  return tokens;
-}
-
-function renderFormattedMessage(content: string): React.ReactNode {
-  const lines = String(content || '').split('\n');
-  return (
-    <div className="space-y-1.5 text-xs sm:text-[13px] leading-relaxed font-medium">
-      {lines.map((line, idx) => {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          return <div key={idx} className="h-1" />;
-        }
-        if (/^#{2,3}\s+/.test(trimmed)) {
-          return (
-            <h4 key={idx} className="text-sm font-extrabold text-slate-900 dark:text-white pt-1">
-              {renderInlineMarkdown(trimmed.replace(/^#{2,3}\s+/, ''))}
-            </h4>
-          );
-        }
-        if (/^(\*|-|•)\s+/.test(trimmed)) {
-          return (
-            <div key={idx} className="flex items-start gap-2 pl-1">
-              <span className="text-blue-500 font-bold mt-0.5 shrink-0">•</span>
-              <span className="flex-1">{renderInlineMarkdown(trimmed.replace(/^(\*|-|•)\s+/, ''))}</span>
-            </div>
-          );
-        }
-        return <p key={idx}>{renderInlineMarkdown(line)}</p>;
-      })}
-    </div>
-  );
-}
 
 const MEMORY_CATEGORY_META: Record<
   AssistantMemoryCategory,
@@ -472,7 +388,9 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
             <span>Bộ nhớ học hỏi ({memories.length})</span>
           </button>
 
-          {telegramStatus?.pollingActive ? (
+          {telegramStatus?.pollingActive &&
+          !telegramStatus?.conflictDetected &&
+          !telegramStatus?.pausedByUser ? (
             <button
               type="button"
               onClick={() => onNavigateModule?.('telegram')}
@@ -487,10 +405,14 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
             <button
               type="button"
               onClick={() => onNavigateModule?.('telegram')}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                telegramStatus?.conflictDetected
+                  ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50'
+                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+              }`}
             >
-              <Settings className="w-3.5 h-3.5 text-slate-500" />
-              <span>Cấu hình Telegram</span>
+              <Settings className="w-3.5 h-3.5" />
+              <span>{telegramStatus?.conflictDetected ? 'Telegram (Lỗi 409)' : 'Cấu hình Telegram'}</span>
             </button>
           )}
 
@@ -652,7 +574,7 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
                 )}
 
                 <div
-                  className={`max-w-3xl rounded-2xl p-4 space-y-3 ${
+                  className={`max-w-3xl min-w-0 rounded-2xl p-4 space-y-3 ${
                     isUser
                       ? 'bg-blue-600 text-white rounded-tr-none shadow-sm'
                       : 'bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-tl-none'
@@ -733,7 +655,7 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
                       {msg.content}
                     </div>
                   ) : (
-                    renderFormattedMessage(msg.content)
+                    <MarkdownContent content={msg.content} />
                   )}
 
                   {/* Action Checklist */}

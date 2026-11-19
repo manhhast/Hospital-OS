@@ -10,6 +10,16 @@ import {
   getGeminiClient,
 } from "./server/assistantEngine";
 import { telegramManager } from "./server/telegramBot";
+import {
+  loadStoredTelegramSettingsFromDb,
+  registerPostgresSyncRoutes,
+} from "./server/postgresSync";
+
+function getRequestHostLabel(req: express.Request): string {
+  const fwd = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const host = String(req.get("host") || "").trim();
+  return fwd || host;
+}
 
 dotenv.config();
 
@@ -17,6 +27,7 @@ const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: "12mb" }));
+registerPostgresSyncRoutes(app);
 
 // Health Check API
 app.get("/api/health", (_req, res) => {
@@ -33,6 +44,7 @@ app.get("/api/health", (_req, res) => {
 // ==========================================
 app.post("/api/assistant/sync-context", (req, res) => {
   try {
+    telegramManager.updateHostLabel(getRequestHostLabel(req));
     const { liveContext, telegramConfig } = req.body || {};
     if (liveContext) {
       telegramManager.updateLiveContext(liveContext);
@@ -57,7 +69,8 @@ app.post("/api/assistant/sync-context", (req, res) => {
   }
 });
 
-app.get("/api/telegram/status", (_req, res) => {
+app.get("/api/telegram/status", (req, res) => {
+  telegramManager.updateHostLabel(getRequestHostLabel(req));
   res.json({
     success: true,
     data: telegramManager.getStatus(),
@@ -66,17 +79,22 @@ app.get("/api/telegram/status", (_req, res) => {
 
 app.post("/api/telegram/test", async (req, res) => {
   try {
+    telegramManager.updateHostLabel(getRequestHostLabel(req));
     const { botToken, defaultChatId, liveContext, enabled } = req.body || {};
     if (liveContext) {
       telegramManager.updateLiveContext(liveContext);
     }
     const result = await telegramManager.testConnection(botToken, defaultChatId);
     if (typeof botToken === "string" && botToken.trim()) {
-      telegramManager.configure({
-        botToken: botToken.trim(),
-        defaultChatId: String(defaultChatId || ""),
-        enabled: enabled !== false,
-      });
+      telegramManager.configure(
+        {
+          botToken: botToken.trim(),
+          defaultChatId: String(defaultChatId || ""),
+          enabled: enabled !== false,
+        },
+        true
+      );
+      await new Promise((r) => setTimeout(r, 850));
     }
     res.json({
       success: true,
@@ -87,6 +105,74 @@ app.post("/api/telegram/test", async (req, res) => {
     res.status(400).json({
       success: false,
       error: error?.message || "Không thể kết nối Telegram Bot",
+      status: telegramManager.getStatus(),
+    });
+  }
+});
+
+app.post("/api/telegram/pause", async (req, res) => {
+  try {
+    telegramManager.updateHostLabel(getRequestHostLabel(req));
+    const status = await telegramManager.pausePolling();
+    res.json({
+      success: true,
+      data: status,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error?.message || "Không thể tạm dừng lắng nghe Telegram",
+    });
+  }
+});
+
+app.post("/api/telegram/retry", async (req, res) => {
+  try {
+    telegramManager.updateHostLabel(getRequestHostLabel(req));
+    const { botToken, defaultChatId, liveContext } = req.body || {};
+    if (liveContext) {
+      telegramManager.updateLiveContext(liveContext);
+    }
+    if (typeof botToken === "string" && botToken.trim()) {
+      telegramManager.configure(
+        {
+          botToken: botToken.trim(),
+          defaultChatId: String(defaultChatId || ""),
+          enabled: true,
+        },
+        true
+      );
+      await new Promise((r) => setTimeout(r, 900));
+    } else {
+      await telegramManager.retryPolling(true);
+    }
+    res.json({
+      success: true,
+      data: telegramManager.getStatus(),
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error?.message || "Không thể kết nối lại Telegram Bot",
+      data: telegramManager.getStatus(),
+    });
+  }
+});
+
+app.post("/api/telegram/verify-exclusivity", async (req, res) => {
+  try {
+    telegramManager.updateHostLabel(getRequestHostLabel(req));
+    const { botToken } = req.body || {};
+    const report = await telegramManager.verifyBotExclusivity(botToken);
+    res.json({
+      success: true,
+      data: report,
+      status: telegramManager.getStatus(),
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error?.message || "Không thể kiểm tra độc quyền Telegram Bot",
       status: telegramManager.getStatus(),
     });
   }
@@ -655,9 +741,38 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[CLS WorkHub Full-Stack Server] running on http://0.0.0.0:${PORT}`);
+    void (async () => {
+      try {
+        const storedTg = await loadStoredTelegramSettingsFromDb();
+        if (storedTg && storedTg.botToken && storedTg.enabled && !telegramManager.getStatus().configured) {
+          telegramManager.configure(storedTg, false);
+        }
+      } catch {
+        // ignore startup Telegram autoload error
+      }
+    })();
   });
+
+  let shuttingDown = false;
+  const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[CLS WorkHub] Received ${signal}, closing Telegram polling & HTTP server...`);
+    try {
+      await telegramManager.shutdown();
+    } catch {
+      // ignore shutdown error
+    }
+    server.close(() => {
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 1500).unref();
+  };
+
+  process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
 }
 
 startServer();

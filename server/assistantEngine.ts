@@ -388,7 +388,7 @@ export function buildDeterministicAssistantAnswer(
   const asksAboutSOP = /(sop|iso|15189|quy trinh|troponin|tat|tran do|hoa chat|westgard|can quang)/.test(
     q
   );
-  const asksAboutSync = /(dong bo|google sheet|sai lech|firebase|lich su)/.test(q);
+  const asksAboutSync = /(dong bo|google sheet|sai lech|postgresql|du lieu|lich su)/.test(q);
 
   const includeOverview =
     !asksAboutCases &&
@@ -588,7 +588,7 @@ export function buildDeterministicAssistantAnswer(
     sources.push("Lịch sử đồng bộ Google Sheet");
     const lastRun = (sy.recentRuns || [])[0];
     parts.push(
-      `🔄 **Đồng bộ Google Sheet <-> Firebase:** Có ${sy.pendingDiscrepanciesCount || 0} mục sai lệch đang chờ xử lý.` +
+      `🔄 **Đồng bộ Google Sheet <-> Hệ thống:** Có ${sy.pendingDiscrepanciesCount || 0} mục sai lệch đang chờ xử lý.` +
         (lastRun
           ? `\n  • Lần gần nhất: ${lastRun.displayTime} (${lastRun.dateRangeLabel}) — ${lastRun.summary}`
           : "")
@@ -732,8 +732,8 @@ export async function askHospitalAssistant(params: {
 
   const channelGuidance =
     channel === "telegram"
-      ? "Người dùng đang trao đổi qua Telegram Bot. Hãy giao tiếp tự nhiên, gần gũi như một trợ lý điều hành tận tâm trên điện thoại: trả lời thẳng trọng tâm ngay đoạn mở đầu, dùng gạch đầu dòng rõ ràng, dễ lướt nhanh, không rườm rà."
-      : "Người dùng đang trao đổi trực tiếp trên CLS WorkHub. Hãy trình bày như một trợ lý chuyên môn cấp cao: ấm áp, linh hoạt, mạch lạc, có phân tích điểm đáng chú ý và gợi mở hướng xử lý thực tế.";
+      ? "Người dùng đang trao đổi qua Telegram Bot. Hãy giao tiếp tự nhiên, gần gũi như một trợ lý điều hành tận tâm trên điện thoại: trả lời thẳng trọng tâm ngay đoạn mở đầu, dùng gạch đầu dòng rõ ràng, dễ lướt nhanh, không dùng bảng Markdown nhiều cột (| ... |) vì màn hình Telegram không kẻ khung bảng."
+      : "Người dùng đang trao đổi trực tiếp trên CLS WorkHub. Hãy trình bày như một trợ lý chuyên môn cấp cao: ấm áp, linh hoạt, mạch lạc, có phân tích điểm đáng chú ý và gợi mở hướng xử lý thực tế. Khi cần trình bày bảng số liệu, so sánh theo ngày/tháng, cơ cấu bộ phận, danh sách thiết bị hoặc lịch trực nhiều cột, hãy dùng Bảng Markdown chuẩn (`| Cột 1 | Cột 2 | ... |` kèm hàng phân cách `| :--- | ---: |`) để giao diện tự kẻ khung viền trực quan.";
 
   const systemInstruction = `Bạn là **Trợ Lý Chuyên Môn & Điều Hành Thông Minh** của Khoa Cận Lâm Sàng (CLS WorkHub Assistant).
 ${channelGuidance}

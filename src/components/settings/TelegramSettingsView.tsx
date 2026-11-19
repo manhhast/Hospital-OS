@@ -10,6 +10,8 @@ import {
   HelpCircle,
   Key,
   MessageCircle,
+  Pause,
+  Play,
   RefreshCw,
   Save,
   Search,
@@ -19,7 +21,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { AppSettings } from '../../types/hospital';
-import { TelegramBotStatus } from '../../types/aiEcosystem';
+import { TelegramBotStatus, TelegramExclusivityReport } from '../../types/aiEcosystem';
 import { storageService } from '../../services/storageService';
 import { aiService } from '../../services/aiService';
 
@@ -48,6 +50,9 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
   const [isSaving, setIsSaving] = useState(false);
   const [isDetectingChats, setIsDetectingChats] = useState(false);
   const [isSyncingContext, setIsSyncingContext] = useState(false);
+  const [isChangingPollState, setIsChangingPollState] = useState(false);
+  const [isVerifyingExclusivity, setIsVerifyingExclusivity] = useState(false);
+  const [exclusivityReport, setExclusivityReport] = useState<TelegramExclusivityReport | null>(null);
   const [detectedChats, setDetectedChats] = useState<DetectedTelegramChat[]>([]);
   const [detectHint, setDetectHint] = useState<{ type: 'error' | 'info'; message: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -59,10 +64,16 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
 
   useEffect(() => {
     void refreshStatus();
+    const pollInterval = window.setInterval(() => {
+      void refreshStatus();
+    }, 5000);
     const unsub = storageService.subscribe(() => {
       setSettings(storageService.getSettings());
     });
-    return () => unsub();
+    return () => {
+      window.clearInterval(pollInterval);
+      unsub();
+    };
   }, []);
 
   const handleCopyText = async (text: string, key: string, label: string) => {
@@ -206,7 +217,97 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
     }
   };
 
-  const isBotActive = Boolean(telegramStatus?.pollingActive && telegramStatus?.enabled);
+  const handlePausePolling = async () => {
+    setIsChangingPollState(true);
+    try {
+      const st = await aiService.pauseTelegramPolling();
+      if (st) setTelegramStatus(st);
+      onShowToast(
+        'Đã tạm dừng Polling tại đây',
+        'Máy chủ này đã ngừng gọi getUpdates để nhường kết nối Bot Token cho phiên bản khác hoặc công cụ ngoài.',
+        'info'
+      );
+    } catch (err) {
+      onShowToast('Không thể tạm dừng', err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setIsChangingPollState(false);
+    }
+  };
+
+  const handleRetryPolling = async () => {
+    const token = (settings.telegramBotToken || '').trim();
+    setIsChangingPollState(true);
+    try {
+      const st = await aiService.retryTelegramPolling(
+        token
+          ? {
+              botToken: token,
+              defaultChatId: (settings.defaultTelegramChatId || '').trim()
+            }
+          : undefined
+      );
+      if (st) setTelegramStatus(st);
+
+      window.setTimeout(() => {
+        void refreshStatus();
+      }, 2800);
+
+      if (st?.conflictDetected) {
+        onShowToast(
+          'Vẫn còn phiên kết nối khác (409)',
+          'Một phiên bản khác vẫn đang giữ Bot Token này. Hãy đóng phiên bản đó trước hoặc bấm Tạm dừng tại đây.',
+          'warning'
+        );
+      } else {
+        onShowToast(
+          'Đã kết nối lại Bot Telegram',
+          'Đã chiếm quyền Polling thành công và đang lắng nghe tin nhắn trên phiên bản này.',
+          'success'
+        );
+      }
+    } catch (err) {
+      await refreshStatus();
+      onShowToast('Không thể kết nối lại', err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setIsChangingPollState(false);
+    }
+  };
+
+  const handleVerifyExclusivity = async () => {
+    const token = (settings.telegramBotToken || '').trim();
+    setIsVerifyingExclusivity(true);
+    try {
+      const { report, status } = await aiService.verifyTelegramExclusivity(token || undefined);
+      setExclusivityReport(report);
+      if (status) setTelegramStatus(status);
+      onShowToast(
+        report.isExclusive ? 'Bot đang dùng riêng cho app hiện tại' : 'Phát hiện kết nối khác với Bot',
+        report.summary,
+        report.isExclusive ? 'success' : 'warning'
+      );
+    } catch (err) {
+      onShowToast(
+        'Không thể kiểm tra độc quyền Bot',
+        err instanceof Error ? err.message : String(err),
+        'error'
+      );
+    } finally {
+      setIsVerifyingExclusivity(false);
+    }
+  };
+
+  const isConflict = Boolean(telegramStatus?.conflictDetected);
+  const isPaused = Boolean(telegramStatus?.pausedByUser);
+  const isStandby = Boolean(telegramStatus?.standbyMode);
+  const hasWebhook = Boolean(telegramStatus?.webhookUrl);
+  const isBotActive = Boolean(
+    telegramStatus?.pollingActive &&
+      telegramStatus?.enabled &&
+      !isConflict &&
+      !isPaused &&
+      !isStandby &&
+      !hasWebhook
+  );
 
   return (
     <div className="space-y-6 pb-12 max-w-4xl">
@@ -226,6 +327,10 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                   className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${
                     isBotActive
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                      : isConflict
+                      ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+                      : isStandby || hasWebhook
+                      ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800'
                       : telegramStatus?.configured
                       ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
                       : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
@@ -233,6 +338,14 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                 >
                   {isBotActive
                     ? `Đang hoạt động${telegramStatus?.botUsername ? ` (@${telegramStatus.botUsername})` : ''}`
+                    : isConflict
+                    ? 'Xung đột kết nối (409)'
+                    : isStandby
+                    ? 'Đang nhường quyền Polling'
+                    : hasWebhook
+                    ? 'Đang chạy qua Webhook'
+                    : isPaused
+                    ? 'Đã tạm dừng tại đây'
                     : telegramStatus?.configured
                     ? 'Đã gắn Token (chờ kích hoạt / đang tắt)'
                     : 'Chưa cấu hình Bot'}
@@ -247,6 +360,15 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
+              onClick={() => void handleVerifyExclusivity()}
+              disabled={isVerifyingExclusivity || isChangingPollState}
+              className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <ShieldCheck className={`w-3.5 h-3.5 ${isVerifyingExclusivity ? 'animate-pulse' : ''}`} />
+              <span>{isVerifyingExclusivity ? 'Đang kiểm tra...' : 'Kiểm tra độc quyền Bot'}</span>
+            </button>
+            <button
+              type="button"
               onClick={() => void handleSyncContextNow()}
               disabled={isSyncingContext}
               className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
@@ -254,6 +376,17 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingContext ? 'animate-spin' : ''}`} />
               <span>Đồng bộ dữ liệu</span>
             </button>
+            {isBotActive && (
+              <button
+                type="button"
+                onClick={() => void handlePausePolling()}
+                disabled={isChangingPollState}
+                className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Pause className="w-3.5 h-3.5" />
+                <span>Tạm dừng</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void handleTestAndActivateBot()}
@@ -276,8 +409,26 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
           </div>
           <div className="px-5 py-3.5">
             <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Lắng nghe tin nhắn</div>
-            <div className={`text-sm font-bold mt-0.5 ${isBotActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
-              {isBotActive ? 'Đang trực 24/7' : 'Tạm dừng'}
+            <div
+              className={`text-sm font-bold mt-0.5 ${
+                isBotActive
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : isConflict
+                  ? 'text-rose-700 dark:text-rose-400'
+                  : isStandby || hasWebhook
+                  ? 'text-sky-700 dark:text-sky-400'
+                  : 'text-amber-700 dark:text-amber-400'
+              }`}
+            >
+              {isBotActive
+                ? 'Đang trực 24/7'
+                : isConflict
+                ? 'Tạm dừng (Trùng Token 409)'
+                : isStandby
+                ? 'Dự phòng (Bản khác đang trực)'
+                : hasWebhook
+                ? 'Webhook trực tuyến'
+                : 'Tạm dừng'}
             </div>
           </div>
           <div className="px-5 py-3.5">
@@ -294,13 +445,138 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
           </div>
         </div>
 
-        {telegramStatus?.lastError && (
-          <div className="px-5 py-3 bg-rose-50 dark:bg-rose-950/40 border-t border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">Cảnh báo kết nối Telegram: </span>
-              <span>{telegramStatus.lastError}</span>
+        {(telegramStatus?.lastError || isConflict) && (
+          <div className="px-5 py-4 bg-rose-50 dark:bg-rose-950/40 border-t border-rose-200 dark:border-rose-900/60 space-y-2.5 text-xs text-rose-800 dark:text-rose-200">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+              <div className="space-y-1">
+                <div>
+                  <span className="font-bold">Cảnh báo kết nối Telegram: </span>
+                  <span>{telegramStatus?.lastError}</span>
+                </div>
+                {isConflict && (
+                  <p className="text-[11px] text-rose-700/90 dark:text-rose-300/90 leading-relaxed">
+                    Lưu ý kỹ thuật: Telegram chỉ cho phép <strong>duy nhất 1 máy chủ</strong> nhận tin qua <code className="font-mono">getUpdates</code> cho mỗi Bot Token. Khi cả link Phát triển (Dev) và link Chia sẻ (Shared) cùng chạy với cùng Token, hệ thống sẽ tự tạm dừng tại đây để tránh lỗi lặp.
+                  </p>
+                )}
+              </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2 pl-6">
+              <button
+                type="button"
+                onClick={() => void handleRetryPolling()}
+                disabled={isChangingPollState}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isChangingPollState ? 'animate-spin' : ''}`} />
+                <span>Chiếm quyền &amp; Kết nối lại tại đây</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePausePolling()}
+                disabled={isChangingPollState}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-rose-200 dark:border-rose-800 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Pause className="w-3.5 h-3.5" />
+                <span>Tạm dừng Polling tại đây (giữ bản chính chạy)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleVerifyExclusivity()}
+                disabled={isVerifyingExclusivity}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>{isVerifyingExclusivity ? 'Đang dò...' : 'Kiểm tra app ngoài'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {exclusivityReport && (
+          <div
+            className={`px-5 py-4 border-t text-xs space-y-2 ${
+              exclusivityReport.isExclusive
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200'
+                : 'bg-amber-50/90 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                {exclusivityReport.isExclusive ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                )}
+                <div className="space-y-1">
+                  <div className="font-bold">
+                    {exclusivityReport.isExclusive
+                      ? `Xác nhận: @${exclusivityReport.botUsername || 'Bot'} đang dùng riêng cho ứng dụng hiện tại`
+                      : `Cảnh báo: @${exclusivityReport.botUsername || 'Bot'} đang có kết nối khác`}
+                  </div>
+                  <p className="leading-relaxed opacity-90">{exclusivityReport.summary}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExclusivityReport(null)}
+                className="text-[11px] font-semibold opacity-70 hover:opacity-100 shrink-0 cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-6 pt-1 text-[11px]">
+              <div className="px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-black/5 dark:border-white/10">
+                <span className="opacity-70">Webhook ngoài: </span>
+                <strong className="font-mono">{exclusivityReport.webhookUrl || 'Không có (Sạch)'}</strong>
+              </div>
+              <div className="px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-black/5 dark:border-white/10">
+                <span className="opacity-70">Phiên getUpdates ngoài: </span>
+                <strong>{exclusivityReport.externalListenerDetected ? 'Có phát hiện' : 'Không có'}</strong>
+              </div>
+              <div className="px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-black/5 dark:border-white/10">
+                <span className="opacity-70">Máy chủ giữ quyền: </span>
+                <strong className="font-mono">{exclusivityReport.leaseHolderHost || telegramStatus?.instanceHost || 'Hiện tại'}</strong>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!telegramStatus?.lastError && isStandby && (
+          <div className="px-5 py-3.5 bg-sky-50 dark:bg-sky-950/40 border-t border-sky-200 dark:border-sky-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-sky-900 dark:text-sky-200">
+            <div className="leading-relaxed">
+              <span className="font-bold">Chế độ điều phối tự động: </span>
+              <span>
+                Máy chủ <code className="font-mono font-semibold">{telegramStatus?.standbyHolder || 'phiên bản chính'}</code> đang giữ quyền lắng nghe Bot Token. Phiên bản này tự động tạm nhường để không gây xung đột 409.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleRetryPolling()}
+              disabled={isChangingPollState}
+              className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Play className="w-3.5 h-3.5" />
+              <span>Chuyển quyền Polling về đây</span>
+            </button>
+          </div>
+        )}
+
+        {!telegramStatus?.lastError && !isConflict && isPaused && telegramStatus?.configured && (
+          <div className="px-5 py-3.5 bg-amber-50/80 dark:bg-amber-950/30 border-t border-amber-200 dark:border-amber-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+            <div>
+              <span className="font-bold">Đã tạm dừng Polling tại phiên bản này: </span>
+              <span>Bot vẫn có thể hoạt động bình thường trên link chính khác mà không bị trùng Token.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleRetryPolling()}
+              disabled={isChangingPollState}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Play className="w-3.5 h-3.5" />
+              <span>Bật lại lắng nghe tại đây</span>
+            </button>
           </div>
         )}
       </section>

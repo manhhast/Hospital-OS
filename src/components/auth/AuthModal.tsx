@@ -5,6 +5,7 @@ import {
   Search, User as UserIcon, Check, Sparkles, LogIn, ChevronDown
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
+import { postgresSyncService } from '../../services/postgresSyncService';
 import { User } from '../../types/hospital';
 import { removeVietnameseTones } from '../../services/searchService';
 
@@ -111,16 +112,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const res = storageService.loginById(selectedUserId, password);
-      setLoading(false);
-      if (res.success) {
-        onShowToast('Đăng nhập thành công', `Chào mừng ${res.user?.name} đã đăng nhập hệ thống!`, 'success');
-        onClose();
-      } else {
-        onShowToast('Đăng nhập thất bại', res.message, 'error');
+    void (async () => {
+      try {
+        const res = postgresSyncService.isActiveBackend()
+          ? await postgresSyncService.login(selectedUserId, password)
+          : storageService.loginById(selectedUserId, password);
+        if (res.success) {
+          onShowToast('Đăng nhập thành công', `Chào mừng ${res.user?.name} đã đăng nhập hệ thống!`, 'success');
+          onClose();
+        } else {
+          onShowToast('Đăng nhập thất bại', res.message, 'error');
+        }
+      } finally {
+        setLoading(false);
       }
-    }, 250);
+    })();
   };
 
   const handleChangePassword = (e: React.FormEvent) => {

@@ -10,6 +10,8 @@ import {
   Bot
 } from 'lucide-react';
 import { NotificationLog } from '../../types/hospital';
+import { storageService } from '../../services/storageService';
+import { resolveEffectiveUserAccess } from '../../utils/rbac';
 import { IntegrationHubView } from '../integration/IntegrationHubView';
 import { NotificationCenterView } from '../notifications/NotificationCenterView';
 import { UserManagementView } from '../users/UserManagementView';
@@ -114,7 +116,17 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
   themeMode,
   onChangeThemeMode
 }) => {
-  const currentMeta = CONFIG_MENU_ITEMS.find((item) => item.id === activeTab) || CONFIG_MENU_ITEMS[0];
+  const currentUser = storageService.getCurrentUser();
+  const actorAccess = resolveEffectiveUserAccess(
+    currentUser,
+    storageService.getStaffProfiles(),
+    storageService.getDepartments(),
+    storageService.getRooms()
+  );
+  const visibleMenuItems = actorAccess.isSystemAdmin
+    ? CONFIG_MENU_ITEMS
+    : CONFIG_MENU_ITEMS.filter(item => item.id === 'users' && actorAccess.permissions.canConfigureRBAC);
+  const currentMeta = visibleMenuItems.find((item) => item.id === activeTab) || visibleMenuItems[0] || CONFIG_MENU_ITEMS[0];
 
   return (
     <div className="space-y-6">
@@ -135,7 +147,7 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
             </div>
           </div>
           <div className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
-            Quản trị viên &middot; {CONFIG_MENU_ITEMS.length} phân hệ cấu hình
+            {actorAccess.shortTierLabel} &middot; {visibleMenuItems.length} phân hệ cấu hình
           </div>
         </div>
 
@@ -144,7 +156,7 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
           aria-label="Menu cấu hình hệ thống"
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-4"
         >
-          {CONFIG_MENU_ITEMS.map((item) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 

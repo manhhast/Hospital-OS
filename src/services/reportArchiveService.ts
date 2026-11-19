@@ -62,7 +62,7 @@ const getYearMetaStorageKey = (year: number) =>
 
 const getIdbKey = (year: number, monthKey: string) => `${year}__${monthKey}`;
 
-export function toFirestoreReportArchiveKey(year: number, monthKey: string): string {
+export function toReportArchiveKey(year: number, monthKey: string): string {
   const mIdx = REPORT_MONTHS.indexOf(monthKey);
   const mNum = mIdx >= 0 ? mIdx + 1 : parseInt(monthKey.replace(/[^0-9]/g, ''), 10) || 1;
   return `${year}_m${String(Math.min(12, Math.max(1, mNum))).padStart(2, '0')}`;
@@ -437,7 +437,7 @@ export const reportArchiveService = {
   },
 
   /**
-   * Non-destructive merge when receiving a monthly report archive from Firebase Cloud Firestore.
+   * Non-destructive merge when receiving a monthly report archive from the PostgreSQL backend server.
    * Preserves all locally recorded and manual-locked days and takes whichever manual edit is newer.
    */
   applyCloudMonthArchive(

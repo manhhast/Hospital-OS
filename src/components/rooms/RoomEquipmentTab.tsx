@@ -12,6 +12,8 @@ interface RoomEquipmentTabProps {
   room: ParaclinicalRoom;
   allEquipment: EquipmentItem[];
   allRooms: ParaclinicalRoom[];
+  canManage?: boolean;
+  scopeHint?: string;
   onAssignEquipment: (equipmentId: string, targetRoomName: string) => void;
   onRemoveEquipment: (equipmentId: string) => void;
 }
@@ -20,11 +22,14 @@ export const RoomEquipmentTab: React.FC<RoomEquipmentTabProps> = ({
   room,
   allEquipment,
   allRooms,
+  canManage = false,
+  scopeHint,
   onAssignEquipment,
   onRemoveEquipment
 }) => {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [transferItem, setTransferItem] = useState<EquipmentItem | null>(null);
+  const [confirmRemoveEq, setConfirmRemoveEq] = useState<EquipmentItem | null>(null);
   const [selectedTargetRoom, setSelectedTargetRoom] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
@@ -120,16 +125,23 @@ export const RoomEquipmentTab: React.FC<RoomEquipmentTabProps> = ({
             Dữ liệu máy móc đồng bộ trực tiếp với module <strong>Quản Lý Máy Móc</strong>. Điều chuyển máy sẽ tự động cập nhật vị trí và nhật ký vận hành.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setSelectedEquipmentIds([]);
-            setSearchTerm('');
-            setShowAssignModal(true);
-          }}
-          className="inline-flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Gán / Chuyển Máy Móc Vào Phòng Này
-        </button>
+        {canManage ? (
+          <button
+            onClick={() => {
+              setSelectedEquipmentIds([]);
+              setSearchTerm('');
+              setShowAssignModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm shrink-0"
+          >
+            <Plus className="w-4 h-4" /> Gán / Chuyển Máy Móc Vào Phòng Này
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold shrink-0">
+            <ShieldAlert className="w-3.5 h-3.5 text-slate-400" />
+            {scopeHint || 'Chỉ xem'}
+          </span>
+        )}
       </div>
 
       {/* Equipment List Grid */}
@@ -140,14 +152,18 @@ export const RoomEquipmentTab: React.FC<RoomEquipmentTabProps> = ({
           </div>
           <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">Chưa có thiết bị nào được bố trí tại phòng này</h4>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Nhấn vào nút "Gán / Chuyển Máy Móc Vào Phòng Này" để phân bổ máy CT, MRI, X-quang, máy xét nghiệm hoặc máy siêu âm từ danh mục thiết bị toàn khoa.
+            {canManage
+              ? 'Nhấn vào nút "Gán / Chuyển Máy Móc Vào Phòng Này" để phân bổ máy CT, MRI, X-quang, máy xét nghiệm hoặc máy siêu âm từ danh mục thiết bị toàn khoa.'
+              : 'Bạn chỉ có quyền xem danh sách thiết bị tại phòng này.'}
           </p>
-          <button
-            onClick={() => setShowAssignModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-          >
-            <Plus className="w-4 h-4" /> Phân bổ thiết bị ngay
-          </button>
+          {canManage && (
+            <button
+              onClick={() => setShowAssignModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Phân bổ thiết bị ngay
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -199,27 +215,27 @@ export const RoomEquipmentTab: React.FC<RoomEquipmentTabProps> = ({
                     <Eye className="w-3.5 h-3.5" /> Hồ sơ
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setTransferItem(eq);
-                      setSelectedTargetRoom('');
-                    }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
-                  >
-                    <ArrowRightLeft className="w-3.5 h-3.5" /> Điều chuyển
-                  </button>
+                  {canManage && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setTransferItem(eq);
+                          setSelectedTargetRoom('');
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <ArrowRightLeft className="w-3.5 h-3.5" /> Điều chuyển
+                      </button>
 
-                  <button
-                    onClick={() => {
-                      if (confirm(`Bạn có chắc chắn muốn chuyển máy "${eq.name}" về Kho thiết bị / Chưa phân phòng?`)) {
-                        onRemoveEquipment(eq.id);
-                      }
-                    }}
-                    title="Chuyển về Kho thiết bị"
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                      <button
+                        onClick={() => setConfirmRemoveEq(eq)}
+                        title="Chuyển về Kho thiết bị"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -409,6 +425,39 @@ export const RoomEquipmentTab: React.FC<RoomEquipmentTabProps> = ({
             if (updated) setDetailEquipment(updated);
           }}
         />
+      )}
+
+      {/* MODAL 3: Confirm Remove Equipment to Warehouse */}
+      {confirmRemoveEq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+            <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+              Xác nhận chuyển máy về Kho thiết bị
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              Bạn có chắc chắn muốn chuyển thiết bị <strong>"{confirmRemoveEq.name}"</strong> về Kho thiết bị / Chưa phân phòng?
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveEq(null)}
+                className="px-3.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onRemoveEquipment(confirmRemoveEq.id);
+                  setConfirmRemoveEq(null);
+                }}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg"
+              >
+                Xác nhận chuyển
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

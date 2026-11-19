@@ -180,10 +180,25 @@ export interface SmartAssistantMessage {
   aiWarning?: string;
 }
 
+export type TelegramBotMode =
+  | 'polling'
+  | 'standby'
+  | 'paused'
+  | 'conflict'
+  | 'webhook'
+  | 'unconfigured';
+
 export interface TelegramBotStatus {
   configured: boolean;
   enabled: boolean;
   pollingActive: boolean;
+  conflictDetected?: boolean;
+  pausedByUser?: boolean;
+  standbyMode?: boolean;
+  standbyHolder?: string;
+  webhookUrl?: string;
+  mode?: TelegramBotMode;
+  instanceHost?: string;
   botUsername?: string;
   botFirstName?: string;
   lastPollAt?: string;
@@ -192,5 +207,21 @@ export interface TelegramBotStatus {
   hasLiveContext: boolean;
   contextUpdatedAt?: string;
   lastError?: string;
+}
+
+export interface TelegramExclusivityReport {
+  checkedAt: string;
+  botId?: number;
+  botUsername?: string;
+  botFirstName?: string;
+  isExclusive: boolean;
+  statusCode: 'EXCLUSIVE' | 'EXTERNAL_WEBHOOK' | 'EXTERNAL_POLLING' | 'CONFLICT_RETRY';
+  summary: string;
+  webhookUrl: string;
+  pendingUpdateCount: number;
+  externalListenerDetected: boolean;
+  leaseSupported: boolean;
+  leaseHolderHost?: string;
+  leaseHeldByThisInstance: boolean;
 }
 

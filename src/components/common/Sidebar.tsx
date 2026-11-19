@@ -7,6 +7,7 @@ import {
 import { storageService } from '../../services/storageService';
 import { User } from '../../types/hospital';
 import { CONFIG_MODULE_IDS } from '../settings/SystemConfigHubView';
+import { resolveEffectiveUserAccess } from '../../utils/rbac';
 
 interface SidebarProps {
   activeModule: string;
@@ -50,7 +51,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => unsubscribe();
   }, []);
 
-  const isAdmin = currentUser?.role === 'Admin';
+  const actorAccess = resolveEffectiveUserAccess(
+    currentUser,
+    storageService.getStaffProfiles(),
+    storageService.getDepartments(),
+    storageService.getRooms()
+  );
+  const isAdmin = actorAccess.isSystemAdmin;
+  const canOpenConfigHub = isAdmin || actorAccess.permissions.canConfigureRBAC;
   const isConfigActive = CONFIG_MODULE_IDS.includes(activeModule as typeof CONFIG_MODULE_IDS[number]);
 
   const menuItems = [
@@ -148,8 +156,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
 
-        {/* Dedicated Configuration Menu Entry (Admin Only) */}
-        {isAdmin && (
+        {/* Dedicated Configuration Menu Entry (Admin or delegated RBAC manager) */}
+        {canOpenConfigHub && (
           <div className="pt-3 mt-3 border-t border-slate-200 dark:border-slate-800">
             {!collapsed && (
               <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
@@ -158,7 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
             <div className="relative group">
               <button
-                onClick={() => onSelectModule(isConfigActive ? activeModule : 'settings')}
+                onClick={() => onSelectModule(isConfigActive ? activeModule : (isAdmin ? 'settings' : 'users'))}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isConfigActive
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'

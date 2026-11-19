@@ -9,7 +9,7 @@ import {
 import { storageService } from '../../services/storageService';
 import { 
   StaffProfile, LeaveRequest, TrainingCourse, EmploymentStatus, WorkStatusHistoryItem, CLSTitle, UserRole,
-  MedicalCertificate, DepartmentUnit, ParaclinicalRoom, User
+  MedicalCertificate, DepartmentUnit, ParaclinicalRoom, User, ManagementTier, UserPermissionOverrides
 } from '../../types/hospital';
 import { formatDateVN, toInputDateFormat, normalizeFlexibleDateVN, normalizeVietnamesePhone } from '../../utils/dateUtils';
 import { LeaveCalendarTab } from './LeaveCalendarTab';
@@ -20,6 +20,20 @@ import {
   getInactiveStaffMatchers,
   isStrictAdminUser
 } from '../../utils/staffStatus';
+import {
+  MANAGEMENT_TIER_ORDER,
+  MANAGEMENT_TIER_META,
+  PERMISSION_FIELD_LABELS,
+  DEFAULT_TIER_PERMISSIONS,
+  resolveEffectiveUserAccess,
+  resolveUserManagementTier,
+  canManageStaffTarget,
+  filterSelectableDepartmentsForActor,
+  filterSelectableRoomsForActor,
+  isStaffInAccessScope,
+  isAdminIdentity,
+  ResolvedPermissions,
+} from '../../utils/rbac';
 
 // Helper to parse dates from Excel (can be Date instance, Excel serial number, or string) strictly to dd/mm/yyyy
 const parseExcelDateToDDMMYYYY = (val: any): string => {
@@ -183,11 +197,18 @@ export const StaffManagementView: React.FC = () => {
   const [avatarPickerTab, setAvatarPickerTab] = useState<'icons' | 'photos' | 'upload'>('icons');
   const [previewUploadedAvatar, setPreviewUploadedAvatar] = useState<string>('');
 
+  // Toast / Banner feedback replacing native alerts
+  const [staffBannerMsg, setStaffBannerMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const notifyStaffBanner = (text: string, type: 'success' | 'error' = 'success') => {
+    setStaffBannerMsg({ text, type });
+    setTimeout(() => setStaffBannerMsg(null), 5000);
+  };
+
   // Handle image upload and resize to max 256x256 for optimal storage
   const handleAvatarFileUpload = (file: File) => {
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert('Dung lượng ảnh tối đa 5MB. Vui lòng chọn ảnh nhỏ hơn.');
+      notifyStaffBanner('Dung lượng ảnh tối đa 5MB. Vui lòng chọn ảnh nhỏ hơn.', 'error');
       return;
     }
     const reader = new FileReader();
@@ -241,10 +262,15 @@ export const StaffManagementView: React.FC = () => {
   const [selectedDetailStaff, setSelectedDetailStaff] = useState<StaffProfile | null>(null);
   const [detailModalTab, setDetailModalTab] = useState<'profile' | 'permissions' | 'history' | 'certs'>('profile');
   const [assignedRole, setAssignedRole] = useState<UserRole>('Staff');
+  const [assignedTier, setAssignedTier] = useState<ManagementTier>('staff');
+  const [assignedManagedDepts, setAssignedManagedDepts] = useState<string[]>([]);
+  const [assignedManagedRooms, setAssignedManagedRooms] = useState<string[]>([]);
+  const [assignedOverrides, setAssignedOverrides] = useState<UserPermissionOverrides>({});
   const [assignedTitle, setAssignedTitle] = useState<string>('');
   const [assignedDept, setAssignedDept] = useState<string>('');
   const [assignedRoom, setAssignedRoom] = useState<string>('');
   const [permissionSuccessMsg, setPermissionSuccessMsg] = useState<string>('');
+  const [scopeOnlyFilter, setScopeOnlyFilter] = useState<boolean>(false);
 
   // Certificate Management State (Add / Edit / Delete)
   const [certStatusFilter, setCertStatusFilter] = useState<'all' | 'Còn hiệu lực' | 'Sắp hết hạn' | 'Hết hiệu lực'>('all');
@@ -326,9 +352,22 @@ export const StaffManagementView: React.FC = () => {
     errorReason?: string;
   }>>([]);
 
+  const [allUsers, setAllUsers] = useState<User[]>(() => storageService.getUsers());
   const currentUser = storageService.getCurrentUser();
-  const isAdmin = currentUser.role === 'Admin' || currentUser.title?.includes('Trưởng khoa');
-  const isStrictLeaveAdmin = isStrictAdminUser(currentUser);
+  const actorAccess = useMemo(
+    () => resolveEffectiveUserAccess(currentUser, profiles, departments, rooms),
+    [currentUser, profiles, departments, rooms, allUsers]
+  );
+  const isStrictLeaveAdmin = isStrictAdminUser(currentUser) || actorAccess.permissions.canApproveLeave;
+  const canCreateAnyStaff = canManageStaffTarget(actorAccess, 'create', undefined, rooms);
+  const selectableDepartmentsForActor = useMemo(
+    () => filterSelectableDepartmentsForActor(actorAccess, departments),
+    [actorAccess, departments]
+  );
+  const selectableRoomsForActor = useMemo(
+    () => filterSelectableRoomsForActor(actorAccess, rooms),
+    [actorAccess, rooms]
+  );
 
   // Helper function to calculate years of service automatically based on join date (dd/mm/yyyy, mm/yyyy, yyyy, or yyyy-mm-dd)
   const calculateYearsOfService = (joinDateStr?: string, defaultYears: number = 0): number => {
@@ -393,6 +432,7 @@ export const StaffManagementView: React.FC = () => {
       setTrainingCourses(storageService.getTrainingCourses());
       setDepartments(storageService.getDepartments());
       setRooms(storageService.getRooms());
+      setAllUsers(storageService.getUsers());
     };
     loadData();
     return storageService.subscribe(loadData);
@@ -571,8 +611,21 @@ export const StaffManagementView: React.FC = () => {
   };
 
   const handleOpenAddCert = (preselectedStaffUserId?: string) => {
+    if (!actorAccess.permissions.canManageCertificates) {
+      notifyStaffBanner('Bạn không có quyền thêm hoặc quản lý chứng chỉ hành nghề.', 'error');
+      return;
+    }
+    const eligibleStaff = profiles.filter((p) => canManageStaffTarget(actorAccess, 'cert', p, rooms));
+    const defaultStaffId =
+      preselectedStaffUserId && eligibleStaff.some((p) => p.userId === preselectedStaffUserId)
+        ? preselectedStaffUserId
+        : eligibleStaff[0]?.userId || '';
+    if (!defaultStaffId) {
+      notifyStaffBanner('Không có nhân sự nào trong phạm vi quản lý của bạn để gán chứng chỉ.', 'error');
+      return;
+    }
     setEditingCert(null);
-    setCertStaffUserId(preselectedStaffUserId || profiles[0]?.userId || '');
+    setCertStaffUserId(defaultStaffId);
     setCertName('');
     setCertCode('');
     setCertIssuedBy('');
@@ -588,6 +641,11 @@ export const StaffManagementView: React.FC = () => {
   };
 
   const handleOpenEditCert = (cert: MedicalCertificate, staffUserId: string) => {
+    const ownerProfile = profiles.find(p => p.userId === staffUserId);
+    if (!ownerProfile || !canManageStaffTarget(actorAccess, 'cert', ownerProfile, rooms)) {
+      notifyStaffBanner('Bạn chỉ có thể chỉnh sửa chứng chỉ của nhân sự trong phạm vi quản lý.', 'error');
+      return;
+    }
     setEditingCert({ certId: cert.id, staffUserId });
     setCertStaffUserId(staffUserId);
     setCertName(cert.name);
@@ -601,6 +659,11 @@ export const StaffManagementView: React.FC = () => {
   };
 
   const handleDeleteCertClick = (cert: MedicalCertificate, staffUserId: string, staffName: string) => {
+    const ownerProfile = profiles.find(p => p.userId === staffUserId);
+    if (!ownerProfile || !canManageStaffTarget(actorAccess, 'cert', ownerProfile, rooms)) {
+      notifyStaffBanner('Bạn không có quyền xóa chứng chỉ của nhân sự ngoài phạm vi quản lý.', 'error');
+      return;
+    }
     setDeleteConfirmCert({
       certId: cert.id,
       certName: cert.name,
@@ -617,6 +680,11 @@ export const StaffManagementView: React.FC = () => {
       setDeleteConfirmCert(null);
       return;
     }
+    if (!canManageStaffTarget(actorAccess, 'cert', targetProfile, rooms)) {
+      notifyStaffBanner('Bạn không có quyền xóa chứng chỉ của nhân sự ngoài phạm vi quản lý.', 'error');
+      setDeleteConfirmCert(null);
+      return;
+    }
 
     const updatedCerts = (targetProfile.certificates || []).filter(c => c.id !== deleteConfirmCert.certId);
     const updatedProfile: StaffProfile = {
@@ -627,30 +695,35 @@ export const StaffManagementView: React.FC = () => {
     storageService.saveStaffProfile(updatedProfile);
     setProfiles(prev => prev.map(p => p.userId === updatedProfile.userId ? updatedProfile : p));
     setDeleteConfirmCert(null);
+    notifyStaffBanner(`Đã xóa chứng chỉ "${deleteConfirmCert.certName}" của ${targetProfile.fullName}.`);
   };
 
   const handleSaveCert = (e: React.FormEvent) => {
     e.preventDefault();
     if (!certStaffUserId) {
-      alert('Vui lòng chọn cán bộ / nhân viên sở hữu chứng chỉ!');
+      notifyStaffBanner('Vui lòng chọn cán bộ / nhân viên sở hữu chứng chỉ!', 'error');
       return;
     }
     if (!certName.trim()) {
-      alert('Vui lòng nhập tên chứng chỉ!');
+      notifyStaffBanner('Vui lòng nhập tên chứng chỉ!', 'error');
       return;
     }
     if (!certCode.trim()) {
-      alert('Vui lòng nhập mã số chứng chỉ!');
+      notifyStaffBanner('Vui lòng nhập mã số chứng chỉ!', 'error');
       return;
     }
     if (!certIssuedBy.trim()) {
-      alert('Vui lòng nhập cơ quan cấp!');
+      notifyStaffBanner('Vui lòng nhập cơ quan cấp!', 'error');
       return;
     }
 
     const targetProfile = profiles.find(p => p.userId === certStaffUserId);
     if (!targetProfile) {
-      alert('Không tìm thấy thông tin cán bộ được chọn!');
+      notifyStaffBanner('Không tìm thấy thông tin cán bộ được chọn!', 'error');
+      return;
+    }
+    if (!canManageStaffTarget(actorAccess, 'cert', targetProfile, rooms)) {
+      notifyStaffBanner('Nhân sự được chọn nằm ngoài phạm vi quản lý chứng chỉ của bạn!', 'error');
       return;
     }
 
@@ -799,7 +872,9 @@ export const StaffManagementView: React.FC = () => {
       p.departmentSection === selectedDepartmentFilter ||
       p.room === selectedDepartmentFilter;
 
-    return matchSearch && matchDept;
+    const matchScope = !scopeOnlyFilter || actorAccess.isDepartmentWide || isStaffInAccessScope(actorAccess, p, rooms);
+
+    return matchSearch && matchDept && matchScope;
   });
 
   // Group profiles by Department / Room when in 'grouped' view mode
@@ -812,8 +887,12 @@ export const StaffManagementView: React.FC = () => {
 
   // Reset Add Staff Form
   const resetNewStaffForm = () => {
-    const defaultDept = allDepartments[0] || '';
-    const defaultDeptRooms = getRoomsForDepartment(defaultDept);
+    const allowedDepts = selectableDepartmentsForActor.map(d => d.name).filter(n => n && n !== 'Chưa phân bộ phận');
+    const defaultDept = allowedDepts[0] || allDepartments[0] || '';
+    const allowedRoomNames = selectableRoomsForActor.map(r => r.name);
+    const defaultDeptRooms = getRoomsForDepartment(defaultDept).filter(rName =>
+      actorAccess.isDepartmentWide || allowedRoomNames.includes(rName)
+    );
     setNewStaffForm({
       userId: `NV-${Math.floor(1000 + Math.random() * 9000)}`,
       fullName: '',
@@ -836,6 +915,10 @@ export const StaffManagementView: React.FC = () => {
   };
 
   const handleOpenAddStaffModal = () => {
+    if (!canManageStaffTarget(actorAccess, 'create', undefined, rooms)) {
+      notifyStaffBanner('Bạn không có quyền thêm nhân viên mới trong phạm vi hiện tại.', 'error');
+      return;
+    }
     resetNewStaffForm();
     setShowAddStaffModal(true);
   };
@@ -969,7 +1052,7 @@ export const StaffManagementView: React.FC = () => {
   const processExcelFile = (file: File) => {
     const fileName = file.name.toLowerCase();
     if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.csv')) {
-      alert('Vui lòng chọn hoặc kéo thả tệp định dạng Excel (.xlsx, .xls) hoặc .csv!');
+      notifyStaffBanner('Vui lòng chọn hoặc kéo thả tệp định dạng Excel (.xlsx, .xls) hoặc .csv!', 'error');
       return;
     }
 
@@ -986,7 +1069,7 @@ export const StaffManagementView: React.FC = () => {
         const rawData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
         if (!rawData || rawData.length === 0) {
-          alert('Tệp Excel không có dữ liệu hàng nào!');
+          notifyStaffBanner('Tệp Excel không có dữ liệu hàng nào!', 'error');
           setIsParsingExcel(false);
           return;
         }
@@ -1034,7 +1117,17 @@ export const StaffManagementView: React.FC = () => {
           const codeCandidate = String(normalizeKey(row, ['mãnv', 'manv', 'mãnhânviên', 'id', 'code']) || '').trim();
           const userId = codeCandidate || `NV-${Date.now().toString().slice(-4)}${index + 1}`;
 
-          const isValid = Boolean(fullName && fullName.length >= 2);
+          const hasName = Boolean(fullName && fullName.length >= 2);
+          const candidateForRbac: Partial<StaffProfile> = {
+            userId,
+            fullName,
+            role: rawRole,
+            title: rawTitle,
+            departmentSection: dept,
+            room,
+          };
+          const allowedInScope = canManageStaffTarget(actorAccess, 'create', candidateForRbac, rooms);
+          const isValid = hasName && allowedInScope;
 
           return {
             userId,
@@ -1053,7 +1146,11 @@ export const StaffManagementView: React.FC = () => {
             currentStatus: (rawStatus.toLowerCase().includes('thử việc') ? 'Đang thử việc' : rawStatus.toLowerCase().includes('thai sản') ? 'Nghỉ thai sản' : rawStatus.toLowerCase().includes('không lương') || rawStatus.toLowerCase().includes('không hưởng lương') ? 'Nghỉ không lương' : (rawStatus.toLowerCase().includes('nghỉ việc') || rawStatus.toLowerCase().includes('kết thúc hợp đồng')) ? 'Đã nghỉ việc' : 'Đang làm việc') as EmploymentStatus,
             certCode,
             isValid,
-            errorReason: !isValid ? 'Thiếu họ và tên' : undefined
+            errorReason: !hasName
+              ? 'Thiếu họ và tên'
+              : !allowedInScope
+              ? 'Ngoài phạm vi quyền hạn của bạn'
+              : undefined
           };
         });
 
@@ -1062,7 +1159,7 @@ export const StaffManagementView: React.FC = () => {
         setIsParsingExcel(false);
       } catch (err: any) {
         console.error(err);
-        alert('Có lỗi khi đọc file Excel: ' + (err?.message || 'Định dạng file không hỗ trợ'));
+        notifyStaffBanner('Có lỗi khi đọc file Excel: ' + (err?.message || 'Định dạng file không hỗ trợ'), 'error');
         setIsParsingExcel(false);
       }
     };
@@ -1114,9 +1211,11 @@ export const StaffManagementView: React.FC = () => {
 
   // --- Confirm Import Excel to Storage ---
   const handleConfirmImportExcel = () => {
-    const validRows = parsedExcelStaff.filter(r => r.isValid);
+    const validRows = parsedExcelStaff.filter(
+      (r) => r.isValid && canManageStaffTarget(actorAccess, 'create', r as Partial<StaffProfile>, rooms)
+    );
     if (validRows.length === 0) {
-      alert('Không có bản ghi hợp lệ nào để nhập!');
+      notifyStaffBanner('Không có bản ghi hợp lệ trong phạm vi quản lý để nhập!', 'error');
       return;
     }
 
@@ -1144,11 +1243,16 @@ export const StaffManagementView: React.FC = () => {
         createdAt: new Date().toLocaleDateString('vi-VN')
       };
 
+      const safeRole: UserRole =
+        !actorAccess.isSystemAdmin && r.role === 'Admin'
+          ? 'Staff'
+          : ((['Admin', 'Manager', 'Doctor', 'Staff'].includes(r.role) ? r.role : 'Staff') as UserRole);
+
       return {
         userId: r.userId,
         fullName: r.fullName,
         title: r.title,
-        role: r.role,
+        role: safeRole,
         departmentSection: r.departmentSection,
         room: r.room,
         phone: r.phone,
@@ -1171,18 +1275,18 @@ export const StaffManagementView: React.FC = () => {
 
     // Sync to Users list so they can be assigned tasks/shifts
     const existingUsers = storageService.getUsers();
-    validRows.forEach(r => {
-      if (!existingUsers.some(u => u.id === r.userId)) {
+    newProfiles.forEach(p => {
+      if (!existingUsers.some(u => u.id === p.userId)) {
         storageService.saveUser({
-          id: r.userId,
-          name: r.fullName,
-          email: r.email || `${r.userId.toLowerCase()}@hospital.vn`,
-          role: (r.role as UserRole) || 'Staff',
-          title: (r.title as CLSTitle) || 'Nhân viên',
-          department: r.departmentSection,
-          room: r.room,
+          id: p.userId,
+          name: p.fullName,
+          email: p.email || `${p.userId.toLowerCase()}@hospital.vn`,
+          role: (p.role as UserRole) || 'Staff',
+          title: (p.title as CLSTitle) || 'Nhân viên',
+          department: p.departmentSection,
+          room: p.room,
           avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150',
-          phone: r.phone || '',
+          phone: p.phone || '',
           status: 'Active'
         });
       }
@@ -1192,14 +1296,33 @@ export const StaffManagementView: React.FC = () => {
     setShowImportExcelModal(false);
     setParsedExcelStaff([]);
     setExcelImportStep('upload');
-    alert(`Đã nhập thành công ${validRows.length} nhân viên vào hệ thống!`);
+    notifyStaffBanner(`Đã nhập thành công ${validRows.length} nhân viên vào hệ thống!`);
   };
 
   // --- Create Single Staff Member ---
   const handleCreateNewStaff = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStaffForm.fullName.trim()) {
-      alert('Vui lòng nhập họ và tên nhân viên!');
+      notifyStaffBanner('Vui lòng nhập họ và tên nhân viên!', 'error');
+      return;
+    }
+    if (!actorAccess.isSystemAdmin && newStaffForm.role === 'Admin') {
+      notifyStaffBanner('Chỉ Quản trị viên (Admin) mới có quyền tạo tài khoản vai trò Admin.', 'error');
+      return;
+    }
+    if (
+      !canManageStaffTarget(
+        actorAccess,
+        'create',
+        {
+          departmentSection: newStaffForm.departmentSection,
+          room: newStaffForm.room,
+          role: newStaffForm.role,
+        },
+        rooms
+      )
+    ) {
+      notifyStaffBanner('Bộ phận hoặc phòng được chọn nằm ngoài phạm vi quản lý của bạn.', 'error');
       return;
     }
     const finalUserId = newStaffForm.userId.trim() || `NV-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -1272,24 +1395,45 @@ export const StaffManagementView: React.FC = () => {
 
     setProfiles(storageService.getStaffProfiles());
     setShowAddStaffModal(false);
-    alert(`Đã thêm nhân viên ${newProfile.fullName} thành công!`);
+    notifyStaffBanner(`Đã thêm nhân viên ${newProfile.fullName} thành công!`);
   };
 
   // --- Delete Staff Profile ---
   const handleConfirmDeleteStaff = () => {
     if (!deleteConfirmStaff) return;
+    if (!canManageStaffTarget(actorAccess, 'delete', deleteConfirmStaff, rooms)) {
+      notifyStaffBanner('Bạn không có quyền xóa hồ sơ nhân viên này!', 'error');
+      setDeleteConfirmStaff(null);
+      return;
+    }
     storageService.deleteStaffProfile(deleteConfirmStaff.userId);
     setProfiles(prev => prev.filter(p => p.userId !== deleteConfirmStaff.userId));
+    notifyStaffBanner(`Đã xóa hồ sơ nhân viên ${deleteConfirmStaff.fullName}.`);
     setDeleteConfirmStaff(null);
   };
 
-  // Save edited profile (Admin action)
+  // Save edited profile (RBAC scoped action)
   const handleSaveProfileEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStaff) return;
+    const originalProfile = profiles.find(p => p.userId === editingStaff.userId) || editingStaff;
+    if (!canManageStaffTarget(actorAccess, 'edit', originalProfile, rooms)) {
+      notifyStaffBanner('Bạn không có quyền chỉnh sửa hồ sơ nhân sự ngoài phạm vi quản lý.', 'error');
+      return;
+    }
+    if (!actorAccess.isDepartmentWide && !canManageStaffTarget(actorAccess, 'edit', editingStaff, rooms)) {
+      notifyStaffBanner('Không thể điều chuyển nhân viên sang Bộ phận / Phòng ngoài phạm vi quản lý của bạn.', 'error');
+      return;
+    }
+
+    const canChangeRoleField = canManageStaffTarget(actorAccess, 'rbac', originalProfile, rooms);
+    const safeRole = canChangeRoleField
+      ? (!actorAccess.isSystemAdmin && editingStaff.role === 'Admin' ? originalProfile.role : editingStaff.role)
+      : originalProfile.role;
 
     const staffToSave: StaffProfile = {
       ...editingStaff,
+      role: safeRole,
       joinDate: normalizeFlexibleDateVN(editingStaff.joinDate)
     };
     storageService.saveStaffProfile(staffToSave);
@@ -1301,24 +1445,24 @@ export const StaffManagementView: React.FC = () => {
       const targetUser = users[userIdx];
       storageService.saveUser({
         ...targetUser,
-        name: editingStaff.fullName,
-        title: editingStaff.title as CLSTitle,
-        role: editingStaff.role as UserRole,
-        department: editingStaff.departmentSection,
-        room: editingStaff.room,
-        avatar: editingStaff.avatar || targetUser.avatar
+        name: staffToSave.fullName,
+        title: staffToSave.title as CLSTitle,
+        role: staffToSave.role as UserRole,
+        department: staffToSave.departmentSection,
+        room: staffToSave.room,
+        avatar: staffToSave.avatar || targetUser.avatar
       });
     }
 
     setProfiles(storageService.getStaffProfiles());
     setEditingStaff(null);
-    alert(`Đã cập nhật thông tin cán bộ ${editingStaff.fullName} thành công!`);
+    notifyStaffBanner(`Đã cập nhật thông tin cán bộ ${staffToSave.fullName} thành công!`);
   };
 
   // Add history item to editingStaff
   const handleAddHistoryItem = () => {
     if (!editingStaff || !histStartDate) {
-      alert('Vui lòng nhập từ ngày bắt đầu!');
+      notifyStaffBanner('Vui lòng nhập từ ngày bắt đầu!', 'error');
       return;
     }
 
@@ -1354,10 +1498,25 @@ export const StaffManagementView: React.FC = () => {
 
   // Open Staff Detail Modal
   const handleOpenDetailModal = (staff: StaffProfile, defaultTab: 'profile' | 'permissions' | 'history' | 'certs' = 'profile') => {
+    const matchedUser = allUsers.find(
+      u => u.id === staff.userId || u.name.trim().toLowerCase() === staff.fullName.trim().toLowerCase()
+    );
+    const effectiveTier = resolveUserManagementTier(matchedUser, staff, departments, rooms);
+    const validRole = (['Admin', 'Manager', 'Doctor', 'Staff'].includes(staff.role) ? staff.role : 'Staff') as UserRole;
     setSelectedDetailStaff(staff);
     setDetailModalTab(defaultTab);
-    const validRole = (['Admin', 'Manager', 'Doctor', 'Staff'].includes(staff.role) ? staff.role : 'Staff') as UserRole;
     setAssignedRole(validRole);
+    setAssignedTier(effectiveTier);
+    setAssignedManagedDepts(
+      Array.from(new Set([...(matchedUser?.managedDepartments || []), ...(staff.managedDepartments || [])]))
+    );
+    setAssignedManagedRooms(
+      Array.from(new Set([...(matchedUser?.managedRooms || []), ...(staff.managedRooms || [])]))
+    );
+    setAssignedOverrides({
+      ...(staff.permissionOverrides || {}),
+      ...(matchedUser?.permissionOverrides || {}),
+    });
     setAssignedTitle(staff.title?.trim() ? staff.title : 'Nhân viên');
     setAssignedDept(staff.departmentSection || '');
     setAssignedRoom(staff.room || '');
@@ -1367,6 +1526,10 @@ export const StaffManagementView: React.FC = () => {
   // Open Edit Modal from Detail Modal
   const handleEditFromDetail = () => {
     if (!selectedDetailStaff) return;
+    if (!canManageStaffTarget(actorAccess, 'edit', selectedDetailStaff, rooms)) {
+      notifyStaffBanner('Bạn không có quyền chỉnh sửa hồ sơ nhân sự ngoài phạm vi quản lý.', 'error');
+      return;
+    }
     const staffToEdit = { ...selectedDetailStaff };
     setSelectedDetailStaff(null);
     setEditingStaff({
@@ -1380,14 +1543,41 @@ export const StaffManagementView: React.FC = () => {
   // Save RBAC Permissions for selected staff
   const handleSavePermissions = () => {
     if (!selectedDetailStaff) return;
+    if (!canManageStaffTarget(actorAccess, 'rbac', selectedDetailStaff, rooms)) {
+      notifyStaffBanner('Bạn không có quyền điều chỉnh phân quyền RBAC cho nhân sự này.', 'error');
+      return;
+    }
+    if (!actorAccess.isSystemAdmin && (assignedTier === 'admin' || assignedRole === 'Admin')) {
+      notifyStaffBanner('Chỉ Quản trị viên (Admin) mới có quyền cấp vai trò Admin.', 'error');
+      return;
+    }
+
+    const sanitizedOverrides: UserPermissionOverrides = { ...assignedOverrides };
+    if (!actorAccess.isSystemAdmin) {
+      delete sanitizedOverrides.canConfigureRBAC;
+      delete sanitizedOverrides.allowCrossScopeEdit;
+    }
+
+    const nextDepts = assignedTier === 'section_head' ? assignedManagedDepts : [];
+    const nextRooms = assignedTier === 'room_head' ? assignedManagedRooms : [];
+    const resolvedRole: UserRole =
+      assignedTier === 'admin'
+        ? 'Admin'
+        : assignedRole === 'Admin'
+        ? MANAGEMENT_TIER_META[assignedTier].defaultRole
+        : assignedRole;
 
     // 1. Update StaffProfile
     const updatedStaff: StaffProfile = {
       ...selectedDetailStaff,
-      role: assignedRole,
+      role: resolvedRole,
       title: assignedTitle || selectedDetailStaff.title,
       departmentSection: assignedDept || selectedDetailStaff.departmentSection,
-      room: assignedRoom || selectedDetailStaff.room
+      room: assignedRoom || selectedDetailStaff.room,
+      managementLevel: assignedTier,
+      managedDepartments: nextDepts,
+      managedRooms: nextRooms,
+      permissionOverrides: sanitizedOverrides,
     };
     storageService.saveStaffProfile(updatedStaff);
 
@@ -1398,25 +1588,33 @@ export const StaffManagementView: React.FC = () => {
       storageService.saveUser({
         ...users[idx],
         name: updatedStaff.fullName,
-        role: assignedRole,
+        role: resolvedRole,
         title: (assignedTitle as CLSTitle) || users[idx].title,
         department: assignedDept || users[idx].department,
         room: assignedRoom || users[idx].room,
         phone: updatedStaff.phone || users[idx].phone,
-        email: updatedStaff.email || users[idx].email
+        email: updatedStaff.email || users[idx].email,
+        managementLevel: assignedTier,
+        managedDepartments: nextDepts,
+        managedRooms: nextRooms,
+        permissionOverrides: sanitizedOverrides,
       });
     } else {
       const newUser: User = {
         id: selectedDetailStaff.userId,
         name: updatedStaff.fullName,
         email: updatedStaff.email || `${selectedDetailStaff.userId.toLowerCase()}@hospital.vn`,
-        role: assignedRole,
+        role: resolvedRole,
         title: (assignedTitle as CLSTitle) || 'Nhân viên',
         department: assignedDept || updatedStaff.departmentSection,
         room: assignedRoom || updatedStaff.room,
         phone: updatedStaff.phone,
         status: 'Active',
-        avatar: updatedStaff.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80'
+        avatar: updatedStaff.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
+        managementLevel: assignedTier,
+        managedDepartments: nextDepts,
+        managedRooms: nextRooms,
+        permissionOverrides: sanitizedOverrides,
       };
       storageService.saveUser(newUser);
     }
@@ -1424,7 +1622,8 @@ export const StaffManagementView: React.FC = () => {
     // 3. Update local state
     setSelectedDetailStaff(updatedStaff);
     setProfiles(storageService.getStaffProfiles());
-    setPermissionSuccessMsg(`Đã cập nhật phân quyền "${assignedRole}" cho nhân sự ${updatedStaff.fullName} thành công!`);
+    setAllUsers(storageService.getUsers());
+    setPermissionSuccessMsg(`Đã cập nhật cấp bậc "${MANAGEMENT_TIER_META[assignedTier].shortLabel}" & phân quyền cho ${updatedStaff.fullName} thành công!`);
     setTimeout(() => setPermissionSuccessMsg(''), 4500);
   };
 
@@ -1442,38 +1641,45 @@ export const StaffManagementView: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {isAdmin && (
-            <span className="hidden lg:flex px-3 py-1.5 bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-bold items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Quyền Admin
-            </span>
+          <span
+            title={`Phạm vi quyền hạn: ${actorAccess.scopeLabel}`}
+            className={`hidden lg:inline-flex px-3 py-1.5 rounded-xl text-xs font-bold items-center gap-1.5 border ${MANAGEMENT_TIER_META[actorAccess.tier].badgeClass}`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span>{actorAccess.shortTierLabel}</span>
+            <span className="opacity-75 font-medium">• {actorAccess.scopeLabel}</span>
+          </span>
+          {canCreateAnyStaff && (
+            <>
+              <button
+                onClick={handleDownloadExcelTemplate}
+                title="Tải tệp mẫu Excel danh sách nhân viên (.xlsx)"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-xs transition-all border border-slate-200 dark:border-slate-700 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                <span>Tải File Mẫu Excel</span>
+              </button>
+              <button
+                onClick={() => {
+                  setExcelImportStep('upload');
+                  setParsedExcelStaff([]);
+                  setShowImportExcelModal(true);
+                }}
+                title="Nhập danh sách nhân viên từ tệp Excel"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-xl font-semibold text-xs transition-all border border-emerald-200 dark:border-emerald-800 shadow-sm"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Nhập từ Excel</span>
+              </button>
+              <button
+                onClick={handleOpenAddStaffModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-semibold text-xs transition-all shadow-sm shadow-indigo-200"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Thêm Nhân Viên</span>
+              </button>
+            </>
           )}
-          <button
-            onClick={handleDownloadExcelTemplate}
-            title="Tải tệp mẫu Excel danh sách nhân viên (.xlsx)"
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-xs transition-all border border-slate-200 dark:border-slate-700 shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            <span>Tải File Mẫu Excel</span>
-          </button>
-          <button
-            onClick={() => {
-              setExcelImportStep('upload');
-              setParsedExcelStaff([]);
-              setShowImportExcelModal(true);
-            }}
-            title="Nhập danh sách nhân viên từ tệp Excel"
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-xl font-semibold text-xs transition-all border border-emerald-200 dark:border-emerald-800 shadow-sm"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>Nhập từ Excel</span>
-          </button>
-          <button
-            onClick={handleOpenAddStaffModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-semibold text-xs transition-all shadow-sm shadow-indigo-200"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm Nhân Viên</span>
-          </button>
           <button
             onClick={() => openCreateLeaveModal()}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs transition-all cursor-pointer"
@@ -1483,6 +1689,34 @@ export const StaffManagementView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Inline Feedback Banner */}
+      {staffBannerMsg && (
+        <div
+          className={`px-4 py-3 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-3 shadow-sm ${
+            staffBannerMsg.type === 'error'
+              ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {staffBannerMsg.type === 'error' ? (
+              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            )}
+            <span>{staffBannerMsg.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStaffBannerMsg(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            title="Đóng thông báo"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Main Container */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
@@ -1625,35 +1859,57 @@ export const StaffManagementView: React.FC = () => {
                   </button>
                 </div>
 
+                {!actorAccess.isDepartmentWide && (actorAccess.allowedDepartments.length > 0 || actorAccess.allowedRooms.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => setScopeOnlyFilter(prev => !prev)}
+                    title="Chỉ hiển thị nhân sự thuộc phạm vi bạn quản lý"
+                    className={`px-2.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 ${
+                      scopeOnlyFilter
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">Trong phạm vi quản lý</span>
+                    <span className="lg:hidden">Phạm vi</span>
+                  </button>
+                )}
+
                 {/* Quick Add Employee & Import Buttons */}
-                <button
-                  onClick={handleOpenAddStaffModal}
-                  title="Thêm nhân viên mới"
-                  className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shadow-sm shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Thêm NV</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setExcelImportStep('upload');
-                    setParsedExcelStaff([]);
-                    setShowImportExcelModal(true);
-                  }}
-                  title="Nhập danh sách từ Excel"
-                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span className="hidden md:inline">Excel</span>
-                </button>
+                {canCreateAnyStaff && (
+                  <>
+                    <button
+                      onClick={handleOpenAddStaffModal}
+                      title="Thêm nhân viên mới"
+                      className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shadow-sm shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span className="hidden md:inline">Thêm NV</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setExcelImportStep('upload');
+                        setParsedExcelStaff([]);
+                        setShowImportExcelModal(true);
+                      }}
+                      title="Nhập danh sách từ Excel"
+                      className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="hidden md:inline">Excel</span>
+                    </button>
+                  </>
+                )}
               </>
             )}
 
-            {(searchTerm || selectedDepartmentFilter !== 'all') && (
+            {(searchTerm || selectedDepartmentFilter !== 'all' || scopeOnlyFilter) && (
               <button
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedDepartmentFilter('all');
+                  setScopeOnlyFilter(false);
                 }}
                 className="px-2.5 py-2 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/30 rounded-xl transition-colors shrink-0"
               >
@@ -1712,30 +1968,30 @@ export const StaffManagementView: React.FC = () => {
                         </span>
 
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Admin Edit & Delete Buttons */}
-                          {isAdmin && (
-                            <>
-                              <button
-                                onClick={() => setEditingStaff({
-                                  ...staff,
-                                  title: staff.title?.trim() ? staff.title : 'Nhân viên',
-                                  joinDate: staff.joinDate ? formatDateVN(staff.joinDate, '') : '',
-                                  experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
-                                })}
-                                title="Chỉnh sửa thông tin cán bộ (Dành cho Admin)"
-                                className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-md transition-all text-xs font-semibold flex items-center gap-1 border border-indigo-200 dark:border-indigo-800"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                                <span>Sửa</span>
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirmStaff(staff)}
-                                title="Xóa nhân viên khỏi hệ thống"
-                                className="p-0.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
+                          {/* Scoped Edit & Delete Buttons */}
+                          {canManageStaffTarget(actorAccess, 'edit', staff, rooms) && (
+                            <button
+                              onClick={() => setEditingStaff({
+                                ...staff,
+                                title: staff.title?.trim() ? staff.title : 'Nhân viên',
+                                joinDate: staff.joinDate ? formatDateVN(staff.joinDate, '') : '',
+                                experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
+                              })}
+                              title="Chỉnh sửa thông tin cán bộ trong phạm vi quyền hạn"
+                              className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-md transition-all text-xs font-semibold flex items-center gap-1 border border-indigo-200 dark:border-indigo-800"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Sửa</span>
+                            </button>
+                          )}
+                          {canManageStaffTarget(actorAccess, 'delete', staff, rooms) && (
+                            <button
+                              onClick={() => setDeleteConfirmStaff(staff)}
+                              title="Xóa nhân viên khỏi hệ thống"
+                              className="p-0.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           )}
                           {/* Số năm công tác hiển thị gọn trong ô */}
                           <span
@@ -1856,19 +2112,21 @@ export const StaffManagementView: React.FC = () => {
                       </div>
 
                       {/* Quick Detail & Permissions Action Buttons */}
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className={`grid gap-2 ${canManageStaffTarget(actorAccess, 'rbac', staff, rooms) ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         <button
                           onClick={() => handleOpenDetailModal(staff, 'profile')}
                           className="py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 border border-indigo-200 dark:border-indigo-800"
                         >
                           <UserCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Chi tiết
                         </button>
-                        <button
-                          onClick={() => handleOpenDetailModal(staff, 'permissions')}
-                          className="py-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 border border-purple-200 dark:border-purple-800"
-                        >
-                          <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> Phân quyền
-                        </button>
+                        {canManageStaffTarget(actorAccess, 'rbac', staff, rooms) && (
+                          <button
+                            onClick={() => handleOpenDetailModal(staff, 'permissions')}
+                            className="py-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 border border-purple-200 dark:border-purple-800"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> Phân quyền
+                          </button>
+                        )}
                       </div>
 
                       {/* Career History Button */}
@@ -1985,40 +2243,42 @@ export const StaffManagementView: React.FC = () => {
                               </td>
                               <td className="p-3 text-right whitespace-nowrap">
                                 <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                                  <button
-                                    onClick={() => handleOpenDetailModal(staff, 'permissions')}
-                                    className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-purple-200 dark:border-purple-800 shrink-0"
-                                    title="Phân quyền cho nhân viên"
-                                  >
-                                    <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> Phân quyền
-                                  </button>
+                                  {canManageStaffTarget(actorAccess, 'rbac', staff, rooms) && (
+                                    <button
+                                      onClick={() => handleOpenDetailModal(staff, 'permissions')}
+                                      className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-purple-200 dark:border-purple-800 shrink-0"
+                                      title="Phân quyền cho nhân viên"
+                                    >
+                                      <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> Phân quyền
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => setHistoryViewingStaff(staff)}
                                     className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 hover:text-indigo-700 dark:text-slate-300 dark:hover:text-indigo-300 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-slate-200 dark:border-slate-700 shrink-0"
                                   >
                                     <History className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Lịch sử
                                   </button>
-                                  {isAdmin && (
-                                    <>
-                                      <button
-                                        onClick={() => setEditingStaff({
-                                          ...staff,
-                                          title: staff.title?.trim() ? staff.title : 'Nhân viên',
-                                          joinDate: staff.joinDate ? formatDateVN(staff.joinDate, '') : '',
-                                          experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
-                                        })}
-                                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 shrink-0"
-                                      >
-                                        <Edit3 className="w-3 h-3" /> Sửa
-                                      </button>
-                                      <button
-                                        onClick={() => setDeleteConfirmStaff(staff)}
-                                        title="Xóa nhân viên"
-                                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
+                                  {canManageStaffTarget(actorAccess, 'edit', staff, rooms) && (
+                                    <button
+                                      onClick={() => setEditingStaff({
+                                        ...staff,
+                                        title: staff.title?.trim() ? staff.title : 'Nhân viên',
+                                        joinDate: staff.joinDate ? formatDateVN(staff.joinDate, '') : '',
+                                        experienceYears: staff.joinDate ? calculateYearsOfService(staff.joinDate, staff.experienceYears) : staff.experienceYears
+                                      })}
+                                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 shrink-0"
+                                    >
+                                      <Edit3 className="w-3 h-3" /> Sửa
+                                    </button>
+                                  )}
+                                  {canManageStaffTarget(actorAccess, 'delete', staff, rooms) && (
+                                    <button
+                                      onClick={() => setDeleteConfirmStaff(staff)}
+                                      title="Xóa nhân viên"
+                                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
                                   )}
                                 </div>
                               </td>
@@ -2049,35 +2309,42 @@ export const StaffManagementView: React.FC = () => {
                     : 'Thử tìm kiếm với từ khóa khác hoặc bấm nút "Xóa lọc" để xem toàn bộ danh sách nhân sự.'}
                 </p>
                 {profiles.length === 0 ? (
-                  <div className="flex flex-wrap items-center justify-center gap-2.5">
-                    <button
-                      onClick={handleOpenAddStaffModal}
-                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" /> Thêm Nhân Viên Mới
-                    </button>
-                    <button
-                      onClick={() => {
-                        setExcelImportStep('upload');
-                        setParsedExcelStaff([]);
-                        setShowImportExcelModal(true);
-                      }}
-                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" /> Nhập Từ File Excel
-                    </button>
-                    <button
-                      onClick={handleDownloadExcelTemplate}
-                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 border border-slate-200 dark:border-slate-700"
-                    >
-                      <Download className="w-4 h-4" /> Tải File Mẫu (.xlsx)
-                    </button>
-                  </div>
+                  canCreateAnyStaff ? (
+                    <div className="flex flex-wrap items-center justify-center gap-2.5">
+                      <button
+                        onClick={handleOpenAddStaffModal}
+                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" /> Thêm Nhân Viên Mới
+                      </button>
+                      <button
+                        onClick={() => {
+                          setExcelImportStep('upload');
+                          setParsedExcelStaff([]);
+                          setShowImportExcelModal(true);
+                        }}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" /> Nhập Từ File Excel
+                      </button>
+                      <button
+                        onClick={handleDownloadExcelTemplate}
+                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 border border-slate-200 dark:border-slate-700"
+                      >
+                        <Download className="w-4 h-4" /> Tải File Mẫu (.xlsx)
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-medium">
+                      <Lock className="w-3.5 h-3.5" /> Tài khoản hiện tại chỉ có quyền xem danh mục
+                    </span>
+                  )
                 ) : (
                   <button
                     onClick={() => {
                       setSearchTerm('');
                       setSelectedDepartmentFilter('all');
+                      setScopeOnlyFilter(false);
                     }}
                     className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-semibold transition-all"
                   >
@@ -2133,13 +2400,15 @@ export const StaffManagementView: React.FC = () => {
                 </div>
                 
                 {/* NÚT THÊM MỚI CHỨNG CHỈ */}
-                <button
-                  onClick={() => handleOpenAddCert()}
-                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Thêm Mới Chứng Chỉ</span>
-                </button>
+                {actorAccess.permissions.canManageCertificates && (
+                  <button
+                    onClick={() => handleOpenAddCert()}
+                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Thêm Mới Chứng Chỉ</span>
+                  </button>
+                )}
               </div>
 
               {/* KPI Summary & Status Filter Badges */}
@@ -2258,27 +2527,40 @@ export const StaffManagementView: React.FC = () => {
                             </span>
                           </td>
                           <td className="p-3 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* NÚT CHỈNH SỬA */}
-                              <button
-                                onClick={() => handleOpenEditCert(cert, cert.staffUserId)}
-                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200"
-                                title="Chỉnh sửa chứng chỉ"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                                <span>Sửa</span>
-                              </button>
+                            {(() => {
+                              const ownerProfile = profiles.find(p => p.userId === cert.staffUserId);
+                              const canManageCert = ownerProfile ? canManageStaffTarget(actorAccess, 'cert', ownerProfile, rooms) : false;
+                              if (!canManageCert) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-medium">
+                                    <Lock className="w-3 h-3" /> Chỉ xem
+                                  </span>
+                                );
+                              }
+                              return (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {/* NÚT CHỈNH SỬA */}
+                                  <button
+                                    onClick={() => handleOpenEditCert(cert, cert.staffUserId)}
+                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-indigo-200"
+                                    title="Chỉnh sửa chứng chỉ"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                    <span>Sửa</span>
+                                  </button>
 
-                              {/* NÚT XÓA */}
-                              <button
-                                onClick={() => handleDeleteCertClick(cert, cert.staffUserId, cert.staffName)}
-                                className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-red-200"
-                                title="Xóa chứng chỉ"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Xóa</span>
-                              </button>
-                            </div>
+                                  {/* NÚT XÓA */}
+                                  <button
+                                    onClick={() => handleDeleteCertClick(cert, cert.staffUserId, cert.staffName)}
+                                    className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 border border-red-200"
+                                    title="Xóa chứng chỉ"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Xóa</span>
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       ))
@@ -2289,12 +2571,14 @@ export const StaffManagementView: React.FC = () => {
                             <Award className="w-8 h-8 text-slate-300" />
                             <p className="font-semibold text-slate-600">Không tìm thấy chứng chỉ nào phù hợp</p>
                             <p className="text-xs text-slate-400">Thử thay đổi bộ lọc trạng thái hoặc từ khóa tìm kiếm</p>
-                            <button
-                              onClick={() => handleOpenAddCert()}
-                              className="mt-2 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5"
-                            >
-                              <Plus className="w-3.5 h-3.5" /> Thêm Mới Chứng Chỉ
-                            </button>
+                            {actorAccess.permissions.canManageCertificates && (
+                              <button
+                                onClick={() => handleOpenAddCert()}
+                                className="mt-2 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5"
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Thêm Mới Chứng Chỉ
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -2604,25 +2888,35 @@ export const StaffManagementView: React.FC = () => {
                       <Building2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                       Bộ Phận <span className="text-rose-500 ml-0.5">*</span>:
                     </label>
-                    <select
-                      required
-                      value={editingStaff.departmentSection}
-                      onChange={e => {
-                        const nextDept = e.target.value;
-                        const nextDeptRooms = getRoomsForDepartment(nextDept);
-                        const keepRoom = editingStaff.room && nextDeptRooms.includes(editingStaff.room) ? editingStaff.room : '';
-                        setEditingStaff({ ...editingStaff, departmentSection: nextDept, room: keepRoom });
-                      }}
-                      className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
-                    >
-                      <option value="">-- Chọn bộ phận ({allDepartments.length}) --</option>
-                      {editingStaff.departmentSection && !allDepartments.includes(editingStaff.departmentSection) && (
-                        <option value={editingStaff.departmentSection}>{editingStaff.departmentSection}</option>
-                      )}
-                      {allDepartments.map(dept => (
-                        <option key={dept} value={dept}>{dept}</option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const deptChoices = actorAccess.isDepartmentWide
+                        ? allDepartments
+                        : selectableDepartmentsForActor.map(d => d.name).filter(n => n && n !== 'Chưa phân bộ phận');
+                      return (
+                        <select
+                          required
+                          value={editingStaff.departmentSection}
+                          onChange={e => {
+                            const nextDept = e.target.value;
+                            const allowedRoomNames = new Set(selectableRoomsForActor.map(r => r.name));
+                            const nextDeptRooms = getRoomsForDepartment(nextDept).filter(
+                              rName => actorAccess.isDepartmentWide || allowedRoomNames.has(rName)
+                            );
+                            const keepRoom = editingStaff.room && nextDeptRooms.includes(editingStaff.room) ? editingStaff.room : '';
+                            setEditingStaff({ ...editingStaff, departmentSection: nextDept, room: keepRoom });
+                          }}
+                          className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
+                        >
+                          <option value="">-- Chọn bộ phận ({deptChoices.length}) --</option>
+                          {editingStaff.departmentSection && !deptChoices.includes(editingStaff.departmentSection) && (
+                            <option value={editingStaff.departmentSection}>{editingStaff.departmentSection}</option>
+                          )}
+                          {deptChoices.map(dept => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
 
                   {/* Cột phải: Phòng Làm Việc Trực Thuộc theo Bộ phận đã chọn */}
@@ -2632,7 +2926,10 @@ export const StaffManagementView: React.FC = () => {
                       Phòng Làm Việc Trực Thuộc:
                     </label>
                     {(() => {
-                      const deptRooms = getRoomsForDepartment(editingStaff.departmentSection);
+                      const allowedRoomNames = new Set(selectableRoomsForActor.map(r => r.name));
+                      const deptRooms = getRoomsForDepartment(editingStaff.departmentSection).filter(
+                        rName => actorAccess.isDepartmentWide || allowedRoomNames.has(rName)
+                      );
                       return (
                         <select
                           value={editingStaff.room || ''}
@@ -2641,7 +2938,7 @@ export const StaffManagementView: React.FC = () => {
                         >
                           <option value="">
                             {editingStaff.departmentSection && deptRooms.length === 0
-                              ? `-- Bộ phận "${editingStaff.departmentSection}" chưa có phòng trực thuộc --`
+                              ? `-- Bộ phận "${editingStaff.departmentSection}" chưa có phòng trực thuộc trong phạm vi --`
                               : `-- Chưa phân phòng làm việc (${deptRooms.length}) --`}
                           </option>
                           {editingStaff.room && !deptRooms.includes(editingStaff.room) && (
@@ -2795,16 +3092,34 @@ export const StaffManagementView: React.FC = () => {
                     <Shield className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     Phân Quyền Hệ Thống (RBAC):
                   </label>
-                  <select
-                    value={editingStaff.role}
-                    onChange={e => setEditingStaff({ ...editingStaff, role: e.target.value })}
-                    className="w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs cursor-pointer"
-                  >
-                    <option value="Admin">Admin (Quản trị viên toàn hệ thống)</option>
-                    <option value="Manager">Manager (Ban Chủ Nhiệm / Quản lý khoa)</option>
-                    <option value="Doctor">Doctor (Bác sĩ chuyên khoa)</option>
-                    <option value="Staff">Staff (Kỹ thuật viên / Điều dưỡng / Nhân viên)</option>
-                  </select>
+                  {(() => {
+                    const originalProfile = profiles.find(p => p.userId === editingStaff.userId) || editingStaff;
+                    const canChangeEditRole = canManageStaffTarget(actorAccess, 'rbac', originalProfile, rooms);
+                    return (
+                      <>
+                        <select
+                          value={editingStaff.role}
+                          disabled={!canChangeEditRole}
+                          onChange={e => setEditingStaff({ ...editingStaff, role: e.target.value })}
+                          className={`w-full h-10 px-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 dark:text-slate-100 shadow-2xs ${
+                            canChangeEditRole ? 'cursor-pointer' : 'opacity-65 cursor-not-allowed'
+                          }`}
+                        >
+                          {(actorAccess.isSystemAdmin || editingStaff.role === 'Admin') && (
+                            <option value="Admin">Admin (Quản trị viên toàn hệ thống)</option>
+                          )}
+                          <option value="Manager">Manager (Ban Chủ Nhiệm / Quản lý khoa / Trưởng bộ phận / Trưởng phòng)</option>
+                          <option value="Doctor">Doctor (Bác sĩ chuyên khoa)</option>
+                          <option value="Staff">Staff (Kỹ thuật viên / Điều dưỡng / Nhân viên)</option>
+                        </select>
+                        {!canChangeEditRole && (
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            Chỉ Quản trị viên (Admin) hoặc người được ủy quyền RBAC mới có thể đổi vai trò hệ thống.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -3387,27 +3702,31 @@ export const StaffManagementView: React.FC = () => {
 
                 {/* Top Action Buttons (Chỉnh sửa & Phân quyền) */}
                 <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
-                  <button
-                    onClick={handleEditFromDetail}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
-                    title="Chỉnh sửa toàn bộ thông tin nhân viên"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Sửa thông tin</span>
-                  </button>
+                  {canManageStaffTarget(actorAccess, 'edit', selectedDetailStaff, rooms) && (
+                    <button
+                      onClick={handleEditFromDetail}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
+                      title="Chỉnh sửa toàn bộ thông tin nhân viên"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Sửa thông tin</span>
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setDetailModalTab('permissions')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${
-                      detailModalTab === 'permissions' 
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-xs' 
-                        : 'bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                    }`}
-                    title="Phân quyền truy cập RBAC cho nhân viên"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Phân quyền</span>
-                  </button>
+                  {(canManageStaffTarget(actorAccess, 'rbac', selectedDetailStaff, rooms) || actorAccess.isDepartmentWide) && (
+                    <button
+                      onClick={() => setDetailModalTab('permissions')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border ${
+                        detailModalTab === 'permissions' 
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs' 
+                          : 'bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                      }`}
+                      title="Phân quyền truy cập RBAC cho nhân viên"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Phân quyền</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => setSelectedDetailStaff(null)}
@@ -3638,264 +3957,413 @@ export const StaffManagementView: React.FC = () => {
                   </div>
 
                   {/* Quick CTAs in Tab */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900">
-                    <div className="text-xs">
-                      <span className="font-bold text-indigo-900 dark:text-indigo-200">Cần chỉnh sửa thông tin hoặc phân quyền tài khoản?</span>
-                      <p className="text-slate-500 dark:text-slate-400 mt-0.5">Nhấp nút dưới để thực hiện ngay lập tức</p>
+                  {(canManageStaffTarget(actorAccess, 'edit', selectedDetailStaff, rooms) ||
+                    canManageStaffTarget(actorAccess, 'rbac', selectedDetailStaff, rooms)) && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900">
+                      <div className="text-xs">
+                        <span className="font-bold text-indigo-900 dark:text-indigo-200">Cần chỉnh sửa thông tin hoặc phân quyền tài khoản?</span>
+                        <p className="text-slate-500 dark:text-slate-400 mt-0.5">Nhấp nút bên phải để thực hiện trong phạm vi quyền hạn</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {canManageStaffTarget(actorAccess, 'edit', selectedDetailStaff, rooms) && (
+                          <button
+                            onClick={handleEditFromDetail}
+                            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Sửa toàn bộ thông tin</span>
+                          </button>
+                        )}
+                        {canManageStaffTarget(actorAccess, 'rbac', selectedDetailStaff, rooms) && (
+                          <button
+                            onClick={() => setDetailModalTab('permissions')}
+                            className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Phân quyền RBAC</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleEditFromDetail}
-                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                        <span>Sửa toàn bộ thông tin</span>
-                      </button>
-                      <button
-                        onClick={() => setDetailModalTab('permissions')}
-                        className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>Phân quyền RBAC</span>
-                      </button>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
               {/* TAB 2: PHÂN QUYỀN & TÀI KHOẢN RBAC */}
-              {detailModalTab === 'permissions' && (
-                <div className="space-y-6">
-                  {/* Alert Success */}
-                  {permissionSuccessMsg && (
-                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-200 flex items-center gap-2.5 text-xs font-semibold animate-in fade-in duration-150">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{permissionSuccessMsg}</span>
-                    </div>
-                  )}
+              {detailModalTab === 'permissions' && (() => {
+                const canModifyThisRbac = canManageStaffTarget(actorAccess, 'rbac', selectedDetailStaff, rooms);
+                const targetOriginalTier = resolveUserManagementTier(
+                  allUsers.find(u => u.id === selectedDetailStaff.userId || u.name.trim().toLowerCase() === selectedDetailStaff.fullName.trim().toLowerCase()),
+                  selectedDetailStaff,
+                  departments,
+                  rooms
+                );
+                const effectiveDefaults = DEFAULT_TIER_PERMISSIONS[assignedTier];
 
-                  {/* Account Summary Banner */}
-                  <div className="p-4 bg-purple-50/60 dark:bg-purple-950/30 rounded-2xl border border-purple-100 dark:border-purple-900/60 flex items-center justify-between">
+                return (
+                  <div className="space-y-6">
+                    {/* Alert Success */}
+                    {permissionSuccessMsg && (
+                      <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-200 flex items-center gap-2.5 text-xs font-semibold animate-in fade-in duration-150">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{permissionSuccessMsg}</span>
+                      </div>
+                    )}
+
+                    {/* Guard Notice when read-only */}
+                    {!canModifyThisRbac && (
+                      <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-amber-800 dark:text-amber-200 flex items-center gap-2.5 text-xs font-semibold">
+                        <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>
+                          Chế độ chỉ xem: Bạn không có quyền điều chỉnh phân quyền RBAC hoặc tài khoản này thuộc cấp Admin hệ thống.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Account Summary Banner */}
+                    <div className="p-4 bg-purple-50/60 dark:bg-purple-950/30 rounded-2xl border border-purple-100 dark:border-purple-900/60 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-purple-600 dark:text-purple-400 tracking-wider">Tài khoản & Cấp bậc hiện tại</span>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 flex flex-wrap items-center gap-2">
+                          <span>{selectedDetailStaff.fullName}</span>
+                          <span className="font-mono text-xs font-normal text-slate-500">({selectedDetailStaff.email || `${selectedDetailStaff.userId.toLowerCase()}@hospital.vn`})</span>
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                          <span>Cấp bậc: <strong className="text-purple-700 dark:text-purple-300">{MANAGEMENT_TIER_META[targetOriginalTier].label}</strong></span>
+                          <span>• Vai trò: <strong className="text-slate-700 dark:text-slate-200">{selectedDetailStaff.role}</strong></span>
+                        </p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${MANAGEMENT_TIER_META[assignedTier].badgeClass}`}>
+                        {MANAGEMENT_TIER_META[assignedTier].scopeSummary}
+                      </span>
+                    </div>
+
+                    {/* 5-Tier Management Level Cards */}
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-purple-600 dark:text-purple-400 tracking-wider">Tài khoản liên kết</span>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 flex items-center gap-2">
-                        <span>{selectedDetailStaff.fullName}</span>
-                        <span className="font-mono text-xs font-normal text-slate-500">({selectedDetailStaff.email || `${selectedDetailStaff.userId.toLowerCase()}@hospital.vn`})</span>
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Quyền hiện tại: <strong className="text-purple-700 dark:text-purple-300">{selectedDetailStaff.role}</strong>
-                      </p>
-                    </div>
-                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full text-xs font-bold border border-emerald-200 dark:border-emerald-800">
-                      Active
-                    </span>
-                  </div>
-
-                  {/* Role Selection Cards */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
-                      Chọn Vai Trò RBAC (Role-Based Access Control):
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Role 1: Admin */}
-                      <div
-                        onClick={() => setAssignedRole('Admin')}
-                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                          assignedRole === 'Admin'
-                            ? 'bg-purple-50/80 border-purple-500 dark:bg-purple-950/40 dark:border-purple-500 ring-2 ring-purple-500/20 shadow-sm'
-                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-purple-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300">
-                            Admin
-                          </span>
-                          <input
-                            type="radio"
-                            name="role"
-                            checked={assignedRole === 'Admin'}
-                            onChange={() => setAssignedRole('Admin')}
-                            className="text-purple-600 focus:ring-purple-500"
-                          />
-                        </div>
-                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Quản trị viên Hệ thống</h5>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                          Toàn quyền quản trị hệ thống, quản lý tài khoản & nhân sự, phân quyền người dùng, cấu hình và phê duyệt cấp cao.
-                        </p>
-                      </div>
-
-                      {/* Role 2: Manager */}
-                      <div
-                        onClick={() => setAssignedRole('Manager')}
-                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                          assignedRole === 'Manager'
-                            ? 'bg-blue-50/80 border-blue-500 dark:bg-blue-950/40 dark:border-blue-500 ring-2 ring-blue-500/20 shadow-sm'
-                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-blue-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                            Manager
-                          </span>
-                          <input
-                            type="radio"
-                            name="role"
-                            checked={assignedRole === 'Manager'}
-                            onChange={() => setAssignedRole('Manager')}
-                            className="text-blue-600 focus:ring-blue-500"
-                          />
-                        </div>
-                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Trưởng khoa / Phó khoa / Quản lý</h5>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                          Quản lý công việc y vụ, phân lịch trực, duyệt đơn xin nghỉ phép, kiểm soát thiết bị và xem thống kê báo cáo toàn khoa.
-                        </p>
-                      </div>
-
-                      {/* Role 3: Doctor */}
-                      <div
-                        onClick={() => setAssignedRole('Doctor')}
-                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                          assignedRole === 'Doctor'
-                            ? 'bg-emerald-50/80 border-emerald-500 dark:bg-emerald-950/40 dark:border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
-                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
-                            Doctor
-                          </span>
-                          <input
-                            type="radio"
-                            name="role"
-                            checked={assignedRole === 'Doctor'}
-                            onChange={() => setAssignedRole('Doctor')}
-                            className="text-emerald-600 focus:ring-emerald-500"
-                          />
-                        </div>
-                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Bác sĩ chuyên môn</h5>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                          Đọc và ký duyệt kết quả cận lâm sàng, hội chẩn chuyên môn ca khó, ký duyệt quy trình SOP và theo dõi ca bệnh.
-                        </p>
-                      </div>
-
-                      {/* Role 4: Staff */}
-                      <div
-                        onClick={() => setAssignedRole('Staff')}
-                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                          assignedRole === 'Staff'
-                            ? 'bg-slate-100 border-slate-500 dark:bg-slate-800 dark:border-slate-400 ring-2 ring-slate-400/20 shadow-sm'
-                            : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-                            Staff
-                          </span>
-                          <input
-                            type="radio"
-                            name="role"
-                            checked={assignedRole === 'Staff'}
-                            onChange={() => setAssignedRole('Staff')}
-                            className="text-slate-600 focus:ring-slate-500"
-                          />
-                        </div>
-                        <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">Kỹ thuật viên / Điều dưỡng / Nhân viên</h5>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                          Tiếp nhận bệnh nhân, lấy mẫu xét nghiệm, chụp chiếu XQ/CT/MRI, vận hành máy, cập nhật thiết bị và xin nghỉ phép.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Additional Role Attributes */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Chức danh hiển thị:
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
+                        1. Chọn Cấp Bậc Quản Lý & Phạm Vi Quyền Hạn (5 Cấp):
                       </label>
-                      <input
-                        type="text"
-                        value={assignedTitle}
-                        onChange={e => setAssignedTitle(e.target.value)}
-                        placeholder="VD: Trưởng khoa, Bác sĩ, KTV..."
-                        className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
-                      />
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {MANAGEMENT_TIER_ORDER.map(tierKey => {
+                          const meta = MANAGEMENT_TIER_META[tierKey];
+                          const isTierSelected = assignedTier === tierKey;
+                          const isDisabledTier = !canModifyThisRbac || (tierKey === 'admin' && !actorAccess.isSystemAdmin);
+
+                          return (
+                            <div
+                              key={tierKey}
+                              onClick={() => {
+                                if (isDisabledTier) return;
+                                setAssignedTier(tierKey);
+                                setAssignedRole(meta.defaultRole);
+                                if (tierKey !== targetOriginalTier) {
+                                  setAssignedOverrides({});
+                                }
+                              }}
+                              className={`p-3.5 rounded-2xl border transition-all ${
+                                isDisabledTier
+                                  ? 'opacity-55 cursor-not-allowed bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800'
+                                  : isTierSelected
+                                  ? 'bg-purple-50/80 border-purple-500 dark:bg-purple-950/40 dark:border-purple-500 ring-2 ring-purple-500/20 shadow-sm cursor-pointer'
+                                  : 'bg-white dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:border-purple-300 cursor-pointer'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md border ${meta.badgeClass}`}>
+                                  {meta.shortLabel}
+                                </span>
+                                <input
+                                  type="radio"
+                                  name="managementTierDetail"
+                                  disabled={isDisabledTier}
+                                  checked={isTierSelected}
+                                  onChange={() => {}}
+                                  className="text-purple-600 focus:ring-purple-500"
+                                />
+                              </div>
+                              <h5 className="text-xs font-bold text-slate-900 dark:text-white mt-2">{meta.label}</h5>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                                {meta.description}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Bộ phận:
-                      </label>
-                      <select
-                        value={assignedDept}
-                        onChange={e => {
-                          const nextDept = e.target.value;
-                          setAssignedDept(nextDept);
-                          const nextDeptRooms = getRoomsForDepartment(nextDept);
-                          if (assignedRoom && !nextDeptRooms.includes(assignedRoom)) {
-                            setAssignedRoom('');
-                          }
-                        }}
-                        className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
-                      >
-                        <option value="">-- Chọn bộ phận ({allDepartments.length}) --</option>
-                        {assignedDept && !allDepartments.includes(assignedDept) && (
-                          <option value={assignedDept}>{assignedDept}</option>
-                        )}
-                        {allDepartments.map(dept => (
-                          <option key={dept} value={dept}>{dept}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {/* Scope Selectors for section_head / room_head */}
+                    {assignedTier === 'section_head' && (
+                      <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-2xl border border-indigo-200 dark:border-indigo-900 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                            <Building2 className="w-4 h-4 text-indigo-600" />
+                            <span>Phạm Vi Bộ Phận Quản Lý (Trưởng bộ phận):</span>
+                          </h5>
+                          <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold">
+                            Đã chọn {assignedManagedDepts.length} bộ phận
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {departments
+                            .filter(d => d.name && d.name !== 'Chưa phân bộ phận')
+                            .map(dept => {
+                              const checked = assignedManagedDepts.includes(dept.name);
+                              return (
+                                <label
+                                  key={dept.id}
+                                  className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                                    checked
+                                      ? 'bg-white dark:bg-slate-900 border-indigo-500 text-indigo-700 dark:text-indigo-300 shadow-2xs'
+                                      : 'bg-white/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                  } ${!canModifyThisRbac ? 'opacity-60 pointer-events-none' : ''}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    disabled={!canModifyThisRbac}
+                                    checked={checked}
+                                    onChange={() => {
+                                      setAssignedManagedDepts(prev =>
+                                        prev.includes(dept.name)
+                                          ? prev.filter(x => x !== dept.name)
+                                          : [...prev, dept.name]
+                                      );
+                                    }}
+                                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span className="truncate">{dept.name}</span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
 
-                    <div>
-                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Phòng làm việc trực thuộc:
-                      </label>
-                      {(() => {
-                        const filteredRooms = assignedDept
-                          ? rooms.filter(r => r.departmentSection === assignedDept)
-                          : rooms;
-                        return (
-                          <select
-                            value={assignedRoom}
-                            onChange={e => setAssignedRoom(e.target.value)}
-                            className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
+                    {assignedTier === 'room_head' && (
+                      <div className="p-4 bg-teal-50/60 dark:bg-teal-950/30 rounded-2xl border border-teal-200 dark:border-teal-900 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-xs font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
+                            <Grid className="w-4 h-4 text-teal-600" />
+                            <span>Phạm Vi Phòng Chuyên Môn Quản Lý (Trưởng phòng):</span>
+                          </h5>
+                          <span className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold">
+                            Đã chọn {assignedManagedRooms.length} phòng
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                          {rooms.map(rm => {
+                            const checked = assignedManagedRooms.includes(rm.name);
+                            return (
+                              <label
+                                key={rm.id}
+                                className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                                  checked
+                                    ? 'bg-white dark:bg-slate-900 border-teal-500 text-teal-700 dark:text-teal-300 shadow-2xs'
+                                    : 'bg-white/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                } ${!canModifyThisRbac ? 'opacity-60 pointer-events-none' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={!canModifyThisRbac}
+                                  checked={checked}
+                                  onChange={() => {
+                                    setAssignedManagedRooms(prev =>
+                                      prev.includes(rm.name)
+                                        ? prev.filter(x => x !== rm.name)
+                                        : [...prev, rm.name]
+                                    );
+                                  }}
+                                  className="rounded text-teal-600 focus:ring-teal-500"
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate">{rm.name}</div>
+                                  <div className="text-[10px] font-normal text-slate-500 truncate">{rm.departmentSection} • {rm.code}</div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Granular Permission Overrides */}
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                            2. Tùy Chỉnh Quyền Hạn Chi Tiết (Ghi đè theo cá nhân):
+                          </h5>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Điều chỉnh từng quyền chỉnh sửa nhân sự, chứng chỉ, thiết bị theo đúng nhiệm vụ thực tế.
+                          </p>
+                        </div>
+                        {canModifyThisRbac && Object.keys(assignedOverrides).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setAssignedOverrides({})}
+                            className="px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold flex items-center gap-1"
                           >
-                            <option value="">
-                              {assignedDept && filteredRooms.length === 0
-                                ? `-- Bộ phận chưa có phòng trực thuộc --`
-                                : `-- Phòng chung bộ phận (${filteredRooms.length}) --`}
-                            </option>
-                            {assignedRoom && !filteredRooms.some(r => r.name === assignedRoom) && (
-                              <option value={assignedRoom}>{assignedRoom}</option>
-                            )}
-                            {filteredRooms.map(r => (
-                              <option key={r.id} value={r.name}>{r.name} ({r.code})</option>
-                            ))}
-                          </select>
-                        );
-                      })()}
+                            <RotateCcw className="w-3 h-3" /> Khôi phục mặc định cấp bậc
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {(
+                          [
+                            { id: 'staff', title: 'Nhân sự & Chứng chỉ' },
+                            { id: 'equipment', title: 'Thiết bị & An toàn' },
+                            { id: 'system', title: 'Phạm vi & Hệ thống' },
+                          ] as const
+                        ).map(grp => (
+                          <div key={grp.id} className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+                            <div className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase pb-1 border-b border-slate-100 dark:border-slate-800">
+                              {grp.title}
+                            </div>
+                            <div className="space-y-1.5">
+                              {PERMISSION_FIELD_LABELS.filter(f => f.group === grp.id).map(field => {
+                                const defaultVal = Boolean(effectiveDefaults[field.key]);
+                                const currentVal =
+                                  assignedOverrides[field.key] !== undefined
+                                    ? Boolean(assignedOverrides[field.key])
+                                    : defaultVal;
+                                const isAdminOnlyLocked = Boolean(field.adminOnly) && !actorAccess.isSystemAdmin;
+                                const isDisabled = !canModifyThisRbac || isAdminOnlyLocked;
+
+                                return (
+                                  <label
+                                    key={field.key}
+                                    className={`flex items-start gap-2 text-[11px] leading-snug ${
+                                      isDisabled ? 'opacity-55 cursor-not-allowed' : 'cursor-pointer'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={isDisabled}
+                                      checked={currentVal}
+                                      onChange={e => {
+                                        const nextBool = e.target.checked;
+                                        setAssignedOverrides(prev => {
+                                          const copy = { ...prev };
+                                          if (nextBool === defaultVal) {
+                                            delete copy[field.key];
+                                          } else {
+                                            copy[field.key] = nextBool;
+                                          }
+                                          return copy;
+                                        });
+                                      }}
+                                      className="mt-0.5 rounded text-purple-600 focus:ring-purple-500"
+                                    />
+                                    <span className="text-slate-700 dark:text-slate-300 font-medium">
+                                      {field.label}
+                                      {field.adminOnly && (
+                                        <span className="ml-1 text-[10px] text-purple-600 dark:text-purple-400 font-bold">(Admin)</span>
+                                      )}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Additional Role Attributes */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Chức danh hiển thị:
+                        </label>
+                        <input
+                          type="text"
+                          disabled={!canModifyThisRbac}
+                          value={assignedTitle}
+                          onChange={e => setAssignedTitle(e.target.value)}
+                          placeholder="VD: Trưởng khoa, Trưởng bộ phận, KTV trưởng..."
+                          className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium disabled:opacity-60"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Bộ phận công tác:
+                        </label>
+                        <select
+                          disabled={!canModifyThisRbac}
+                          value={assignedDept}
+                          onChange={e => {
+                            const nextDept = e.target.value;
+                            setAssignedDept(nextDept);
+                            const nextDeptRooms = getRoomsForDepartment(nextDept);
+                            if (assignedRoom && !nextDeptRooms.includes(assignedRoom)) {
+                              setAssignedRoom('');
+                            }
+                          }}
+                          className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium disabled:opacity-60"
+                        >
+                          <option value="">-- Chọn bộ phận ({allDepartments.length}) --</option>
+                          {assignedDept && !allDepartments.includes(assignedDept) && (
+                            <option value={assignedDept}>{assignedDept}</option>
+                          )}
+                          {allDepartments.map(dept => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Phòng làm việc trực thuộc:
+                        </label>
+                        {(() => {
+                          const filteredRooms = assignedDept
+                            ? rooms.filter(r => r.departmentSection === assignedDept)
+                            : rooms;
+                          return (
+                            <select
+                              disabled={!canModifyThisRbac}
+                              value={assignedRoom}
+                              onChange={e => setAssignedRoom(e.target.value)}
+                              className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium disabled:opacity-60"
+                            >
+                              <option value="">
+                                {assignedDept && filteredRooms.length === 0
+                                  ? `-- Bộ phận chưa có phòng trực thuộc --`
+                                  : `-- Phòng chung bộ phận (${filteredRooms.length}) --`}
+                              </option>
+                              {assignedRoom && !filteredRooms.some(r => r.name === assignedRoom) && (
+                                <option value={assignedRoom}>{assignedRoom}</option>
+                              )}
+                              {filteredRooms.map(r => (
+                                <option key={r.id} value={r.name}>{r.name} ({r.code})</option>
+                              ))}
+                            </select>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Action Save Button */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                      <span className="text-xs text-slate-500">
+                        * Thay đổi cấp bậc, phạm vi quản lý và quyền chi tiết sẽ đồng bộ trực tiếp vào hồ sơ nhân sự & tài khoản RBAC.
+                      </span>
+                      {canModifyThisRbac && (
+                        <button
+                          type="button"
+                          onClick={handleSavePermissions}
+                          className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-purple-200 dark:shadow-none"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Lưu Phân Quyền Nhân Viên</span>
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  {/* Action Save Button */}
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-xs text-slate-500">
-                      * Thay đổi phân quyền sẽ cập nhật trực tiếp vào hệ thống RBAC và danh sách tài khoản đăng nhập.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleSavePermissions}
-                      className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-purple-200 dark:shadow-none"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>Lưu Phân Quyền Nhân Viên</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* TAB 3: LỊCH SỬ CÔNG TÁC */}
               {detailModalTab === 'history' && (
@@ -3966,12 +4434,14 @@ export const StaffManagementView: React.FC = () => {
                     <div className="py-12 text-center text-slate-400 space-y-2">
                       <Award className="w-8 h-8 mx-auto opacity-40 text-slate-400" />
                       <p className="text-xs">Chưa có chứng chỉ nào được tải lên cho cán bộ này.</p>
-                      <button
-                        onClick={handleEditFromDetail}
-                        className="text-xs text-indigo-600 font-semibold hover:underline"
-                      >
-                        Bấm vào đây để cập nhật chứng chỉ trong form sửa
-                      </button>
+                      {canManageStaffTarget(actorAccess, 'edit', selectedDetailStaff, rooms) && (
+                        <button
+                          onClick={handleEditFromDetail}
+                          className="text-xs text-indigo-600 font-semibold hover:underline"
+                        >
+                          Bấm vào đây để cập nhật chứng chỉ trong form sửa
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-3">
@@ -4017,32 +4487,40 @@ export const StaffManagementView: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <button
-                onClick={handleEditFromDetail}
-                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Chỉnh sửa thông tin nhân viên</span>
-              </button>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+              {canManageStaffTarget(actorAccess, 'edit', selectedDetailStaff, rooms) ? (
+                <button
+                  onClick={handleEditFromDetail}
+                  className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Chỉnh sửa thông tin nhân viên</span>
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                  <Lock className="w-3.5 h-3.5" /> Hồ sơ chỉ xem
+                </span>
+              )}
 
               <div className="flex items-center gap-2">
-                {detailModalTab !== 'permissions' ? (
-                  <button
-                    onClick={() => setDetailModalTab('permissions')}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Phân quyền nhân viên</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSavePermissions}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Lưu phân quyền</span>
-                  </button>
+                {canManageStaffTarget(actorAccess, 'rbac', selectedDetailStaff, rooms) && (
+                  detailModalTab !== 'permissions' ? (
+                    <button
+                      onClick={() => setDetailModalTab('permissions')}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Phân quyền nhân viên</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSavePermissions}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Lưu phân quyền</span>
+                    </button>
+                  )
                 )}
 
                 <button
@@ -4260,11 +4738,13 @@ export const StaffManagementView: React.FC = () => {
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
                 >
                   <option value="">-- Chọn cán bộ / nhân viên --</option>
-                  {(!editingCert ? activeProfiles : profiles).map((p, idx) => (
-                    <option key={`${p.userId}-${idx}`} value={p.userId}>
-                      {p.fullName} ({p.title} - {p.departmentSection})
-                    </option>
-                  ))}
+                  {(!editingCert ? activeProfiles : profiles)
+                    .filter(p => canManageStaffTarget(actorAccess, 'cert', p, rooms))
+                    .map((p, idx) => (
+                      <option key={`${p.userId}-${idx}`} value={p.userId}>
+                        {p.fullName} ({p.title} - {p.departmentSection})
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -4580,7 +5060,9 @@ export const StaffManagementView: React.FC = () => {
                     <option value="Staff">Staff (Nhân viên)</option>
                     <option value="Doctor">Doctor (Bác sĩ)</option>
                     <option value="Manager">Manager (Quản lý)</option>
-                    <option value="Admin">Admin (Quản trị viên)</option>
+                    {actorAccess.isSystemAdmin && (
+                      <option value="Admin">Admin (Quản trị viên)</option>
+                    )}
                   </select>
                 </div>
 
@@ -4589,24 +5071,34 @@ export const StaffManagementView: React.FC = () => {
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Bộ Phận (Từ Quản lý Phòng / Bộ phận) <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={newStaffForm.departmentSection}
-                    onChange={e => {
-                      const nextDept = e.target.value;
-                      const nextDeptRooms = getRoomsForDepartment(nextDept);
-                      setNewStaffForm({
-                        ...newStaffForm,
-                        departmentSection: nextDept,
-                        room: nextDeptRooms.includes(newStaffForm.room) ? newStaffForm.room : (nextDeptRooms[0] || '')
-                      });
-                    }}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
-                  >
-                    <option value="">-- Chọn bộ phận ({allDepartments.length}) --</option>
-                    {allDepartments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const deptChoices = actorAccess.isDepartmentWide
+                      ? allDepartments
+                      : selectableDepartmentsForActor.map(d => d.name).filter(n => n && n !== 'Chưa phân bộ phận');
+                    const allowedRoomNames = new Set(selectableRoomsForActor.map(r => r.name));
+                    return (
+                      <select
+                        value={newStaffForm.departmentSection}
+                        onChange={e => {
+                          const nextDept = e.target.value;
+                          const nextDeptRooms = getRoomsForDepartment(nextDept).filter(
+                            rName => actorAccess.isDepartmentWide || allowedRoomNames.has(rName)
+                          );
+                          setNewStaffForm({
+                            ...newStaffForm,
+                            departmentSection: nextDept,
+                            room: nextDeptRooms.includes(newStaffForm.room) ? newStaffForm.room : (nextDeptRooms[0] || '')
+                          });
+                        }}
+                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-white"
+                      >
+                        <option value="">-- Chọn bộ phận ({deptChoices.length}) --</option>
+                        {deptChoices.map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </div>
 
                 {/* Phòng làm việc trực thuộc bộ phận đã chọn */}
@@ -4615,7 +5107,10 @@ export const StaffManagementView: React.FC = () => {
                     Phòng Làm Việc Cụ Thể <span className="text-red-500">*</span>
                   </label>
                   {(() => {
-                    const deptRooms = getRoomsForDepartment(newStaffForm.departmentSection);
+                    const allowedRoomNames = new Set(selectableRoomsForActor.map(r => r.name));
+                    const deptRooms = getRoomsForDepartment(newStaffForm.departmentSection).filter(
+                      rName => actorAccess.isDepartmentWide || allowedRoomNames.has(rName)
+                    );
                     return (
                       <select
                         value={newStaffForm.room}
@@ -4624,7 +5119,7 @@ export const StaffManagementView: React.FC = () => {
                       >
                         <option value="">
                           {newStaffForm.departmentSection && deptRooms.length === 0
-                            ? `-- Bộ phận chưa có phòng trực thuộc --`
+                            ? `-- Bộ phận chưa có phòng trực thuộc trong phạm vi --`
                             : `-- Chưa phân phòng (${deptRooms.length}) --`}
                         </option>
                         {deptRooms.map(room => (

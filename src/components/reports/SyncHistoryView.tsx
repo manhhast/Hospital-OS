@@ -20,7 +20,7 @@ import {
 import { ConfirmModal } from '../common/ConfirmModal';
 import { storageService } from '../../services/storageService';
 import { reportArchiveService } from '../../services/reportArchiveService';
-import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
+import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
 import { runThreeDaySmartSync } from '../../services/googleSheetReportService';
 import type {
   SyncHistoryDiscrepancyItem,
@@ -46,8 +46,8 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
   const [entries, setEntries] = useState<SyncHistoryEntry[]>(() =>
     storageService.getSyncHistory()
   );
-  const [cloudState, setCloudState] = useState<FirebaseCloudState>(() =>
-    firebaseSyncService.getState()
+  const [pgState, setPgState] = useState<PostgresSyncState>(() =>
+    postgresSyncService.getState()
   );
   const [filterStatus, setFilterStatus] = useState<'all' | SyncHistoryStatus>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -73,12 +73,12 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
     const unsubStorage = storageService.subscribe(() => {
       setEntries(storageService.getSyncHistory());
     });
-    const unsubFirebase = firebaseSyncService.subscribe(() => {
-      setCloudState(firebaseSyncService.getState());
+    const unsubPg = postgresSyncService.subscribe(() => {
+      setPgState(postgresSyncService.getState());
     });
     return () => {
       unsubStorage();
-      unsubFirebase();
+      unsubPg();
     };
   }, []);
 
@@ -155,13 +155,13 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
       if (outcome.alertDiscrepancies.length > 0) {
         onShowToast?.(
           'Phát hiện sai lệch 3 ngày gần nhất',
-          `Có ${outcome.alertDiscrepancies.length} mục sai lệch giữa Firebase và Google Sheet (đã giữ nguyên dữ liệu và lưu vào Lịch sử đồng bộ).`,
+          `Có ${outcome.alertDiscrepancies.length} mục sai lệch giữa Hệ thống và Google Sheet (đã giữ nguyên dữ liệu và lưu vào Lịch sử đồng bộ).`,
           'warning'
         );
       } else if (outcome.autoWrittenCount > 0) {
         onShowToast?.(
           'Đồng bộ 3 ngày gần nhất thành công',
-          `Đã tự động ghi ${outcome.autoWrittenCount} ô mới từ Google Sheet vào Firebase.`,
+          `Đã tự động ghi ${outcome.autoWrittenCount} ô mới từ Google Sheet vào Hệ thống.`,
           'success'
         );
       } else if (outcome.reason === 'sheet_unreachable') {
@@ -173,7 +173,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
       } else {
         onShowToast?.(
           'Dữ liệu 3 ngày gần nhất khớp hoàn toàn',
-          'Không phát hiện sai lệch giữa Firebase và Google Sheet.',
+          'Không phát hiện sai lệch giữa Hệ thống và Google Sheet.',
           'info'
         );
       }
@@ -210,7 +210,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
             }
           ]
         );
-        const fbRes = await firebaseSyncService.forceSaveReportMonthToCloud(
+        const dbRes = await postgresSyncService.forceSaveReportMonthToServer(
           disc.year,
           disc.monthKey,
           updatedMonthItems
@@ -219,14 +219,14 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
         onShowToast?.(
           'Đã cập nhật theo Google Sheet',
           `${disc.serviceName} (${disc.dateLabel}): BH ${disc.sheetBh}, ND ${disc.sheetNd}. ${
-            fbRes.savedOnFirebase ? 'Đã lưu cố định lên Firebase Cloud.' : 'Đã lưu cục bộ.'
+            dbRes.saved ? 'Đã lưu cố định trên PostgreSQL.' : 'Đã lưu cục bộ.'
           }`,
           'success'
         );
       } else {
         storageService.updateSyncHistoryDiscrepancyStatus(entryId, disc.id, 'kept_system');
         onShowToast?.(
-          'Đã giữ nguyên dữ liệu Firebase',
+          'Đã giữ nguyên dữ liệu Hệ thống',
           `Giữ nguyên ${disc.serviceName} (${disc.dateLabel}): BH ${disc.systemBh}, ND ${disc.systemNd}.`,
           'info'
         );
@@ -329,7 +329,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
     }
     if (entry.autoWrittenCount > 0 || entry.updatedFromSheetCount > 0) {
       return {
-        text: `Đã ghi Firebase (${entry.autoWrittenCount + entry.updatedFromSheetCount} ô)`,
+        text: `Đã ghi Hệ thống (${entry.autoWrittenCount + entry.updatedFromSheetCount} ô)`,
         cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-800',
         Icon: CheckCircle2
       };
@@ -355,7 +355,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                 Lịch Sử Đồng Bộ &amp; Rà Soát Số Liệu
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                Ghi nhận tự động khi khởi động (rà soát <strong>3 ngày gần nhất</strong>: tự điền ô trống lên Firebase, cảnh báo nếu sai lệch hoặc Sheet thiếu) và toàn bộ lịch sử <strong>Rà soát số liệu</strong> thủ công.
+                Ghi nhận tự động khi khởi động (rà soát <strong>3 ngày gần nhất</strong>: tự điền ô trống vào Hệ thống, cảnh báo nếu sai lệch hoặc Sheet thiếu) và toàn bộ lịch sử <strong>Rà soát số liệu</strong> thủ công.
               </p>
             </div>
           </div>
@@ -399,7 +399,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
           <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800">
             <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5" />
-              Đã tự động ghi Firebase
+              Đã tự động ghi Hệ thống
             </div>
             <div className="text-xl font-black text-emerald-800 dark:text-emerald-200 mt-1 tabular-nums">
               {stats.totalAutoWritten} <span className="text-xs font-bold">ô</span>
@@ -436,17 +436,17 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
 
           <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
             <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              {cloudState.status === 'synced' ? (
+              {pgState.configured && pgState.status === 'synced' ? (
                 <Cloud className="w-3.5 h-3.5 text-emerald-600" />
               ) : (
-                <CloudOff className="w-3.5 h-3.5 text-amber-600" />
+                <CloudOff className="w-3.5 h-3.5 text-blue-600" />
               )}
-              Đồng bộ Lịch sử lên Cloud
+              Lưu trữ Lịch sử Hệ thống
             </div>
             <div className="text-xs font-extrabold text-slate-800 dark:text-slate-100 mt-1.5 truncate">
-              {cloudState.status === 'synced'
-                ? `Đã bật (${cloudState.userEmail})`
-                : 'Đang lưu cục bộ (chưa đăng nhập Firebase)'}
+              {pgState.configured && pgState.status === 'synced'
+                ? 'Đồng bộ PostgreSQL Server'
+                : 'Đang lưu cục bộ (IndexedDB & LocalStorage)'}
             </div>
           </div>
         </div>
@@ -522,7 +522,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
             Chưa có bản ghi lịch sử đồng bộ phù hợp
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Mỗi lần khởi động ứng dụng kiểm tra 3 ngày gần nhất hoặc khi bạn dùng nút Rà soát số liệu, kết quả sẽ được lưu tự động tại đây và đồng bộ lên Firebase.
+            Mỗi lần khởi động ứng dụng kiểm tra 3 ngày gần nhất hoặc khi bạn dùng nút Rà soát số liệu, kết quả sẽ được lưu tự động tại đây và đồng bộ với Hệ thống.
           </p>
         </div>
       ) : (
@@ -582,8 +582,8 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                       <span>Người thực hiện: <strong>{entry.performedBy}</strong></span>
                       <span>Đã rà soát: <strong>{entry.checkedCellsCount.toLocaleString('vi-VN')}</strong> ô</span>
-                      <span className={entry.savedOnFirebase ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : ''}>
-                        {entry.firebaseNote || (entry.savedOnFirebase ? 'Đã lưu Firebase' : 'Lưu cục bộ')}
+                      <span className={(entry.savedToDatabase ?? entry.savedOnFirebase) ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : ''}>
+                        {entry.databaseNote || entry.firebaseNote || ((entry.savedToDatabase ?? entry.savedOnFirebase) ? 'Đã lưu PostgreSQL' : 'Lưu cục bộ')}
                       </span>
                     </div>
                   </div>
@@ -649,7 +649,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                               <tr>
                                 <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Ngày</th>
                                 <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Kỹ thuật / Bộ phận</th>
-                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Trên Firebase</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Trên Hệ thống</th>
                                 <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Trên Google Sheet</th>
                                 <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Tình trạng</th>
                                 <th className="p-2.5 text-right">Quyết định cập nhật</th>
@@ -662,7 +662,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                 const typeInfo =
                                   disc.type === 'cleared_on_sheet'
                                     ? {
-                                        label: 'Firebase có · Sheet trống',
+                                        label: 'Hệ thống có · Sheet trống',
                                         cls: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200'
                                       }
                                     : disc.type === 'value_changed'
@@ -717,7 +717,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                               )
                                             }
                                             className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
-                                            title="Ghi đè giá trị Google Sheet vào Firebase"
+                                            title="Ghi đè giá trị Google Sheet vào Hệ thống"
                                           >
                                             <RotateCcw className="w-3 h-3" />
                                             Cập nhật theo Sheet
@@ -733,10 +733,10 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                               )
                                             }
                                             className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
-                                            title="Giữ nguyên số liệu đang có trên Firebase"
+                                            title="Giữ nguyên số liệu đang có trên Hệ thống"
                                           >
                                             <Check className="w-3 h-3" />
-                                            Giữ Firebase
+                                            Giữ Hệ thống
                                           </button>
                                         </div>
                                       ) : disc.resolutionStatus === 'updated_from_sheet' ? (
@@ -747,7 +747,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                       ) : (
                                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 dark:text-slate-300">
                                           <ShieldCheck className="w-3 h-3" />
-                                          Đã giữ Firebase
+                                          Đã giữ Hệ thống
                                         </span>
                                       )}
                                     </td>
@@ -766,7 +766,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                         <h4 className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>
-                            Dữ liệu trống trên Firebase đã tự động nạp từ Google Sheet ({entry.autoWrittenCount} ô
+                            Dữ liệu trống trên Hệ thống đã tự động nạp từ Google Sheet ({entry.autoWrittenCount} ô
                             {entry.autoWrittenCount > autoSamples.length ? `, hiển thị ${autoSamples.length} ô đầu` : ''})
                           </span>
                         </h4>
@@ -777,7 +777,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                 <th className="p-2 border-r border-emerald-200 dark:border-emerald-800">Ngày</th>
                                 <th className="p-2 border-r border-emerald-200 dark:border-emerald-800">Kỹ thuật</th>
                                 <th className="p-2 border-r border-emerald-200 dark:border-emerald-800">Bộ phận</th>
-                                <th className="p-2 text-right">Đã ghi lên Firebase</th>
+                                <th className="p-2 text-right">Đã ghi vào Hệ thống</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
@@ -822,7 +822,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
         }
         message={
           confirmClearModal?.mode === 'filtered'
-            ? `Bạn có chắc chắn muốn xóa ${confirmClearModal.count} bản ghi lịch sử thông báo & đồng bộ đang hiển thị theo bộ lọc hiện tại? Thao tác này cũng sẽ đồng bộ lên Firebase.`
+            ? `Bạn có chắc chắn muốn xóa ${confirmClearModal.count} bản ghi lịch sử thông báo & đồng bộ đang hiển thị theo bộ lọc hiện tại? Thao tác này cũng sẽ đồng bộ vào hệ thống.`
             : `Bạn có chắc chắn muốn xóa toàn bộ ${confirmClearModal?.count || 0} bản ghi trong lịch sử thông báo & đồng bộ? Số liệu báo cáo đã lưu trên hệ thống sẽ không bị ảnh hưởng.`
         }
         confirmText="Xóa lịch sử"

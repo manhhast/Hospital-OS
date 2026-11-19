@@ -7,7 +7,7 @@ import {
   Cloud, CloudOff, RefreshCw
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
-import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
+import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
 import { EquipmentItem, TaskItem, User, UserRole } from '../../types/hospital';
 import { medicalSearchEngine, SearchResultItem, removeVietnameseTones } from '../../services/searchService';
 import {
@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(() => storageService.getEquipment());
   const [taskList, setTaskList] = useState<TaskItem[]>(() => storageService.getTasks());
-  const [cloudState, setCloudState] = useState<FirebaseCloudState>(() => firebaseSyncService.getState());
+  const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showThemeDropdown, setShowThemeDropdown] = useState(false);
   const [showAlertPopover, setShowAlertPopover] = useState(false);
@@ -74,38 +74,44 @@ export const Header: React.FC<HeaderProps> = ({
       setEquipmentList(storageService.getEquipment());
       setTaskList(storageService.getTasks());
     });
-    const unsubCloud = firebaseSyncService.subscribe(() => {
-      setCloudState(firebaseSyncService.getState());
+    const unsubPg = postgresSyncService.subscribe(() => {
+      setPgState(postgresSyncService.getState());
     });
     return () => {
       unsubscribe();
-      unsubCloud();
+      unsubPg();
     };
   }, []);
 
   const handleHeaderCloudClick = async () => {
-    if (cloudState.status === 'disconnected' || cloudState.status === 'unverified') {
-      const res = await firebaseSyncService.signInWithGoogle();
-      onShowToast?.(
-        res.success ? 'Firebase Cloud' : 'Kết nối Firebase',
-        res.message,
-        res.success ? 'success' : 'warning'
-      );
-      if (!res.success && res.code === 'auth/unauthorized-domain' && currentUser.role === 'Admin') {
+    if (pgState.configured) {
+      if (currentUser.role === 'Admin') {
         onNavigateModule('settings');
+      } else if (pgState.status === 'synced') {
+        try {
+          const res = await postgresSyncService.pullAllServerToLocal();
+          onShowToast?.(
+            'Đã đồng bộ PostgreSQL mới nhất',
+            `Đã cập nhật ${res.bucketsPulled} phân hệ từ máy chủ PostgreSQL.`,
+            'success'
+          );
+        } catch (err) {
+          onShowToast?.('Lỗi đồng bộ PostgreSQL', err instanceof Error ? err.message : String(err), 'error');
+        }
+      } else if (pgState.errorMessage) {
+        onShowToast?.('Trạng thái PostgreSQL', pgState.errorMessage, 'warning');
       }
       return;
     }
+
     if (currentUser.role === 'Admin') {
       onNavigateModule('settings');
-    } else if (cloudState.status === 'synced') {
+    } else {
       onShowToast?.(
-        'Firebase Cloud đang hoạt động',
-        `Tài khoản ${cloudState.userEmail || ''} đang đồng bộ thời gian thực (${cloudState.syncedBucketsCount} phân hệ).`,
+        'Chế độ Lưu trữ Cục bộ',
+        'Dữ liệu đang được lưu trực tiếp trên trình duyệt hiện tại (IndexedDB & LocalStorage).',
         'info'
       );
-    } else if (cloudState.errorMessage) {
-      onShowToast?.('Trạng thái Firebase Cloud', cloudState.errorMessage, 'warning');
     }
   };
 
@@ -362,42 +368,69 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Firebase Cloud Sync Trigger */}
-        <button
-          type="button"
-          onClick={() => void handleHeaderCloudClick()}
-          className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
-            cloudState.status === 'synced'
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60 hover:bg-emerald-100'
-              : cloudState.status === 'syncing' || cloudState.status === 'connecting'
-              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/60'
-              : cloudState.status === 'unauthorized' || cloudState.status === 'error'
-              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60'
-              : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100'
-          }`}
-          title={
-            cloudState.status === 'synced'
-              ? `Firebase Đã đồng bộ (${cloudState.userEmail || ''})`
-              : cloudState.errorMessage || 'Kết nối Google để đồng bộ dữ liệu lên Firebase Cloud'
-          }
-        >
-          {cloudState.status === 'syncing' || cloudState.status === 'connecting' ? (
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-          ) : cloudState.status === 'synced' ? (
-            <Cloud className="w-3.5 h-3.5" />
-          ) : (
-            <CloudOff className="w-3.5 h-3.5" />
-          )}
-          <span className="hidden xl:inline whitespace-nowrap">
-            {cloudState.status === 'synced'
-              ? 'Firebase Cloud'
-              : cloudState.status === 'syncing' || cloudState.status === 'connecting'
-              ? 'Đang đồng bộ...'
-              : cloudState.status === 'unauthorized'
-              ? 'Chờ cấp quyền'
-              : 'Kết nối Firebase'}
-          </span>
-        </button>
+        {/* Database / Cloud Sync Trigger */}
+        {pgState.configured ? (() => {
+          const isSyncingNow =
+            pgState.status === 'syncing' ||
+            pgState.status === 'checking' ||
+            pgState.pendingChangesCount > 0;
+          const isSyncedOk = pgState.status === 'synced' && !isSyncingNow;
+          return (
+            <button
+              type="button"
+              onClick={() => void handleHeaderCloudClick()}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                isSyncingNow
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/60'
+                  : isSyncedOk
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60 hover:bg-emerald-100'
+                  : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60 hover:bg-rose-100'
+              }`}
+              title={
+                isSyncingNow
+                  ? `Đang tự động đồng bộ ${pgState.pendingChangesCount > 0 ? `${pgState.pendingChangesCount} thay đổi ` : ''}lên PostgreSQL...`
+                  : isSyncedOk
+                  ? `Đồng bộ hai chiều tự động theo thời gian thực (${pgState.liveStreamConnected ? 'Kênh Live SSE đang bật' : 'Tự động định kỳ'}, không cần bấm nút)${pgState.lastSyncedAt ? ` · ${pgState.lastSyncedAt}` : ''}`
+                  : pgState.errorMessage || 'Trạng thái đồng bộ PostgreSQL Server'
+              }
+            >
+              {isSyncingNow ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+              ) : isSyncedOk ? (
+                <span className="relative inline-flex items-center justify-center shrink-0">
+                  <Cloud className="w-3.5 h-3.5 shrink-0" />
+                  {pgState.liveStreamConnected && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <CloudOff className="w-3.5 h-3.5 shrink-0" />
+              )}
+              <span className="hidden sm:inline whitespace-nowrap">
+                {isSyncingNow
+                  ? 'Đang đồng bộ...'
+                  : isSyncedOk
+                  ? pgState.liveStreamConnected
+                    ? 'Live Sync'
+                    : 'PostgreSQL Sync'
+                  : 'Lỗi PostgreSQL'}
+              </span>
+            </button>
+          );
+        })() : (
+          <button
+            type="button"
+            onClick={() => void handleHeaderCloudClick()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Dữ liệu đang lưu cục bộ trên trình duyệt · Quản trị viên có thể cấu hình PostgreSQL Server"
+          >
+            <Cloud className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span className="hidden sm:inline whitespace-nowrap">Lưu Cục Bộ</span>
+          </button>
+        )}
 
         {/* Unified Equipment Expiration & Task Reminder Bell */}
         <div className="relative" ref={alertPopoverRef}>
@@ -740,45 +773,82 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
 
-              {/* Cloud Firebase Status Row */}
-              <div className="mb-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-2 text-[11px]">
-                <div className="min-w-0">
-                  <div className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                    <Cloud className={`w-3.5 h-3.5 shrink-0 ${cloudState.status === 'synced' ? 'text-emerald-500' : 'text-slate-400'}`} />
-                    <span className="truncate">
-                      {cloudState.status === 'synced'
-                        ? `Firebase: ${cloudState.userEmail}`
-                        : cloudState.status === 'unauthorized'
-                        ? 'Chưa cấp quyền Firebase'
-                        : 'Chưa kết nối Firebase'}
-                    </span>
+              {/* Cloud / PostgreSQL Status Row */}
+              {pgState.configured ? (
+                <div className="mb-3 p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between gap-2 text-[11px]">
+                  <div className="min-w-0">
+                    <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      {pgState.liveStreamConnected ? (
+                        <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                        </span>
+                      ) : (
+                        <Cloud className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                      )}
+                      <span className="truncate">
+                        {pgState.liveStreamConnected
+                          ? 'Đồng bộ Live trực tiếp'
+                          : 'Đồng bộ tự động định kỳ'}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 pl-4 tabular-nums">
+                      {pgState.pendingChangesCount > 0
+                        ? `Đang gửi ${pgState.pendingChangesCount} thay đổi...`
+                        : pgState.lastSyncedAt
+                        ? `Tự động lưu · ${pgState.lastSyncedAt}`
+                        : 'Tự động lưu hai chiều'}
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoleDropdown(false);
+                      void postgresSyncService
+                        .pullAllServerToLocal()
+                        .then((res) =>
+                          onShowToast?.(
+                            'Đã đồng bộ dữ liệu mới nhất',
+                            `Đã tải ${res.bucketsPulled} phân hệ từ máy chủ PostgreSQL.`,
+                            'success'
+                          )
+                        )
+                        .catch((err) =>
+                          onShowToast?.(
+                            'Lỗi đồng bộ PostgreSQL',
+                            err instanceof Error ? err.message : String(err),
+                            'error'
+                          )
+                        );
+                    }}
+                    className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 hover:bg-emerald-200 text-emerald-700 dark:text-emerald-300 cursor-pointer shrink-0"
+                    title="Làm mới thủ công từ PostgreSQL"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                  </button>
                 </div>
-                {cloudState.status === 'disconnected' || cloudState.status === 'unverified' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRoleDropdown(false);
-                      void handleHeaderCloudClick();
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 cursor-pointer"
-                  >
-                    Kết nối Google
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRoleDropdown(false);
-                      void firebaseSyncService.signOut();
-                      onShowToast?.('Firebase Cloud', 'Đã ngắt kết nối tài khoản Google khỏi phiên đồng bộ.', 'info');
-                    }}
-                    className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 font-semibold shrink-0 cursor-pointer"
-                  >
-                    Ngắt kết nối
-                  </button>
-                )}
-              </div>
+              ) : (
+                <div className="mb-3 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-2 text-[11px]">
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                      <Cloud className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+                      <span className="truncate">Lưu trữ Cục bộ (IndexedDB &amp; LocalStorage)</span>
+                    </div>
+                  </div>
+                  {currentUser.role === 'Admin' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRoleDropdown(false);
+                        onNavigateModule('settings');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 font-bold shrink-0 cursor-pointer"
+                    >
+                      Cấu hình
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* The 3 Required Action Buttons: Đăng xuất, Chuyển tài khoản, Đổi mật khẩu */}
               <div className="grid grid-cols-3 gap-2">
@@ -786,6 +856,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   onClick={() => {
                     setShowRoleDropdown(false);
+                    void postgresSyncService.logout();
                     storageService.logout();
                     if (onShowToast) {
                       onShowToast('Đã đăng xuất', `Đã kết thúc phiên làm việc của ${currentUser.name}. Vui lòng đăng nhập lại.`, 'info');

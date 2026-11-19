@@ -11,6 +11,13 @@ import { isEquipmentInRoom } from '../../utils/roomDisplay';
 import { RoomStaffTab } from './RoomStaffTab';
 import { RoomEquipmentTab } from './RoomEquipmentTab';
 import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
+import {
+  resolveEffectiveUserAccess,
+  canManageRoomTarget,
+  filterSelectableDepartmentsForActor,
+  isRoomInAccessScope,
+  isDepartmentInAccessScope,
+} from '../../utils/rbac';
 
 export const RoomManagementView: React.FC = () => {
   const [departments, setDepartments] = useState<DepartmentUnit[]>([]);
@@ -41,14 +48,24 @@ export const RoomManagementView: React.FC = () => {
   const [deptDeleteMode, setDeptDeleteMode] = useState<'transfer' | 'unassign' | 'delete_rooms'>('transfer');
   const [deptTransferTarget, setDeptTransferTarget] = useState<string>('');
 
-  // Admin check
+  // RBAC Access Control
   const currentUser = storageService.getCurrentUser();
-  const isAdmin =
-    currentUser.role === 'Admin' ||
-    currentUser.id === 'USR-ADMIN' ||
-    currentUser.title === 'Quản trị ứng dụng' ||
-    currentUser.title === 'Quản trị hệ thống' ||
-    currentUser.title?.includes('Trưởng khoa');
+  const actorAccess = useMemo(
+    () => resolveEffectiveUserAccess(currentUser, staffList, departments, rooms),
+    [currentUser, staffList, departments, rooms]
+  );
+  const canManageDepartments = canManageRoomTarget(actorAccess, 'manage_departments', undefined, rooms);
+  const canCreateAnyRoom = useMemo(() => {
+    if (actorAccess.isDepartmentWide && actorAccess.permissions.canManageRoomsDepartments) return true;
+    if (actorAccess.tier === 'section_head' && actorAccess.permissions.canManageRoomsDepartments) {
+      return actorAccess.allowedDepartments.length > 0;
+    }
+    return false;
+  }, [actorAccess]);
+  const selectableDepartments = useMemo(
+    () => filterSelectableDepartmentsForActor(actorAccess, departments),
+    [actorAccess, departments]
+  );
 
   useEffect(() => {
     const loadAllData = () => {
@@ -201,6 +218,7 @@ export const RoomManagementView: React.FC = () => {
 
   // Department (Level 1) Handlers
   const handleSaveDepartment = (dept: DepartmentUnit) => {
+    if (!canManageDepartments) return;
     const saved = storageService.saveDepartment(dept);
     setExpandedDeptIds(prev => ({ ...prev, [saved.id]: true }));
     setSelectedDepartment(saved);
@@ -208,6 +226,7 @@ export const RoomManagementView: React.FC = () => {
   };
 
   const openDeleteDeptModal = (dept: DepartmentUnit) => {
+    if (!canManageDepartments) return;
     const otherDepts = departments.filter(d => d.id !== dept.id);
     setDeptDeleteMode(otherDepts.length > 0 ? 'transfer' : 'unassign');
     setDeptTransferTarget(otherDepts[0]?.name || '');
@@ -215,7 +234,7 @@ export const RoomManagementView: React.FC = () => {
   };
 
   const handleConfirmDeleteDepartment = () => {
-    if (!deleteModalDept) return;
+    if (!deleteModalDept || !canManageDepartments) return;
     storageService.deleteDepartment(deleteModalDept.id, {
       mode: deptDeleteMode,
       targetDepartmentName: deptTransferTarget
@@ -229,12 +248,23 @@ export const RoomManagementView: React.FC = () => {
 
   // Room (Level 2) Handlers
   const openAddRoomForDept = (deptName?: string) => {
+    const targetDept =
+      deptName ||
+      (selectedDepartment && canManageRoomTarget(actorAccess, 'create_room', { departmentName: selectedDepartment.name }, rooms)
+        ? selectedDepartment.name
+        : selectableDepartments[0]?.name || departments[0]?.name);
+    if (!canManageRoomTarget(actorAccess, 'create_room', { departmentName: targetDept }, rooms)) return;
     setEditingRoom(null);
-    setDefaultRoomDeptSection(deptName || selectedDepartment?.name || departments[0]?.name);
+    setDefaultRoomDeptSection(targetDept);
     setIsRoomModalOpen(true);
   };
 
   const handleSaveRoom = (roomData: Partial<ParaclinicalRoom>) => {
+    const isUpdate = Boolean(editingRoom?.id || roomData.id);
+    const allowed = isUpdate
+      ? canManageRoomTarget(actorAccess, 'edit_room', { room: roomData as ParaclinicalRoom }, rooms)
+      : canManageRoomTarget(actorAccess, 'create_room', { departmentName: roomData.departmentSection }, rooms);
+    if (!allowed) return;
     const saved = storageService.saveRoom(roomData as ParaclinicalRoom);
     const parentDept = departments.find(d => d.name === saved.departmentSection);
     if (parentDept) {
@@ -246,30 +276,40 @@ export const RoomManagementView: React.FC = () => {
 
   const handleDeleteRoom = () => {
     if (!deleteModalRoom) return;
+    if (!canManageRoomTarget(actorAccess, 'delete_room', { room: deleteModalRoom }, rooms)) return;
     storageService.deleteRoom(deleteModalRoom.id, transferTargetRoom || undefined);
     setDeleteModalRoom(null);
     setTransferTargetRoom('');
   };
 
   const handleAssignStaff = (userId: string, targetRoomName: string, departmentSection?: string) => {
+    if (!selectedRoom) return;
+    if (!canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms)) return;
     storageService.assignStaffToRoom(userId, targetRoomName, departmentSection);
   };
 
   const handleRemoveStaff = (userId: string) => {
+    if (!selectedRoom) return;
+    if (!canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms)) return;
     storageService.removeStaffFromRoom(userId);
   };
 
   const handleSetManager = (managerName: string) => {
     if (!selectedRoom) return;
+    if (!canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms)) return;
     const updated = { ...selectedRoom, managerInCharge: managerName };
     storageService.saveRoom(updated);
   };
 
   const handleAssignEquipment = (equipmentId: string, targetRoomName: string) => {
+    if (!selectedRoom) return;
+    if (!canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms)) return;
     storageService.assignEquipmentToRoom(equipmentId, targetRoomName);
   };
 
   const handleRemoveEquipment = (equipmentId: string) => {
+    if (!selectedRoom) return;
+    if (!canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms)) return;
     storageService.removeEquipmentFromRoom(equipmentId);
   };
 
@@ -315,31 +355,36 @@ export const RoomManagementView: React.FC = () => {
             </h4>
           </div>
 
-          {isAdmin && (
+          {(canManageRoomTarget(actorAccess, 'edit_room', { room }, rooms) ||
+            canManageRoomTarget(actorAccess, 'delete_room', { room }, rooms)) && (
             <div
               className="flex items-center gap-0.5 shrink-0"
               onClick={e => e.stopPropagation()}
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingRoom(room);
-                  setDefaultRoomDeptSection(room.departmentSection);
-                  setIsRoomModalOpen(true);
-                }}
-                title="Đổi tên / Sửa phòng"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteModalRoom(room)}
-                title="Xóa phòng"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {canManageRoomTarget(actorAccess, 'edit_room', { room }, rooms) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingRoom(room);
+                    setDefaultRoomDeptSection(room.departmentSection);
+                    setIsRoomModalOpen(true);
+                  }}
+                  title="Đổi tên / Sửa phòng"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {canManageRoomTarget(actorAccess, 'delete_room', { room }, rooms) && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalRoom(room)}
+                  title="Xóa phòng"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -375,27 +420,36 @@ export const RoomManagementView: React.FC = () => {
           <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">
             Tổ chức khoa theo 2 cấp rõ ràng: <strong>Bộ phận (Cấp 1)</strong> quản lý danh sách các <strong>Phòng trực thuộc (Cấp 2)</strong>, điều phối nhân sự và thiết bị y tế theo từng phòng.
           </p>
+          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">{actorAccess.shortTierLabel}</span>
+            <span className="text-slate-400">•</span>
+            <span>Phạm vi quản lý: {actorAccess.scopeLabel}</span>
+          </div>
         </div>
 
-        {isAdmin && (
+        {(canManageDepartments || canCreateAnyRoom) && (
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setEditingDept(null);
-                setIsDeptModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-indigo-600/20"
-            >
-              <Plus className="w-4 h-4" /> Thêm Bộ Phận (Cấp 1)
-            </button>
-            <button
-              type="button"
-              onClick={() => openAddRoomForDept()}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-600/20"
-            >
-              <Plus className="w-4 h-4" /> Thêm Phòng (Cấp 2)
-            </button>
+            {canManageDepartments && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingDept(null);
+                  setIsDeptModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-indigo-600/20"
+              >
+                <Plus className="w-4 h-4" /> Thêm Bộ Phận (Cấp 1)
+              </button>
+            )}
+            {canCreateAnyRoom && (
+              <button
+                type="button"
+                onClick={() => openAddRoomForDept()}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-600/20"
+              >
+                <Plus className="w-4 h-4" /> Thêm Phòng (Cấp 2)
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -491,7 +545,7 @@ export const RoomManagementView: React.FC = () => {
             {filteredDepartmentGroups.length === 0 && filteredOrphanRooms.length === 0 ? (
               <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs text-slate-400 space-y-2">
                 <p>Không tìm thấy Bộ phận hoặc Phòng phù hợp.</p>
-                {isAdmin && departments.length === 0 && (
+                {canManageDepartments && departments.length === 0 && (
                   <button
                     type="button"
                     onClick={() => {
@@ -562,39 +616,46 @@ export const RoomManagementView: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Admin Actions for Level 1 Bộ phận */}
-                        {isAdmin && (
+                        {/* Scoped Actions for Level 1 Bộ phận */}
+                        {(canManageDepartments ||
+                          canManageRoomTarget(actorAccess, 'create_room', { departmentName: dept.name }, rooms)) && (
                           <div
                             className="flex items-center gap-0.5 shrink-0"
                             onClick={e => e.stopPropagation()}
                           >
-                            <button
-                              type="button"
-                              onClick={() => openAddRoomForDept(dept.name)}
-                              title={`Thêm phòng (Cấp 2) vào bộ phận ${dept.name}`}
-                              className="p-1.5 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingDept(dept);
-                                setIsDeptModalOpen(true);
-                              }}
-                              title="Đổi tên / Sửa bộ phận"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openDeleteDeptModal(dept)}
-                              title="Xóa bộ phận"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canManageRoomTarget(actorAccess, 'create_room', { departmentName: dept.name }, rooms) && (
+                              <button
+                                type="button"
+                                onClick={() => openAddRoomForDept(dept.name)}
+                                title={`Thêm phòng (Cấp 2) vào bộ phận ${dept.name}`}
+                                className="p-1.5 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canManageDepartments && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingDept(dept);
+                                    setIsDeptModalOpen(true);
+                                  }}
+                                  title="Đổi tên / Sửa bộ phận"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openDeleteDeptModal(dept)}
+                                  title="Xóa bộ phận"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -608,7 +669,7 @@ export const RoomManagementView: React.FC = () => {
                                 <p className="text-[11px] text-slate-400">
                                   Chưa có phòng trực thuộc trong bộ phận này
                                 </p>
-                                {isAdmin && (
+                                {canManageRoomTarget(actorAccess, 'create_room', { departmentName: dept.name }, rooms) && (
                                   <button
                                     type="button"
                                     onClick={() => openAddRoomForDept(dept.name)}
@@ -707,32 +768,39 @@ export const RoomManagementView: React.FC = () => {
                   </p>
                 </div>
 
-                {isAdmin && (
+                {(canManageDepartments ||
+                  canManageRoomTarget(actorAccess, 'create_room', { departmentName: selectedDepartment.name }, rooms)) && (
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openAddRoomForDept(selectedDepartment.name)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Thêm Phòng (Cấp 2)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingDept(selectedDepartment);
-                        setIsDeptModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 text-indigo-500" /> Đổi Tên / Sửa
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openDeleteDeptModal(selectedDepartment)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Xóa Bộ Phận
-                    </button>
+                    {canManageRoomTarget(actorAccess, 'create_room', { departmentName: selectedDepartment.name }, rooms) && (
+                      <button
+                        type="button"
+                        onClick={() => openAddRoomForDept(selectedDepartment.name)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Thêm Phòng (Cấp 2)
+                      </button>
+                    )}
+                    {canManageDepartments && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingDept(selectedDepartment);
+                            setIsDeptModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-indigo-500" /> Đổi Tên / Sửa
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDeleteDeptModal(selectedDepartment)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Xóa Bộ Phận
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -764,7 +832,7 @@ export const RoomManagementView: React.FC = () => {
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Bộ phận <strong>"{selectedDepartment.name}"</strong> hiện chưa có phòng trực thuộc nào.
                         </p>
-                        {isAdmin && (
+                        {canManageRoomTarget(actorAccess, 'create_room', { departmentName: selectedDepartment.name }, rooms) && (
                           <button
                             type="button"
                             onClick={() => openAddRoomForDept(selectedDepartment.name)}
@@ -805,28 +873,33 @@ export const RoomManagementView: React.FC = () => {
                                     {room.name}
                                   </h4>
                                 </div>
-                                {isAdmin && (
+                                {(canManageRoomTarget(actorAccess, 'edit_room', { room }, rooms) ||
+                                  canManageRoomTarget(actorAccess, 'delete_room', { room }, rooms)) && (
                                   <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingRoom(room);
-                                        setDefaultRoomDeptSection(room.departmentSection);
-                                        setIsRoomModalOpen(true);
-                                      }}
-                                      title="Đổi tên / Sửa phòng"
-                                      className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/60"
-                                    >
-                                      <Edit3 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setDeleteModalRoom(room)}
-                                      title="Xóa phòng"
-                                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/60"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    {canManageRoomTarget(actorAccess, 'edit_room', { room }, rooms) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingRoom(room);
+                                          setDefaultRoomDeptSection(room.departmentSection);
+                                          setIsRoomModalOpen(true);
+                                        }}
+                                        title="Đổi tên / Sửa phòng"
+                                        className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/60"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    {canManageRoomTarget(actorAccess, 'delete_room', { room }, rooms) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setDeleteModalRoom(room)}
+                                        title="Xóa phòng"
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/60"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -897,30 +970,35 @@ export const RoomManagementView: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Top Action Buttons for Selected Room (Admin) */}
-                {isAdmin && (
+                {/* Top Action Buttons for Selected Room (Scoped RBAC) */}
+                {(canManageRoomTarget(actorAccess, 'edit_room', { room: selectedRoom }, rooms) ||
+                  canManageRoomTarget(actorAccess, 'delete_room', { room: selectedRoom }, rooms)) && (
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingRoom(selectedRoom);
-                        setDefaultRoomDeptSection(selectedRoom.departmentSection);
-                        setIsRoomModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
-                      title="Chỉnh sửa hoặc đổi tên phòng"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 text-blue-500" /> Đổi Tên / Sửa
-                    </button>
+                    {canManageRoomTarget(actorAccess, 'edit_room', { room: selectedRoom }, rooms) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingRoom(selectedRoom);
+                          setDefaultRoomDeptSection(selectedRoom.departmentSection);
+                          setIsRoomModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
+                        title="Chỉnh sửa hoặc đổi tên phòng"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-blue-500" /> Đổi Tên / Sửa
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => setDeleteModalRoom(selectedRoom)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
-                      title="Xóa phòng này"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Xóa Phòng
-                    </button>
+                    {canManageRoomTarget(actorAccess, 'delete_room', { room: selectedRoom }, rooms) && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteModalRoom(selectedRoom)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
+                        title="Xóa phòng này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Xóa Phòng
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1063,6 +1141,8 @@ export const RoomManagementView: React.FC = () => {
                   room={selectedRoom}
                   allStaff={activeStaffList}
                   allRooms={rooms}
+                  canManage={canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms)}
+                  scopeHint={!canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms) ? 'Ngoài phạm vi phòng/bộ phận bạn quản lý' : undefined}
                   onAssignStaff={handleAssignStaff}
                   onRemoveStaff={handleRemoveStaff}
                   onSetManager={handleSetManager}
@@ -1075,6 +1155,8 @@ export const RoomManagementView: React.FC = () => {
                   room={selectedRoom}
                   allEquipment={equipmentList}
                   allRooms={rooms}
+                  canManage={canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms)}
+                  scopeHint={!canManageRoomTarget(actorAccess, 'manage_room_resources', { room: selectedRoom }, rooms) ? 'Ngoài phạm vi phòng/bộ phận bạn quản lý' : undefined}
                   onAssignEquipment={handleAssignEquipment}
                   onRemoveEquipment={handleRemoveEquipment}
                 />
@@ -1110,7 +1192,7 @@ export const RoomManagementView: React.FC = () => {
         }}
         onSave={handleSaveRoom}
         initialRoom={editingRoom}
-        departments={departments}
+        departments={selectableDepartments.length > 0 ? selectableDepartments : departments}
         defaultDepartmentSection={defaultRoomDeptSection}
         staffList={activeStaffList}
         equipmentList={equipmentList}

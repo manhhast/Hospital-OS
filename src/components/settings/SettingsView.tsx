@@ -3,14 +3,16 @@ import {
   Settings, Save, RefreshCw, Key, Folder, Database, Mail, Shield, AlertTriangle, 
   FileSpreadsheet, Link, Sun, Moon, Monitor, Palette, CheckCircle2, Trash2, 
   PlayCircle, Layers, Building2, UserCheck, Stethoscope, Calendar, Lock,
-  Cloud, CloudOff, UploadCloud, DownloadCloud, UserPlus, LogOut, Copy, ExternalLink,
-  Bot, Send
+  Cloud, CloudOff, UploadCloud, DownloadCloud, LogOut,
+  Bot, Send, Check
 } from 'lucide-react';
-import { AppSettings, UserRole } from '../../types/hospital';
+import { AppSettings } from '../../types/hospital';
 import { TelegramBotStatus } from '../../types/aiEcosystem';
 import { storageService } from '../../services/storageService';
 import { aiService } from '../../services/aiService';
-import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
+import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
+import { googleDriveService, type GoogleDriveAuthState } from '../../services/googleDriveService';
+import { GoogleSignInButton } from '../common/GoogleSignInButton';
 import {
   DEFAULT_REPORT_YEAR,
   getKnownReportYears,
@@ -64,97 +66,96 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return String(settings.reportSheetYear || DEFAULT_REPORT_YEAR);
   });
 
-  // Firebase Cloud Firestore State
-  const [cloudState, setCloudState] = useState<FirebaseCloudState>(() => firebaseSyncService.getState());
-  const [isCloudBusy, setIsCloudBusy] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<UserRole>('Staff');
+  // PostgreSQL & Google Drive OAuth State
+  const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
+  const [driveAuth, setDriveAuth] = useState<GoogleDriveAuthState>(() => googleDriveService.getState());
+  const [isPgBusy, setIsPgBusy] = useState(false);
 
   // Telegram Q&A Bot Status Summary
   const [telegramStatus, setTelegramStatus] = useState<TelegramBotStatus | null>(null);
+  const [, setStorageTick] = useState(0);
 
   useEffect(() => {
-    const unsub = firebaseSyncService.subscribe(() => {
-      setCloudState(firebaseSyncService.getState());
+    const unsubDrive = googleDriveService.subscribe(() => {
+      setDriveAuth(googleDriveService.getState());
+    });
+    const unsubPg = postgresSyncService.subscribe(() => {
+      setPgState(postgresSyncService.getState());
+    });
+    const unsubStorage = storageService.subscribe(() => {
+      setStorageTick((prev) => prev + 1);
+      if (storageService.getIsApplyingRemote()) {
+        const remoteSettings = storageService.getSettings();
+        const remoteYear = remoteSettings.reportSheetYear || DEFAULT_REPORT_YEAR;
+        setSettings((prev) => ({
+          ...prev,
+          ...remoteSettings,
+          reportSheetYear: remoteYear
+        }));
+        setSelectedSheetYear(remoteYear);
+        setYearInputText(String(remoteYear));
+      }
     });
     void aiService.getTelegramBotStatus().then((st) => setTelegramStatus(st)).catch(() => {});
-    return () => unsub();
+    return () => {
+      unsubDrive();
+      unsubPg();
+      unsubStorage();
+    };
   }, []);
 
-  const handleCopyHostname = async (hostnameToCopy: string) => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(hostnameToCopy);
-        onShowToast('Đã sao chép tên miền', `Đã copy "${hostnameToCopy}" để dán vào Firebase Console.`, 'success');
-      } else {
-        onShowToast('Tên miền triển khai', `Vui lòng sao chép thủ công: ${hostnameToCopy}`, 'info');
-      }
-    } catch {
-      onShowToast('Tên miền triển khai', `Vui lòng sao chép thủ công: ${hostnameToCopy}`, 'info');
-    }
-  };
-
-  const handleFirebaseSignIn = async () => {
-    setIsCloudBusy(true);
-    try {
-      const res = await firebaseSyncService.signInWithGoogle();
+  const handleDriveSignIn = async () => {
+    const res = await googleDriveService.signInWithGoogle();
+    if (res.success) {
       onShowToast(
-        res.success ? 'Kết nối Firebase thành công' : 'Kết nối Firebase',
-        res.message,
-        res.success ? 'success' : 'warning'
+        'Kết nối Google Drive thành công',
+        `Đã đăng nhập tài khoản ${res.email || 'Google'}. Bạn có thể tải lên và xóa hồ sơ trên Google Drive.`,
+        'success'
       );
-    } finally {
-      setIsCloudBusy(false);
+    } else if (res.message) {
+      onShowToast('Chưa hoàn tất đăng nhập Google', res.message, 'warning');
     }
   };
 
-  const handleFirebasePushAll = async () => {
-    setIsCloudBusy(true);
+  const handleDriveSignOut = async () => {
+    await googleDriveService.signOutGoogle();
+    onShowToast(
+      'Đã ngắt kết nối Google Drive',
+      'Hệ thống chuyển về chế độ Chỉ Xem & Tải về công khai.',
+      'info'
+    );
+  };
+
+  const handlePgPushAll = async () => {
+    setIsPgBusy(true);
     try {
-      const res = await firebaseSyncService.syncAllLocalToCloud();
+      const res = await postgresSyncService.syncAllLocalToServer();
       onShowToast(
-        'Đồng bộ lên Firebase thành công',
-        `Đã lưu ${res.bucketsPushed} phân hệ dữ liệu và ${res.reportMonthsPushed} bảng báo cáo tháng lên Cloud Firestore.`,
+        'Đồng bộ lên PostgreSQL thành công',
+        `Đã lưu ${res.bucketsPushed} phân hệ dữ liệu và ${res.reportMonthsPushed} bảng báo cáo tháng lên PostgreSQL.`,
         'success'
       );
     } catch (err) {
-      onShowToast('Lỗi đồng bộ Firebase', err instanceof Error ? err.message : String(err), 'error');
+      onShowToast('Lỗi đồng bộ PostgreSQL', err instanceof Error ? err.message : String(err), 'error');
     } finally {
-      setIsCloudBusy(false);
+      setIsPgBusy(false);
     }
   };
 
-  const handleFirebasePullAll = async () => {
-    setIsCloudBusy(true);
+  const handlePgPullAll = async () => {
+    setIsPgBusy(true);
     try {
-      const res = await firebaseSyncService.pullAllCloudToLocal();
+      const res = await postgresSyncService.pullAllServerToLocal();
       setSettings(storageService.getSettings());
       onShowToast(
-        'Tải dữ liệu Firebase hoàn tất',
-        `Đã tải ${res.bucketsPulled} phân hệ và ${res.reportMonthsPulled} bảng báo cáo tháng từ Cloud Firestore về máy.`,
+        'Tải dữ liệu PostgreSQL hoàn tất',
+        `Đã tải ${res.bucketsPulled} phân hệ và ${res.reportMonthsPulled} bảng báo cáo tháng từ máy chủ PostgreSQL về máy.`,
         'success'
       );
     } catch (err) {
-      onShowToast('Lỗi tải dữ liệu Firebase', err instanceof Error ? err.message : String(err), 'error');
+      onShowToast('Lỗi tải dữ liệu PostgreSQL', err instanceof Error ? err.message : String(err), 'error');
     } finally {
-      setIsCloudBusy(false);
-    }
-  };
-
-  const handleInviteCloudMember = async () => {
-    if (!inviteEmail.trim()) {
-      onShowToast('Thiếu email', 'Vui lòng nhập Gmail đồng nghiệp cần cấp quyền đồng bộ Firebase.', 'warning');
-      return;
-    }
-    setIsCloudBusy(true);
-    try {
-      const res = await firebaseSyncService.inviteCloudMember(inviteEmail, inviteRole);
-      onShowToast(res.success ? 'Đã cấp quyền' : 'Lỗi cấp quyền', res.message, res.success ? 'success' : 'error');
-      if (res.success) setInviteEmail('');
-    } catch (err) {
-      onShowToast('Lỗi cấp quyền Firebase', err instanceof Error ? err.message : String(err), 'error');
-    } finally {
-      setIsCloudBusy(false);
+      setIsPgBusy(false);
     }
   };
 
@@ -427,251 +428,162 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* HYBRID CLOUD STORAGE: FIREBASE CLOUD FIRESTORE + GOOGLE DRIVE */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-amber-200/80 dark:border-amber-900/50 shadow-xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <Cloud className="w-5 h-5 text-amber-500 mr-2 shrink-0" />
-              Lưu Trữ Đám Mây Firebase Cloud Firestore &amp; Google Drive
-            </h3>
-            <span
-              className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                cloudState.status === 'synced'
-                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300/60'
-                  : cloudState.status === 'syncing' || cloudState.status === 'connecting'
-                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300/60'
-                  : cloudState.status === 'unauthorized' || cloudState.status === 'error'
-                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300/60'
-                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300/60'
-              }`}
-            >
-              {cloudState.status === 'synced'
-                ? 'Đã kết nối · Đồng bộ Real-time'
-                : cloudState.status === 'syncing' || cloudState.status === 'connecting'
-                ? 'Đang đồng bộ dữ liệu...'
-                : cloudState.status === 'unauthorized'
-                ? 'Chờ Admin cấp quyền'
-                : cloudState.status === 'error'
-                ? 'Lỗi kết nối Cloud'
-                : 'Chưa kết nối Google Cloud'}
-            </span>
-          </div>
+        {/* EXTERNAL POSTGRESQL DATABASE SYNC CARD (LIVE AUTO-SYNC) */}
+        {(() => {
+          const isAdminUser = storageService.getCurrentUser()?.role === 'Admin';
+          const isSyncingOrPending =
+            pgState.status === 'syncing' ||
+            pgState.status === 'checking' ||
+            pgState.pendingChangesCount > 0;
+          const isSyncedLive = pgState.status === 'synced' && !isSyncingOrPending;
 
-          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Kiến trúc lưu trữ kết hợp: <strong className="text-slate-800 dark:text-slate-200">Toàn bộ dữ liệu vận hành</strong> (công việc, lịch trực, thiết bị, nhân sự, phòng ban, báo cáo số ca theo năm) được lưu &amp; đồng bộ tức thời qua <strong className="text-amber-600 dark:text-amber-400">Firebase Cloud Firestore</strong>; riêng <strong className="text-blue-600 dark:text-blue-400">tệp gốc Hồ sơ, Quy trình SOP &amp; Văn bản ISO</strong> vẫn lưu trữ an toàn trên <strong className="text-blue-600 dark:text-blue-400">Google Drive</strong> (Folder ID cấu hình ở mục 3 bên dưới).
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Tài khoản Firebase</div>
-              <div className="font-bold text-slate-800 dark:text-slate-100 mt-1 truncate">
-                {cloudState.userEmail || 'Chưa đăng nhập'}
-              </div>
-            </div>
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Workspace Khoa</div>
-              <div className="font-mono font-bold text-slate-800 dark:text-slate-100 mt-1 truncate">
-                {cloudState.workspaceId}
-              </div>
-            </div>
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Phân hệ &amp; Báo cáo</div>
-              <div className="font-bold text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">
-                {cloudState.syncedBucketsCount} phân hệ · {cloudState.syncedReportMonthsCount} tháng
-              </div>
-            </div>
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Đồng bộ gần nhất</div>
-              <div className="font-bold text-slate-800 dark:text-slate-100 mt-1 tabular-nums">
-                {cloudState.lastSyncedAt || '--:--'}
-              </div>
-            </div>
-          </div>
-
-          {cloudState.errorMessage && (
-            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 space-y-2.5">
-              <div className="font-semibold leading-relaxed">{cloudState.errorMessage}</div>
-
-              {cloudState.unauthorizedDomain && (
-                <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-rose-200/80 dark:border-rose-800/70 space-y-2 text-slate-700 dark:text-slate-200">
-                  <div className="font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
-                    <Shield className="w-4 h-4 shrink-0" />
-                    <span>Hướng dẫn mở khóa tên miền trên Firebase Console (chỉ làm 1 lần):</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
-                    <li>
-                      Mở trang{' '}
-                      <a
-                        href={`https://console.firebase.google.com/project/${cloudState.projectId}/authentication/settings`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        <span>Firebase Console &rarr; Authentication &rarr; Settings</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </li>
-                    <li>
-                      Chọn mục <strong>Authorized domains</strong> &rarr; nhấn nút <strong>Add domain</strong>.
-                    </li>
-                    <li>Dán chính xác tên miền bên dưới rồi nhấn <strong>Add</strong>, sau đó quay lại bấm đăng nhập Google:</li>
-                  </ol>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <code className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono font-bold text-slate-900 dark:text-slate-100">
-                      {cloudState.unauthorizedDomain}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopyHostname(cloudState.unauthorizedDomain!)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-semibold cursor-pointer"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>Sao chép tên miền</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2.5 text-xs">
-            {cloudState.status === 'disconnected' || cloudState.status === 'unverified' ? (
-              <button
-                type="button"
-                disabled={isCloudBusy}
-                onClick={() => void handleFirebaseSignIn()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
-              >
-                <Cloud className="w-4 h-4" />
-                <span>Đăng nhập Google để Đồng bộ Firebase</span>
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  disabled={isCloudBusy || cloudState.status === 'unauthorized'}
-                  onClick={() => void handleFirebasePushAll()}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
+          return (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-emerald-200/80 dark:border-emerald-900/50 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                  <Database className="w-5 h-5 text-emerald-600 mr-2 shrink-0" />
+                  Đồng Bộ Live PostgreSQL (Tự Động Hai Chiều)
+                </h3>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border ${
+                    isSyncingOrPending
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300/60'
+                      : isSyncedLive
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300/60'
+                      : pgState.configured
+                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300/60'
+                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300/60'
+                  }`}
                 >
-                  <UploadCloud className="w-4 h-4" />
-                  <span>Đẩy toàn bộ dữ liệu lên Firebase</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isCloudBusy || cloudState.status === 'unauthorized'}
-                  onClick={() => void handleFirebasePullAll()}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs transition-colors disabled:opacity-60 cursor-pointer"
-                >
-                  <DownloadCloud className="w-4 h-4" />
-                  <span>Tải từ Firebase về máy</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isCloudBusy}
-                  onClick={() => void firebaseSyncService.signOut()}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold transition-colors cursor-pointer"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Ngắt kết nối Google</span>
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Admin Collaborator Access Management */}
-          {cloudState.isAdmin && cloudState.status === 'synced' && (
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-              <div className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                <UserPlus className="w-4 h-4 text-blue-600" />
-                Cấp quyền Gmail đồng bộ Firebase cho máy tính khác trong khoa
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2 text-xs">
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="Nhập Gmail đồng nghiệp (vd: bshung.cls@gmail.com)"
-                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
-                />
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                  className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-slate-800 dark:text-slate-100"
-                >
-                  <option value="Staff">Nhân viên / KTV (Staff)</option>
-                  <option value="Doctor">Bác sĩ (Doctor)</option>
-                  <option value="Manager">Trưởng / Phó khoa (Manager)</option>
-                  <option value="Admin">Quản trị (Admin)</option>
-                </select>
-                <button
-                  type="button"
-                  disabled={isCloudBusy}
-                  onClick={() => void handleInviteCloudMember()}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 cursor-pointer disabled:opacity-60"
-                >
-                  Cấp quyền
-                </button>
+                  {isSyncedLive && pgState.liveStreamConnected && (
+                    <span className="relative inline-flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600" />
+                    </span>
+                  )}
+                  {isSyncingOrPending
+                    ? 'Đang tự động đồng bộ...'
+                    : isSyncedLive && pgState.liveStreamConnected
+                    ? 'Đồng bộ Live (SSE) · Tức thì'
+                    : isSyncedLive
+                    ? 'Tự động đồng bộ · Đang bật'
+                    : pgState.configured
+                    ? 'Lỗi kết nối PostgreSQL'
+                    : 'Chưa cấu hình biến môi trường'}
+                </span>
               </div>
 
-              {(cloudState.invites.length > 0 || cloudState.members.length > 0) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                    <div className="font-bold text-slate-700 dark:text-slate-200">
-                      Email đã cấp quyền ({cloudState.invites.length})
-                    </div>
-                    {cloudState.invites.length === 0 ? (
-                      <div className="text-slate-400">Chưa có email mời bổ sung.</div>
-                    ) : (
-                      cloudState.invites.map((inv) => (
-                        <div key={inv.inviteId} className="flex items-center justify-between gap-2 py-1 border-b border-slate-200/60 dark:border-slate-700/60 last:border-none">
-                          <span className="truncate font-mono text-slate-700 dark:text-slate-200">
-                            {inv.email} ({inv.role})
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => void firebaseSyncService.removeCloudInvite(inv.inviteId)}
-                            className="text-rose-600 hover:underline font-semibold shrink-0 cursor-pointer"
-                          >
-                            Xóa
-                          </button>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Hệ thống đồng bộ trực tiếp với máy chủ <strong className="text-slate-800 dark:text-slate-200">PostgreSQL</strong> chỉ bằng <strong className="text-emerald-700 dark:text-emerald-400">tài khoản đăng nhập nội bộ của ứng dụng</strong> mà không cần đăng nhập Google.
+              </p>
+
+              {pgState.configured ? (
+                <>
+                  {/* Live Auto-Sync Active Banner */}
+                  <div className="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5 text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-emerald-900 dark:text-emerald-200">
+                          Chế độ Live Sync đang chạy ngầm — Không cần nhấn nút đồng bộ
                         </div>
-                      ))
-                    )}
+                        <p className="text-[11.5px] text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
+                          Mọi thao tác thêm/sửa/xóa được tự động đẩy lên PostgreSQL sau ~0,25 giây và phát tức thì tới các tab/thiết bị khác qua kênh SSE (tự thử lại khi rớt mạng &amp; tự xả hàng đợi khi đóng tab).
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between gap-1 text-[11px] pl-6 sm:pl-0">
+                      <span
+                        className={`font-bold ${
+                          pgState.liveStreamConnected
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-amber-700 dark:text-amber-400'
+                        }`}
+                      >
+                        {pgState.liveStreamConnected
+                          ? 'Kênh Live (SSE): Đang nối'
+                          : 'Kênh Live (SSE): Đang nối lại...'}
+                      </span>
+                      <span className="text-slate-600 dark:text-slate-400 tabular-nums">
+                        Chờ đồng bộ: <strong>{pgState.pendingChangesCount}</strong> mục
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
-                    <div className="font-bold text-slate-700 dark:text-slate-200">
-                      Thành viên đang đồng bộ ({cloudState.members.length})
-                    </div>
-                    {cloudState.members.map((m) => (
-                      <div key={m.uid} className="flex items-center justify-between gap-2 py-1 border-b border-slate-200/60 dark:border-slate-700/60 last:border-none">
-                        <span className="truncate text-slate-700 dark:text-slate-200">
-                          {m.displayName} · <span className="font-mono">{m.email}</span> ({m.role})
-                        </span>
-                        {m.uid !== cloudState.userUid && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void firebaseSyncService.toggleMemberStatus(
-                                m.uid,
-                                m.status === 'Active' ? 'Revoked' : 'Active'
-                              )
-                            }
-                            className={`font-semibold shrink-0 cursor-pointer ${
-                              m.status === 'Active' ? 'text-rose-600 hover:underline' : 'text-emerald-600 hover:underline'
-                            }`}
-                          >
-                            {m.status === 'Active' ? 'Thu hồi' : 'Khôi phục'}
-                          </button>
-                        )}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">Trạng thái máy chủ</div>
+                      <div className="font-bold text-emerald-700 dark:text-emerald-400 mt-1">
+                        {pgState.connected ? 'Đã nối máy chủ PostgreSQL' : 'Mất kết nối'}
                       </div>
-                    ))}
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">Phân hệ &amp; Báo cáo</div>
+                      <div className="font-bold text-slate-800 dark:text-slate-100 mt-1 tabular-nums">
+                        {pgState.syncedBucketsCount} phân hệ · {pgState.syncedReportMonthsCount} tháng
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">Đồng bộ gần nhất</div>
+                      <div className="font-bold text-slate-800 dark:text-slate-100 mt-1 tabular-nums">
+                        {pgState.lastSyncedAt || '--:--'}
+                      </div>
+                    </div>
                   </div>
-                </div>
+
+                  {pgState.errorMessage && (
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
+                      {pgState.errorMessage}
+                    </div>
+                  )}
+
+                  {/* Demoted Maintenance / Backup Manual Controls */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                    <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      Công cụ đồng bộ thủ công (chỉ dùng khi khởi tạo lần đầu hoặc khôi phục dữ liệu):
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        disabled={isPgBusy || !pgState.authenticated || !isAdminUser}
+                        onClick={() => void handlePgPushAll()}
+                        title={
+                          !isAdminUser
+                            ? 'Chỉ tài khoản Admin mới có quyền ghi đè toàn bộ dữ liệu lên PostgreSQL'
+                            : 'Đẩy toàn bộ dữ liệu hiện tại trên máy lên PostgreSQL'
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Khởi tạo / Ghi đè lên PostgreSQL</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isPgBusy || !pgState.authenticated}
+                        onClick={() => void handlePgPullAll()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <DownloadCloud className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Tải lại từ PostgreSQL</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs space-y-2 text-slate-700 dark:text-slate-300">
+              <div className="font-bold text-slate-900 dark:text-slate-100">
+                Cách kích hoạt trong 2 phút (hiện tại hệ thống đang lưu trữ an toàn cục bộ bằng IndexedDB &amp; LocalStorage):
+              </div>
+              <ol className="list-decimal list-inside space-y-1 text-[11.5px] leading-relaxed">
+                <li>Tạo 1 dự án PostgreSQL miễn phí trên <strong>Neon</strong> (<span className="font-mono">neon.tech</span>) hoặc <strong>Supabase</strong> (<span className="font-mono">supabase.com</span>) và sao chép chuỗi kết nối (Connection String dạng <span className="font-mono">postgresql://...</span>).</li>
+                <li>Thêm biến môi trường tên <code className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono font-bold">EXTERNAL_DATABASE_URL</code> vào mục <strong>Secrets</strong> / cấu hình môi trường của hệ thống.</li>
+                <li>Khởi động lại ứng dụng: chế độ đồng bộ PostgreSQL không cần Google Login sẽ tự động được kích hoạt và tự tạo bảng dữ liệu.</li>
+              </ol>
+            </div>
               )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* SHEET 1: GOOGLE SHEET BÁO CÁO SỐ CA */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-emerald-200/80 dark:border-emerald-900/50 shadow-xs space-y-4">
@@ -808,7 +720,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs">
             <Lock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="text-slate-600 dark:text-slate-300 leading-relaxed">
-              <strong className="text-slate-800 dark:text-slate-100">Lưu cố định trên Firebase &amp; Rà soát theo khoảng thời gian:</strong> Mọi dữ liệu kéo từ Google Sheet sẽ được lưu trữ cố định lên <strong>Firebase Cloud Firestore</strong> (cùng bản dự phòng IndexedDB/LocalStorage). Nếu xóa hoặc sửa file Google Sheet, dữ liệu đã lưu vẫn được bảo toàn; khi cần đối chiếu, hãy nhấn <strong>Rà soát số liệu</strong> theo khoảng thời gian tùy chọn để kiểm tra sai lệch và tự quyết định có cập nhật lại hay không.
+              <strong className="text-slate-800 dark:text-slate-100">Lưu cố định trên Hệ thống &amp; Rà soát theo khoảng thời gian:</strong> Mọi dữ liệu kéo từ Google Sheet sẽ được lưu trữ cố định vào cơ sở dữ liệu hệ thống (<strong>PostgreSQL</strong> / bộ nhớ cục bộ IndexedDB &amp; LocalStorage). Nếu xóa hoặc sửa file Google Sheet, dữ liệu đã lưu vẫn được bảo toàn; khi cần đối chiếu, hãy nhấn <strong>Rà soát số liệu</strong> theo khoảng thời gian tùy chọn để kiểm tra sai lệch và tự quyết định có cập nhật lại hay không.
             </div>
           </div>
         </div>
@@ -870,6 +782,57 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="text-xs space-y-4">
+            <div className="p-4 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-bold text-slate-800 dark:text-slate-100 flex flex-wrap items-center gap-2">
+                  <span>Tài khoản Google Drive (Tải lên &amp; Xóa tài liệu)</span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold border inline-flex items-center gap-1 ${
+                      driveAuth.isSignedIn && driveAuth.hasAccessToken
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                    }`}
+                  >
+                    {driveAuth.isSignedIn && driveAuth.hasAccessToken ? (
+                      <>
+                        <Check className="w-3 h-3" />
+                        <span>Đã kết nối ({driveAuth.userEmail})</span>
+                      </>
+                    ) : (
+                      <span>Chế độ Chỉ Xem &amp; Tải về</span>
+                    )}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Mọi người đều có thể xem trước và tải về tài liệu. Để tải tài liệu mới lên hoặc xóa tệp trên Google Drive, vui lòng đăng nhập tài khoản Google.
+                </p>
+                {driveAuth.errorMessage && (
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-1">
+                    {driveAuth.errorMessage}
+                  </p>
+                )}
+              </div>
+
+              <div className="shrink-0 flex items-center gap-2">
+                {driveAuth.isSignedIn && driveAuth.hasAccessToken ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDriveSignOut()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Đăng xuất Google</span>
+                  </button>
+                ) : (
+                  <GoogleSignInButton
+                    onClick={() => void handleDriveSignIn()}
+                    loading={driveAuth.isSigningIn}
+                    label="Đăng nhập Google Drive"
+                  />
+                )}
+              </div>
+            </div>
+
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
                 Google Drive Folder ID (Lưu trữ Hồ sơ SOP / Văn bản)
@@ -885,7 +848,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 placeholder="Nhập Folder ID hoặc dán liên kết Google Drive Folder"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Dán ID hoặc URL thư mục Google Drive (tự động trích xuất Folder ID).
+                Dán ID hoặc URL thư mục Google Drive (tự động trích xuất Folder ID). Để trống hoặc mặc định sẽ lưu ở thư mục gốc Google Drive của tài khoản đăng nhập.
               </p>
             </div>
 
@@ -898,15 +861,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     {telegramStatus && (
                       <span
                         className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
-                          telegramStatus.pollingActive && telegramStatus.enabled
+                          telegramStatus.pollingActive &&
+                          telegramStatus.enabled &&
+                          !telegramStatus.conflictDetected &&
+                          !telegramStatus.pausedByUser
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                            : telegramStatus.conflictDetected
+                            ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
                             : telegramStatus.configured
                             ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
                             : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                         }`}
                       >
-                        {telegramStatus.pollingActive && telegramStatus.enabled
+                        {telegramStatus.pollingActive &&
+                        telegramStatus.enabled &&
+                        !telegramStatus.conflictDetected &&
+                        !telegramStatus.pausedByUser
                           ? `Đang hoạt động${telegramStatus.botUsername ? ` (@${telegramStatus.botUsername})` : ''}`
+                          : telegramStatus.conflictDetected
+                          ? 'Xung đột Token (409)'
+                          : telegramStatus.standbyMode
+                          ? 'Đang nhường Polling'
+                          : telegramStatus.pausedByUser
+                          ? 'Đang tạm dừng'
                           : telegramStatus.configured
                           ? 'Đã nhập Token'
                           : 'Chưa cấu hình'}

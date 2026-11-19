@@ -4,7 +4,8 @@ import {
   ISOCopilotChatMessage,
   PredictiveMaintenanceSummary,
   SmartAssistantMessage,
-  TelegramBotStatus
+  TelegramBotStatus,
+  TelegramExclusivityReport
 } from '../types/aiEcosystem';
 import { buildLiveHospitalContext, syncLiveContextToServer } from './aiContextService';
 import { storageService } from './storageService';
@@ -140,6 +141,58 @@ export const aiService = {
       throw new Error(json?.error || `Không thể dò danh sách Chat ID từ Telegram (HTTP ${res.status})`);
     }
     return Array.isArray(json.data) ? json.data : [];
+  },
+
+  async pauseTelegramPolling(): Promise<TelegramBotStatus | null> {
+    const res = await fetch('/api/telegram/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.error || 'Không thể tạm dừng lắng nghe Telegram');
+    }
+    return (json.data as TelegramBotStatus) || null;
+  },
+
+  async retryTelegramPolling(params?: {
+    botToken?: string;
+    defaultChatId?: string;
+  }): Promise<TelegramBotStatus | null> {
+    const liveContext = buildLiveHospitalContext();
+    const res = await fetch('/api/telegram/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        botToken: params?.botToken,
+        defaultChatId: params?.defaultChatId,
+        liveContext
+      })
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.error || 'Không thể kết nối lại Telegram Bot');
+    }
+    return (json.data as TelegramBotStatus) || null;
+  },
+
+  async verifyTelegramExclusivity(botToken?: string): Promise<{
+    report: TelegramExclusivityReport;
+    status?: TelegramBotStatus;
+  }> {
+    const res = await fetch('/api/telegram/verify-exclusivity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ botToken })
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success || !json?.data) {
+      throw new Error(json?.error || 'Không thể kiểm tra trạng thái độc quyền Bot Telegram');
+    }
+    return {
+      report: json.data as TelegramExclusivityReport,
+      status: json.status as TelegramBotStatus | undefined
+    };
   },
 
   async syncContextNow(): Promise<boolean> {

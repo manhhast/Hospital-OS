@@ -4,7 +4,7 @@ import {
   CheckCircle2, Wrench, Activity, Users, FileText, ArrowUpRight, ArrowDownRight, Search,
   RefreshCw, Link, Edit3, Table, Layers, Sparkles, Filter, Check, Save, Upload, Plus, ChevronLeft, ChevronRight,
   Pin, Star, Bookmark, AlertTriangle, AlertCircle, Eye, EyeOff, SlidersHorizontal, Copy, Send, Printer, X, Lock, Database,
-  Cloud, CloudOff, RotateCcw, History
+  Cloud, RotateCcw, History
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -43,7 +43,7 @@ import {
   resolveSpreadsheetId,
   runThreeDaySmartSync
 } from '../../services/googleSheetReportService';
-import { firebaseSyncService, type FirebaseCloudState } from '../../services/firebaseSyncService';
+import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
 import type { SyncHistoryDiscrepancyItem, SyncHistoryEntry } from '../../types/hospital';
 
 interface ReportsAnalyticsViewProps {
@@ -227,7 +227,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
   const [yearInputStr, setYearInputStr] = useState<string>(() => String(initialYear));
-  const [cloudState, setCloudState] = useState<FirebaseCloudState>(() => firebaseSyncService.getState());
+  const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
+  const isPgSynced = pgState.configured && pgState.authenticated && pgState.connected;
   const [activeTab, setActiveTab] = useState<'dashboard' | 'google_sheet' | 'sync_history'>('google_sheet');
   const [timePeriod, setTimePeriod] = useState<string>(`${initialLatest.month}/${initialYear}`);
   const [sheetTab, setSheetTab] = useState<string>('Báo cáo ngày');
@@ -289,8 +290,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
   const [isApplyingAudit, setIsApplyingAudit] = useState<boolean>(false);
 
   useEffect(() => {
-    const unsub = firebaseSyncService.subscribe(() => {
-      setCloudState(firebaseSyncService.getState());
+    const unsub = postgresSyncService.subscribe(() => {
+      setPgState(postgresSyncService.getState());
     });
     return () => unsub();
   }, []);
@@ -598,8 +599,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     checkedCellsCount: number;
     discrepancyCount: number;
     updatedFromSheetCount: number;
-    savedOnFirebase: boolean;
-    firebaseNote?: string;
+    savedToDatabase: boolean;
+    databaseNote?: string;
     summary: string;
     discrepancies?: SyncHistoryDiscrepancyItem[];
   }) => {
@@ -620,12 +621,12 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
       autoWrittenCount: 0,
       discrepancyCount: params.discrepancyCount,
       updatedFromSheetCount: params.updatedFromSheetCount,
-      savedOnFirebase: params.savedOnFirebase,
-      firebaseNote:
-        params.firebaseNote ||
-        (params.savedOnFirebase
-          ? 'Đã lưu cố định trên Firebase Cloud Firestore'
-          : 'Lưu cục bộ (chưa kết nối Firebase)'),
+      savedToDatabase: params.savedToDatabase,
+      databaseNote:
+        params.databaseNote ||
+        (params.savedToDatabase
+          ? 'Đã lưu cố định trên PostgreSQL'
+          : 'Lưu cục bộ (IndexedDB/LocalStorage)'),
       performedBy: currentUser?.name || currentUser?.email || 'Quản trị viên',
       summary: params.summary,
       discrepancies: params.discrepancies
@@ -633,7 +634,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     storageService.addSyncHistoryEntry(entry);
   };
 
-  // Switch active reporting year cleanly (reads stored Firebase/IDB archive only; multi-day sync requires manual Range Audit)
+  // Switch active reporting year cleanly (reads stored PostgreSQL/IDB archive only; multi-day sync requires manual Range Audit)
   const handleChangeReportYear = (rawYear: number) => {
     const nextYear = Math.max(MIN_REPORT_YEAR, Math.min(MAX_REPORT_YEAR, Math.round(rawYear)));
     setSelectedYear(nextYear);
@@ -660,8 +661,6 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         setCaseReports(hydrated[latestHydrated.month] || []);
       }
     });
-
-    void firebaseSyncService.subscribeReportYear(nextYear);
   };
 
   const toIsoDateInput = (y: number, mNum: number, dNum: number): string => {
@@ -855,8 +854,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           checkedCellsCount: 0,
           discrepancyCount: 0,
           updatedFromSheetCount: 0,
-          savedOnFirebase: false,
-          firebaseNote: 'Không đọc được tab Google Sheet',
+          savedToDatabase: false,
+          databaseNote: 'Không đọc được tab Google Sheet',
           summary: msg
         });
         return;
@@ -877,13 +876,15 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
       if (allDiscrepancies.length === 0) {
         const startLabel = resyncStartDate.split('-').reverse().join('/');
         const endLabel = resyncEndDate.split('-').reverse().join('/');
+        const pgNow = postgresSyncService.getState();
+        const pgReady = pgNow.configured && pgNow.authenticated && pgNow.connected;
         logRangeAuditToHistory({
           status: 'no_change',
           checkedCellsCount: totalCheckedCells,
           discrepancyCount: 0,
           updatedFromSheetCount: 0,
-          savedOnFirebase: firebaseSyncService.getState().status === 'synced',
-          summary: `Rà soát thủ công (${startLabel} – ${endLabel}): kiểm tra ${totalCheckedCells.toLocaleString('vi-VN')} ô trên ${totalCheckedMonths} tháng, dữ liệu Firebase và Google Sheet hoàn toàn khớp.`
+          savedToDatabase: pgReady,
+          summary: `Rà soát thủ công (${startLabel} – ${endLabel}): kiểm tra ${totalCheckedCells.toLocaleString('vi-VN')} ô trên ${totalCheckedMonths} tháng, dữ liệu Hệ thống và Google Sheet hoàn toàn khớp.`
         });
       }
     } catch (err) {
@@ -895,24 +896,26 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         checkedCellsCount: 0,
         discrepancyCount: 0,
         updatedFromSheetCount: 0,
-        savedOnFirebase: false,
-        firebaseNote: errMsg,
+        savedToDatabase: false,
+        databaseNote: errMsg,
         summary: `Lỗi khi rà soát thủ công: ${errMsg}`
       });
     }
   };
 
-  const handleKeepFirebaseAfterAudit = () => {
+  const handleKeepSystemAfterAudit = () => {
     if (auditDiscrepancies.length > 0) {
       const startLabel = resyncStartDate.split('-').reverse().join('/');
       const endLabel = resyncEndDate.split('-').reverse().join('/');
+      const pgNow = postgresSyncService.getState();
+      const pgReady = pgNow.configured && pgNow.authenticated && pgNow.connected;
       logRangeAuditToHistory({
         status: 'discrepancy_alert',
         checkedCellsCount: auditCheckedCells,
         discrepancyCount: auditDiscrepancies.length,
         updatedFromSheetCount: 0,
-        savedOnFirebase: firebaseSyncService.getState().status === 'synced',
-        summary: `Rà soát thủ công (${startLabel} – ${endLabel}): phát hiện ${auditDiscrepancies.length} sai lệch và đã chọn giữ nguyên số liệu Firebase.`,
+        savedToDatabase: pgReady,
+        summary: `Rà soát thủ công (${startLabel} – ${endLabel}): phát hiện ${auditDiscrepancies.length} sai lệch và đã chọn giữ nguyên số liệu Hệ thống.`,
         discrepancies: mapDiscrepanciesForHistory(auditDiscrepancies, () => 'kept_system')
       });
     }
@@ -938,8 +941,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         grouped.set(key, existingGroup);
       }
 
-      let firebaseSavedMonths = 0;
-      let firebaseReason: string | undefined;
+      let pgSavedMonths = 0;
+      let pgReason: string | undefined;
       const touchedYears = new Set<number>();
 
       for (const group of grouped.values()) {
@@ -949,13 +952,13 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           group.items
         );
         touchedYears.add(group.year);
-        const fbRes = await firebaseSyncService.forceSaveReportMonthToCloud(
+        const dbRes = await postgresSyncService.forceSaveReportMonthToServer(
           group.year,
           group.monthKey,
           updatedItems
         );
-        if (fbRes.savedOnFirebase) firebaseSavedMonths += 1;
-        else if (!firebaseReason && fbRes.reason) firebaseReason = fbRes.reason;
+        if (dbRes.saved) pgSavedMonths += 1;
+        else if (!pgReason && dbRes.reason) pgReason = dbRes.reason;
       }
 
       const parsedYear = parseInt(resyncYearInput, 10);
@@ -981,24 +984,24 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         checkedCellsCount: auditCheckedCells,
         discrepancyCount: auditDiscrepancies.length,
         updatedFromSheetCount: approved.length,
-        savedOnFirebase: firebaseSavedMonths > 0,
-        firebaseNote:
-          firebaseReason ||
-          (firebaseSavedMonths > 0
-            ? `Đã lưu cố định ${firebaseSavedMonths} tháng trên Firebase Cloud Firestore`
-            : 'Lưu cục bộ (chưa kết nối Firebase)'),
-        summary: `Rà soát thủ công (${startLabel} – ${endLabel}): đã cập nhật ${approved.length}/${auditDiscrepancies.length} sai lệch theo Google Sheet${skippedCount > 0 ? `, giữ nguyên ${skippedCount} mục trên Firebase` : ''}.`,
+        savedToDatabase: pgSavedMonths > 0,
+        databaseNote:
+          pgReason ||
+          (pgSavedMonths > 0
+            ? `Đã lưu cố định ${pgSavedMonths} tháng trên PostgreSQL`
+            : 'Lưu cục bộ (IndexedDB/LocalStorage)'),
+        summary: `Rà soát thủ công (${startLabel} – ${endLabel}): đã cập nhật ${approved.length}/${auditDiscrepancies.length} sai lệch theo Google Sheet${skippedCount > 0 ? `, giữ nguyên ${skippedCount} mục trên Hệ thống` : ''}.`,
         discrepancies: mapDiscrepanciesForHistory(auditDiscrepancies, (d) =>
           selectedDiscrepancyIds[d.id] ? 'updated_from_sheet' : 'kept_system'
         )
       });
 
       setIsResyncModalOpen(false);
-      const fbSummary =
-        firebaseSavedMonths > 0
-          ? `Đã lưu cố định ${firebaseSavedMonths} tháng lên Firebase Cloud.`
-          : `Đã lưu tại máy (${firebaseReason || 'hãy đăng nhập Firebase để đồng bộ lên Cloud'}).`;
-      const toastMsg = `✅ Đã cập nhật ${approved.length} sai lệch sau rà soát (${startLabel} → ${endLabel}). ${fbSummary}`;
+      const dbSummary =
+        pgSavedMonths > 0
+          ? `Đã lưu cố định ${pgSavedMonths} tháng lên PostgreSQL.`
+          : `Đã lưu cục bộ vào trình duyệt (IndexedDB/LocalStorage).`;
+      const toastMsg = `✅ Đã cập nhật ${approved.length} sai lệch sau rà soát (${startLabel} → ${endLabel}). ${dbSummary}`;
       setSyncToast(toastMsg);
       onShowToast?.('Cập nhật sau rà soát thành công', toastMsg, 'success');
       setTimeout(() => setSyncToast(null), 6500);
@@ -1029,7 +1032,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     return () => { active = false; };
   }, []);
 
-  // Refresh UI immediately when Firebase Cloud or 3-day smart sync pushes updated archive data
+  // Refresh UI immediately when PostgreSQL or 3-day smart sync pushes updated archive data
   useEffect(() => {
     const handleCloudArchiveUpdated = (ev: Event) => {
       const detail = (ev as CustomEvent<{ year?: number; monthKey?: string }>).detail;
@@ -3702,23 +3705,23 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     </h3>
                     <span
                       className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border inline-flex items-center gap-1 whitespace-nowrap ${
-                        cloudState.status === 'synced'
+                        isPgSynced
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700'
                           : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600'
                       }`}
                       title={
-                        cloudState.status === 'synced'
-                          ? `Mọi dữ liệu Google Sheet sau đồng bộ được lưu cố định trên Firebase Cloud Firestore (${cloudState.userEmail || ''})`
-                          : 'Kết nối Firebase ở thanh trên để tự động lưu cố định mọi dữ liệu lên Cloud Firestore'
+                        isPgSynced
+                          ? `Dữ liệu Google Sheet sau đồng bộ được lưu cố định trên PostgreSQL (${pgState.sessionUserName || ''})`
+                          : 'Dữ liệu báo cáo đang lưu trữ cục bộ (IndexedDB & LocalStorage) hoặc kết nối PostgreSQL ở Cài đặt'
                       }
                     >
-                      {cloudState.status === 'synced' ? (
+                      {isPgSynced ? (
                         <Cloud className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       ) : (
                         <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
                       )}
                       <span>
-                        {cloudState.status === 'synced' ? 'Firebase Cloud' : 'Lưu máy'}
+                        {isPgSynced ? 'PostgreSQL Cloud' : 'Lưu máy'}
                       </span>
                     </span>
 
@@ -3774,7 +3777,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                   onClick={() => void handleRunManualThreeDaySync()}
                   disabled={isSyncing}
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
-                  title="Rà soát và đồng bộ 3 ngày gần nhất (tự điền ô trống trên Firebase; cảnh báo & ghi Lịch sử nếu có sai lệch)"
+                  title="Rà soát và đồng bộ 3 ngày gần nhất (tự điền ô trống trong Hệ thống; cảnh báo & ghi Lịch sử nếu có sai lệch)"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
                   <span>{isSyncing ? 'Đang kiểm tra 3 ngày...' : 'Đồng bộ 3 ngày gần nhất'}</span>
@@ -4990,7 +4993,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     </div>
 
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 leading-relaxed">
-                      Hệ thống sẽ đọc trực tiếp Google Sheet và <strong>đối chiếu với dữ liệu đã lưu trên Firebase</strong> trong khoảng thời gian trên. Bước này <strong>không tự động ghi đè</strong>; nếu phát hiện sai lệch, bạn sẽ xem chi tiết từng ô lệch và tự quyết định có cập nhật hay không.
+                      Hệ thống sẽ đọc trực tiếp Google Sheet và <strong>đối chiếu với dữ liệu đã lưu trên Hệ thống</strong> trong khoảng thời gian trên. Bước này <strong>không tự động ghi đè</strong>; nếu phát hiện sai lệch, bạn sẽ xem chi tiết từng ô lệch và tự quyết định có cập nhật hay không.
                     </div>
                   </>
                 )}
@@ -5020,7 +5023,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                         <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 leading-relaxed">
                           Đã rà soát <strong>{auditCheckedCells.toLocaleString('vi-VN')}</strong> ô dữ liệu thuộc{' '}
                           <strong>{auditCheckedMonths}</strong> tháng ({resyncStartDate.split('-').reverse().join('/')} →{' '}
-                          {resyncEndDate.split('-').reverse().join('/')}). Toàn bộ số liệu đang lưu trên hệ thống và Firebase hoàn toàn khớp với Google Sheet.
+                          {resyncEndDate.split('-').reverse().join('/')}). Toàn bộ số liệu đang lưu trên hệ thống hoàn toàn khớp với Google Sheet.
                         </p>
                       </div>
                     </div>
@@ -5186,21 +5189,21 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       </table>
                     </div>
 
-                    {/* Firebase Persistence Status Notice */}
+                    {/* Database Persistence Status Notice */}
                     <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-200">
-                      {cloudState.status === 'synced' ? (
+                      {isPgSynced ? (
                         <Cloud className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
                       ) : (
-                        <CloudOff className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                        <Database className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
                       )}
                       <div className="leading-relaxed">
-                        {cloudState.status === 'synced' ? (
+                        {isPgSynced ? (
                           <>
-                            Đang kết nối Firebase (<strong>{cloudState.userEmail}</strong>). Nếu bạn chọn cập nhật, các mục được đánh dấu sẽ được <strong>lưu cố định lên Firebase Cloud Firestore</strong>.
+                            Đang kết nối PostgreSQL (<strong>{pgState.sessionUserName}</strong>). Nếu bạn chọn cập nhật, các mục được đánh dấu sẽ được <strong>lưu cố định lên cơ sở dữ liệu PostgreSQL</strong>.
                           </>
                         ) : (
                           <>
-                            Chưa đăng nhập Firebase trên phiên này. Nếu cập nhật, số liệu được lưu cục bộ trước và sẽ đồng bộ lên Cloud ngay khi bạn kết nối Firebase.
+                            Hệ thống đang lưu trữ an toàn cục bộ (IndexedDB & LocalStorage). Các mục được đánh dấu sẽ được lưu cố định và sẵn sàng đồng bộ ngay khi kết nối PostgreSQL.
                           </>
                         )}
                       </div>
@@ -5283,7 +5286,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                       <button
                         type="button"
                         disabled={isApplyingAudit}
-                        onClick={handleKeepFirebaseAfterAudit}
+                        onClick={handleKeepSystemAfterAudit}
                         className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl cursor-pointer disabled:opacity-50"
                       >
                         Không cập nhật (Giữ nguyên)
@@ -5302,7 +5305,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                         <span>
                           {isApplyingAudit
                             ? 'Đang cập nhật...'
-                            : `Có, cập nhật & Lưu Firebase (${selectedAuditCount} mục)`}
+                            : `Có, cập nhật & Lưu dữ liệu (${selectedAuditCount} mục)`}
                         </span>
                       </button>
                     </div>

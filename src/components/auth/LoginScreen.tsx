@@ -3,9 +3,11 @@ import {
   KeyRound, Lock, Eye, EyeOff, ShieldCheck, 
   RefreshCw, CheckCircle2, AlertCircle, X, HelpCircle, ArrowRight,
   Search, User as UserIcon, Check, Sparkles, LogIn, Activity,
-  Sun, Moon, Hospital, Building2, UserCheck, RotateCcw
+  Sun, Moon, Hospital, Building2, UserCheck, RotateCcw,
+  Cloud, CloudOff
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
+import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
 import { User } from '../../types/hospital';
 import { removeVietnameseTones } from '../../services/searchService';
 
@@ -22,7 +24,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   isDarkMode,
   onToggleTheme
 }) => {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>(() => storageService.getUsers());
+  const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearching, setIsSearching] = useState<boolean>(false);
@@ -35,18 +38,45 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const list = storageService.getUsers();
-    setUsers(list);
-    // Don't auto-select user so that the list stays hidden until typing
+    setUsers(storageService.getUsers());
     setSelectedUserId('');
     setPassword('');
     setSearchQuery('');
+    void postgresSyncService.refreshDirectory();
+
+    const unsubStorage = storageService.subscribe(() => {
+      setUsers(storageService.getUsers());
+    });
+    const unsubPg = postgresSyncService.subscribe(() => {
+      setPgState(postgresSyncService.getState());
+    });
+    return () => {
+      unsubStorage();
+      unsubPg();
+    };
   }, []);
 
-  const selectedUser = users.find(u => u.id === selectedUserId);
+  const effectiveUsers: User[] =
+    pgState.configured && pgState.publicStaffDirectory.length > 0
+      ? pgState.publicStaffDirectory.map((s) => {
+          const localMatch = users.find((u) => u.id === s.id);
+          return {
+            ...(localMatch || {}),
+            id: s.id,
+            name: s.name,
+            email: localMatch?.email || '',
+            role: s.role,
+            department: s.department || localMatch?.department || 'Khoa Cận Lâm Sàng',
+            title: (s.title || localMatch?.title || s.role) as User['title'],
+            avatar: s.avatar || localMatch?.avatar
+          } as User;
+        })
+      : users;
+
+  const selectedUser = effectiveUsers.find(u => u.id === selectedUserId);
 
   // Diacritic-insensitive filtering by staff name and department/title
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = effectiveUsers.filter((u) => {
     if (!searchQuery.trim()) return false;
     const q = removeVietnameseTones(searchQuery);
     const nameNorm = removeVietnameseTones(u.name);
@@ -104,16 +134,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const res = storageService.loginById(selectedUserId, password);
-      setLoading(false);
-      if (res.success && res.user) {
-        onShowToast('Đăng nhập thành công', `Chào mừng ${res.user.name} truy cập hệ thống!`, 'success');
-        onLoginSuccess(res.user);
-      } else {
-        onShowToast('Đăng nhập thất bại', res.message, 'error');
+    void (async () => {
+      try {
+        const res = pgState.configured
+          ? await postgresSyncService.login(selectedUserId, password)
+          : storageService.loginById(selectedUserId, password);
+        if (res.success && res.user) {
+          onShowToast('Đăng nhập thành công', `Chào mừng ${res.user.name} truy cập hệ thống!`, 'success');
+          onLoginSuccess(res.user);
+        } else {
+          onShowToast('Đăng nhập thất bại', res.message, 'error');
+        }
+      } finally {
+        setLoading(false);
       }
-    }, 250);
+    })();
   };
 
   // Condition to show filtered list: user has typed characters and hasn't explicitly locked in a selection or is searching
@@ -182,6 +217,54 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </div>
 
           <div className="p-6 space-y-4">
+            {/* PostgreSQL Server Sync Banner (Zero Google Login) OR Local Storage Mode */}
+            {pgState.configured ? (
+              <div className={`p-3 rounded-2xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
+                pgState.connected
+                  ? 'bg-emerald-50/70 dark:bg-emerald-950/25 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300'
+                  : 'bg-rose-50/70 dark:bg-rose-950/25 border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-300'
+              }`}>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {pgState.connected ? (
+                    <Cloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  ) : (
+                    <CloudOff className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-bold truncate">
+                      {pgState.connected
+                        ? `Đồng bộ PostgreSQL Server (${effectiveUsers.length} tài khoản)`
+                        : 'Lỗi kết nối máy chủ PostgreSQL'}
+                    </div>
+                    <div className="text-[11px] opacity-85">
+                      {pgState.connected
+                        ? 'Đăng nhập bằng tài khoản nội bộ để tự động đồng bộ toàn bộ dữ liệu khoa.'
+                        : pgState.errorMessage || 'Vui lòng kiểm tra cấu hình EXTERNAL_DATABASE_URL.'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void postgresSyncService.refreshDirectory()}
+                  className="px-2.5 py-1 rounded-xl bg-white/80 dark:bg-slate-800 border border-emerald-300/70 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px] shrink-0 cursor-pointer hover:bg-white"
+                >
+                  Làm mới
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 rounded-2xl border text-xs flex items-center gap-2.5 bg-slate-50/90 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
+                <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <div className="min-w-0">
+                  <div className="font-bold truncate">
+                    Chế độ Lưu trữ Cục bộ &amp; Sẵn sàng PostgreSQL ({effectiveUsers.length} tài khoản)
+                  </div>
+                  <div className="text-[11px] opacity-80">
+                    Đăng nhập bằng tài khoản nội bộ để làm việc; quản trị viên có thể kết nối PostgreSQL trong Cấu Hình Hệ Thống.
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleLogin} className="space-y-4 text-xs">
               
               {/* Staff Name Search Input */}
@@ -397,11 +480,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </div>
               </div>
 
-              {/* Default Password Hint Notice (No change password button outside) */}
-              <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl px-3.5 py-2.5 text-[11px] text-amber-800 dark:text-amber-300">
+              {/* Default Password Hint Notice */}
+              <div className="flex flex-wrap items-center justify-between gap-1 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl px-3.5 py-2.5 text-[11px] text-amber-800 dark:text-amber-300">
                 <div className="flex items-center space-x-1.5">
                   <HelpCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>Mật khẩu mặc định hệ thống: <strong className="font-mono text-amber-900 dark:text-amber-200 font-bold">123456</strong></span>
+                  <span>Mật khẩu mặc định: <strong className="font-mono font-bold">123456</strong> (Nhân viên) · <strong className="font-mono font-bold">admin</strong> (Quản trị viên)</span>
                 </div>
                 <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 italic">
                   (Đổi mật khẩu sau khi đăng nhập)

@@ -20,11 +20,21 @@ export const isStrictAdminUser = (
  * Only Admin and Department Head / Deputy Head ("Trưởng khoa" / "Phó khoa") can approve or reject leave requests.
  */
 export const canApproveLeaveRequest = (
-  user?: Pick<User, 'id' | 'role' | 'title'> | null,
-  matchedProfile?: Pick<StaffProfile, 'role' | 'title'> | null
+  user?: Pick<User, 'id' | 'role' | 'title' | 'managementLevel' | 'permissionOverrides'> | null,
+  matchedProfile?: Pick<StaffProfile, 'role' | 'title' | 'managementLevel' | 'permissionOverrides'> | null
 ): boolean => {
   if (!user && !matchedProfile) return false;
   if (isStrictAdminUser(user)) return true;
+
+  const overrideVal =
+    user?.permissionOverrides?.canApproveLeave ??
+    matchedProfile?.permissionOverrides?.canApproveLeave;
+  if (typeof overrideVal === 'boolean') return overrideVal;
+
+  const tier = user?.managementLevel || matchedProfile?.managementLevel;
+  if (tier === 'admin' || tier === 'department_head') return true;
+  if (tier === 'section_head' || tier === 'room_head' || tier === 'staff') return false;
+
   if (user?.role === 'Manager' || matchedProfile?.role === 'Manager') return true;
 
   const normalizedTitles = [

@@ -6,7 +6,7 @@ import {
   type ArchivedCaseReportItem,
   type RangeAuditDiscrepancy
 } from './reportArchiveService';
-import { firebaseSyncService } from './firebaseSyncService';
+import { postgresSyncService } from './postgresSyncService';
 import { storageService } from './storageService';
 import type {
   SyncHistoryAutoWrittenItem,
@@ -407,8 +407,8 @@ export interface ThreeDaySmartSyncOutcome {
 /**
  * 3-Day Smart Sync (runs on startup or via manual 3-day check):
  * - Audits the 3 most recent calendar days BEFORE writing anything.
- * - Rule 1: If Firebase/system is empty for a service day & Google Sheet has data -> auto-writes to Firebase.
- * - Rule 2: If Firebase has data & Google Sheet is empty/missing OR both have differing values -> DO NOT overwrite;
+ * - Rule 1: If System database is empty for a service day & Google Sheet has data -> auto-writes to System/PostgreSQL.
+ * - Rule 2: If System has data & Google Sheet is empty/missing OR both have differing values -> DO NOT overwrite;
  *   raise notification/toast and persist full result into Sync History (`buckets/sync_history`).
  */
 export async function runThreeDaySmartSync(
@@ -437,8 +437,8 @@ export async function runThreeDaySmartSync(
 
   let totalCheckedCells = 0;
   let processedSlices = 0;
-  let firebaseSavedMonths = 0;
-  let firebaseFailureNote: string | undefined;
+  let dbSavedMonths = 0;
+  let dbFailureNote: string | undefined;
 
   const autoWrittenSamples: SyncHistoryAutoWrittenItem[] = [];
   let autoWrittenCount = 0;
@@ -505,7 +505,7 @@ export async function runThreeDaySmartSync(
               nd: disc.sheetValue.nd
             });
           } else {
-            // Firebase has data & Sheet missing OR both differ OR manual lock -> Alert & log, DO NOT overwrite
+            // System has data & Sheet missing OR both differ OR manual lock -> Alert & log, DO NOT overwrite
             alertDiscrepancies.push({
               id: disc.id,
               year: disc.year,
@@ -531,15 +531,15 @@ export async function runThreeDaySmartSync(
             slice.monthKey,
             autoFillItems
           );
-          const fbRes = await firebaseSyncService.forceSaveReportMonthToCloud(
+          const dbRes = await postgresSyncService.forceSaveReportMonthToServer(
             sliceYear,
             slice.monthKey,
             updatedMonthItems
           );
-          if (fbRes.savedOnFirebase) {
-            firebaseSavedMonths += 1;
-          } else if (!firebaseFailureNote && fbRes.reason) {
-            firebaseFailureNote = fbRes.reason;
+          if (dbRes.saved) {
+            dbSavedMonths += 1;
+          } else if (!dbFailureNote && dbRes.reason) {
+            dbFailureNote = dbRes.reason;
           }
 
           if (typeof window !== 'undefined') {
@@ -553,9 +553,10 @@ export async function runThreeDaySmartSync(
       }
     }
 
-    const fbConnected = firebaseSyncService.getState().status === 'synced';
-    const savedOnFirebase =
-      autoWrittenCount > 0 ? firebaseSavedMonths > 0 : fbConnected;
+    const pgState = postgresSyncService.getState();
+    const pgConnected = pgState.configured && pgState.authenticated;
+    const savedToDatabase =
+      autoWrittenCount > 0 ? dbSavedMonths > 0 : pgConnected;
 
     const status =
       processedSlices === 0
@@ -570,14 +571,22 @@ export async function runThreeDaySmartSync(
     if (processedSlices === 0) {
       summary = `Không đọc được tab Google Sheet trong 3 ngày gần nhất (${window3d.dateRangeLabel}): ${unreachableTabs.join(', ')}.`;
     } else if (alertDiscrepancies.length > 0 && autoWrittenCount > 0) {
-      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi ${autoWrittenCount} ô mới lên Firebase; phát hiện ${alertDiscrepancies.length} ô sai lệch cần kiểm tra.`;
+      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi ${autoWrittenCount} ô mới vào hệ thống; phát hiện ${alertDiscrepancies.length} ô sai lệch cần kiểm tra.`;
     } else if (alertDiscrepancies.length > 0) {
-      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): phát hiện ${alertDiscrepancies.length} ô sai lệch giữa Firebase và Google Sheet (đã giữ nguyên dữ liệu để chờ xác nhận).`;
+      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): phát hiện ${alertDiscrepancies.length} ô sai lệch giữa Hệ thống và Google Sheet (đã giữ nguyên dữ liệu để chờ xác nhận).`;
     } else if (autoWrittenCount > 0) {
-      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi ${autoWrittenCount} ô từ Google Sheet vào Firebase.`;
+      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi ${autoWrittenCount} ô từ Google Sheet vào Hệ thống.`;
     } else {
-      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã kiểm tra ${totalCheckedCells} ô, dữ liệu Firebase và Google Sheet hoàn toàn khớp.`;
+      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã kiểm tra ${totalCheckedCells} ô, dữ liệu Hệ thống và Google Sheet hoàn toàn khớp.`;
     }
+
+    const persistenceNote =
+      dbFailureNote ||
+      (savedToDatabase
+        ? 'Đã lưu cố định trên PostgreSQL'
+        : pgState.configured
+          ? 'Đã lưu cục bộ (chưa đồng bộ PostgreSQL)'
+          : 'Đã lưu cục bộ (IndexedDB & LocalStorage)');
 
     const entry: SyncHistoryEntry = {
       id: `SYNC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -592,12 +601,8 @@ export async function runThreeDaySmartSync(
       autoWrittenCount,
       discrepancyCount: alertDiscrepancies.length,
       updatedFromSheetCount: 0,
-      savedOnFirebase,
-      firebaseNote:
-        firebaseFailureNote ||
-        (savedOnFirebase
-          ? 'Đã lưu cố định trên Firebase Cloud Firestore'
-          : 'Lưu cục bộ (chưa kết nối Firebase)'),
+      savedToDatabase,
+      databaseNote: persistenceNote,
       performedBy,
       summary,
       autoWrittenSamples: autoWrittenSamples.slice(0, 40),
@@ -639,8 +644,8 @@ export async function runThreeDaySmartSync(
       autoWrittenCount,
       discrepancyCount: alertDiscrepancies.length,
       updatedFromSheetCount: 0,
-      savedOnFirebase: false,
-      firebaseNote: errMsg,
+      savedToDatabase: false,
+      databaseNote: errMsg,
       performedBy,
       summary: `Lỗi khi rà soát tự động 3 ngày gần nhất (${window3d.dateRangeLabel}): ${errMsg}`
     };

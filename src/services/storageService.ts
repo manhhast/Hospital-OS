@@ -103,6 +103,8 @@ const DEFAULT_DEPARTMENTS: DepartmentUnit[] = [
   }
 ];
 
+const DIRTY_BUCKETS_KEY = 'cls_workhub_cloud_dirty_buckets_v1';
+
 class HospitalStorageService {
   private currentUser: User = initialUsers[0]; // Default to Admin
   private listeners: Array<() => void> = [];
@@ -110,6 +112,8 @@ class HospitalStorageService {
   private isApplyingRemote = false;
   private lastBucketSnapshots: Partial<Record<CloudBucketKey, string>> = {};
   private cloudBucketChangeHandler: ((bucketKey: CloudBucketKey) => void) | null = null;
+  private isCloudSyncedChecker: (() => boolean) | null = null;
+  private dirtyBucketTimestamps: Partial<Record<CloudBucketKey, number>> = {};
 
   private nextUniqueId(prefix: string): string {
     this.idSeq = (this.idSeq + 1) % 1000000;
@@ -136,7 +140,86 @@ class HospitalStorageService {
 
   constructor() {
     this.initDefaultData();
+    this.loadDirtyBucketTimestamps();
     this.captureCurrentBucketSnapshots();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (!e.key) return;
+        const matchedEntry = (Object.entries(CLOUD_BUCKET_STORAGE_MAP) as [CloudBucketKey, string][]).find(
+          ([, storageKey]) => storageKey === e.key
+        );
+        if (!matchedEntry) return;
+        const [bucketKey] = matchedEntry;
+        const nextVal = e.newValue || '';
+        if (this.lastBucketSnapshots[bucketKey] === nextVal) return;
+
+        this.lastBucketSnapshots[bucketKey] = nextVal;
+        this.isApplyingRemote = true;
+        try {
+          if (bucketKey === 'users' || bucketKey === 'staff_profiles') {
+            const users = this.getUsers();
+            const found = users.find((u) => u.id === this.currentUser.id);
+            if (found) this.currentUser = found;
+          }
+          this.notify();
+        } finally {
+          this.isApplyingRemote = false;
+        }
+      });
+    }
+  }
+
+  private loadDirtyBucketTimestamps() {
+    try {
+      const raw = localStorage.getItem(DIRTY_BUCKETS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          this.dirtyBucketTimestamps = parsed as Partial<Record<CloudBucketKey, number>>;
+          return;
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+    this.dirtyBucketTimestamps = {};
+  }
+
+  private saveDirtyBucketTimestamps() {
+    try {
+      localStorage.setItem(DIRTY_BUCKETS_KEY, JSON.stringify(this.dirtyBucketTimestamps));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  public markBucketDirty(bucketKey: CloudBucketKey, timestampMs = Date.now()) {
+    this.dirtyBucketTimestamps[bucketKey] = timestampMs;
+    this.saveDirtyBucketTimestamps();
+  }
+
+  public clearBucketDirty(bucketKey?: CloudBucketKey) {
+    if (bucketKey) {
+      if (this.dirtyBucketTimestamps[bucketKey] !== undefined) {
+        delete this.dirtyBucketTimestamps[bucketKey];
+        this.saveDirtyBucketTimestamps();
+      }
+      return;
+    }
+    this.dirtyBucketTimestamps = {};
+    this.saveDirtyBucketTimestamps();
+  }
+
+  public getDirtyBucketTimestamps(): Partial<Record<CloudBucketKey, number>> {
+    return { ...this.dirtyBucketTimestamps };
+  }
+
+  public getIsApplyingRemote(): boolean {
+    return this.isApplyingRemote;
+  }
+
+  public registerCloudConnectedChecker(checker: (() => boolean) | null) {
+    this.isCloudSyncedChecker = checker;
   }
 
   private captureCurrentBucketSnapshots() {
@@ -152,6 +235,133 @@ class HospitalStorageService {
 
   public registerCloudBucketChangeHandler(handler: ((bucketKey: CloudBucketKey) => void) | null) {
     this.cloudBucketChangeHandler = handler;
+  }
+
+  public isUntouchedSeedData(
+    bucketKey: CloudBucketKey,
+    items: Record<string, unknown>[]
+  ): boolean {
+    if (!Array.isArray(items)) return true;
+
+    switch (bucketKey) {
+      case 'tasks':
+      case 'notifications':
+      case 'shifts':
+      case 'work_task_rows':
+      case 'meetings':
+      case 'meeting_items':
+      case 'messages':
+      case 'announcements':
+      case 'equipment':
+      case 'staff_profiles':
+      case 'leave_requests':
+      case 'training_courses':
+      case 'sync_history':
+        return items.length === 0;
+
+      case 'documents': {
+        if (items.length === 0) return true;
+        if (items.length === sampleDemoData.initialDocuments.length) {
+          const seedIds = sampleDemoData.initialDocuments.map((d) => d.id).sort().join('|');
+          const curIds = items.map((d) => String(d.id || '')).sort().join('|');
+          return seedIds === curIds;
+        }
+        return false;
+      }
+
+      case 'departments': {
+        if (items.length !== DEFAULT_DEPARTMENTS.length) return false;
+        const seedSig = DEFAULT_DEPARTMENTS.map((d) => `${d.id}:${d.code}:${d.name}`).sort().join('|');
+        const curSig = items.map((d) => `${String(d.id || '')}:${String(d.code || '')}:${String(d.name || '')}`).sort().join('|');
+        return seedSig === curSig;
+      }
+
+      case 'rooms': {
+        if (items.length !== initialRooms.length) return false;
+        const seedSig = initialRooms.map((r) => `${r.id}:${r.code}:${r.name}:${r.departmentSection}`).sort().join('|');
+        const curSig = items.map((r) => `${String(r.id || '')}:${String(r.code || '')}:${String(r.name || '')}:${String(r.departmentSection || '')}`).sort().join('|');
+        return seedSig === curSig;
+      }
+
+      case 'users': {
+        if (items.length !== initialUsers.length) return false;
+        const u = items[0];
+        const seed = initialUsers[0];
+        return (
+          String(u?.id || '') === seed.id &&
+          String(u?.name || '') === seed.name &&
+          String(u?.email || '') === seed.email &&
+          String(u?.password || '') === String(seed.password || 'admin') &&
+          String(u?.telegramChatId || '') === ''
+        );
+      }
+
+      case 'channels': {
+        if (items.length !== initialChannels.length) return false;
+        const seedSig = initialChannels.map((c) => `${c.id}:${c.name}`).sort().join('|');
+        const curSig = items.map((c) => `${String(c.id || '')}:${String(c.name || '')}`).sort().join('|');
+        return seedSig === curSig;
+      }
+
+      case 'audit_logs': {
+        return items.every((log) => {
+          const action = String(log.action || '');
+          return (
+            String(log.id || '') === 'AUD-001' ||
+            action === 'PURGE_TRIAL_DATA' ||
+            action === 'Khởi tạo hệ thống thực tế'
+          );
+        });
+      }
+
+      case 'settings': {
+        const s = items[0] as Partial<AppSettings> | undefined;
+        if (!s || typeof s !== 'object') return true;
+        const hasSheetYears =
+          s.reportGoogleSheetsByYear &&
+          Object.values(s.reportGoogleSheetsByYear).some((cfg) => Boolean(cfg?.sheetId || cfg?.url));
+        return (
+          !(s.telegramBotToken || '').trim() &&
+          !(s.defaultTelegramChatId || '').trim() &&
+          !(s.googleDriveFolderId || '').trim() &&
+          !(s.googleSheetUrl || '').trim() &&
+          !(s.reportGoogleSheetId || '').trim() &&
+          !(s.googleSheetId || '').trim() &&
+          !(s.smtpUser || '').trim() &&
+          !hasSheetYears &&
+          (!Array.isArray(s.archivedReportYears) || s.archivedReportYears.length === 0) &&
+          (!Array.isArray(s.assistantMemories) || s.assistantMemories.length === 0)
+        );
+      }
+
+      case 'equipment_duration_defaults': {
+        const d = items[0] as Partial<EquipmentDurationDefaults> | undefined;
+        if (!d || typeof d !== 'object') return true;
+        return (
+          (d.permitMonths ?? 60) === 60 &&
+          (d.calibrationMonths ?? 12) === 12 &&
+          (d.radiationSurveyMonths ?? 12) === 12 &&
+          (d.maintenanceMonths ?? 3) === 3
+        );
+      }
+
+      case 'integration_endpoints': {
+        if (items.length !== initialIntegrationEndpoints.length) return false;
+        const seedSig = initialIntegrationEndpoints.map((e) => `${e.id}:${e.endpointUrl}`).sort().join('|');
+        const curSig = items.map((e) => `${String(e.id || '')}:${String(e.endpointUrl || '')}`).sort().join('|');
+        return seedSig === curSig;
+      }
+
+      case 'integration_payloads': {
+        if (items.length !== initialIntegrationPayloads.length) return false;
+        const seedSig = initialIntegrationPayloads.map((p) => String(p.id)).sort().join('|');
+        const curSig = items.map((p) => String(p.id || '')).sort().join('|');
+        return seedSig === curSig;
+      }
+
+      default:
+        return false;
+    }
   }
 
   public getBucketItemsForCloud(bucketKey: CloudBucketKey): Record<string, unknown>[] {
@@ -183,7 +393,7 @@ class HospitalStorageService {
 
     if (Array.isArray(parsed)) {
       if (bucketKey === 'documents') {
-        // Keep SOP/ISO document files stored on Google Drive; only metadata & Drive link go to Firestore
+        // Keep SOP/ISO document files stored on Google Drive; only metadata & Drive link go to database
         return parsed.slice(0, 1000).map((doc: any) => {
           const copy = { ...doc };
           delete copy.rawFileData;
@@ -212,6 +422,7 @@ class HospitalStorageService {
     }
 
     if (this.lastBucketSnapshots[bucketKey] === serialized) {
+      this.clearBucketDirty(bucketKey);
       return;
     }
 
@@ -219,6 +430,15 @@ class HospitalStorageService {
     try {
       this.safeSetItem(storageKey, serialized);
       this.lastBucketSnapshots[bucketKey] = serialized;
+      this.clearBucketDirty(bucketKey);
+      // Keep in-memory currentUser synced when users bucket updates remotely
+      if (bucketKey === 'users' || bucketKey === 'staff_profiles') {
+        const users = this.getUsers();
+        const found = users.find((u) => u.id === this.currentUser.id);
+        if (found) {
+          this.currentUser = found;
+        }
+      }
       this.notify();
     } finally {
       this.isApplyingRemote = false;
@@ -233,14 +453,23 @@ class HospitalStorageService {
   }
 
   private notify() {
-    if (!this.isApplyingRemote && this.cloudBucketChangeHandler) {
+    if (!this.isApplyingRemote) {
+      const cloudSynced = this.isCloudSyncedChecker ? this.isCloudSyncedChecker() : false;
       (Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]).forEach((bucketKey) => {
         const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
         try {
           const current = localStorage.getItem(storageKey) || '';
           if (current !== (this.lastBucketSnapshots[bucketKey] ?? '')) {
             this.lastBucketSnapshots[bucketKey] = current;
-            this.cloudBucketChangeHandler?.(bucketKey);
+            if (cloudSynced && this.cloudBucketChangeHandler) {
+              this.cloudBucketChangeHandler(bucketKey);
+            } else {
+              // Mark offline dirty modification unless audit_logs was auto-logged by a read/init
+              const items = this.getBucketItemsForCloud(bucketKey);
+              if (!this.isUntouchedSeedData(bucketKey, items)) {
+                this.markBucketDirty(bucketKey);
+              }
+            }
           }
         } catch {
           // ignore read errors
@@ -315,11 +544,26 @@ class HospitalStorageService {
     if (!localStorage.getItem(STORAGE_KEYS.MESSAGES)) {
       localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(initialChatMessages));
     }
+    if (!localStorage.getItem(STORAGE_KEYS.CHANNELS)) {
+      localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(initialChannels));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.ANNOUNCEMENTS)) {
+      localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(initialAnnouncements));
+    }
     if (!localStorage.getItem(STORAGE_KEYS.EQUIPMENT)) {
       localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(initialEquipment));
     }
+    if (!localStorage.getItem(STORAGE_KEYS.DEPARTMENTS)) {
+      localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(DEFAULT_DEPARTMENTS));
+    }
     if (!localStorage.getItem(STORAGE_KEYS.ROOMS)) {
       localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(initialRooms));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS)) {
+      localStorage.setItem(
+        STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS,
+        JSON.stringify({ permitMonths: 60, calibrationMonths: 12, radiationSurveyMonths: 12, maintenanceMonths: 3 })
+      );
     }
     if (!localStorage.getItem(STORAGE_KEYS.STAFF_PROFILES)) {
       localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(initialStaffProfiles));
@@ -1098,19 +1342,11 @@ class HospitalStorageService {
   public getDocuments(): DocumentItem[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!parsed || parsed.length === 0) {
-        // Fallback to sample demo documents so user has rich SOP files to test preview and sync
-        const seedDocs = sampleDemoData.initialDocuments.map(d => ({
-          ...d,
-          syncStatus: (d.syncStatus || 'synced') as 'synced' | 'pending' | 'syncing' | 'failed',
-          lastSyncedAt: d.lastSyncedAt || '2026-11-10 16:45',
-          checksum: d.checksum || `sha256_${Math.random().toString(36).substr(2, 10)}`,
-          driveFolderId: d.driveFolderId || this.getSettings().googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID'
-        }));
-        localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(seedDocs));
-        return seedDocs;
+      if (raw === null) {
+        return initialDocuments;
       }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
       return parsed.map((d: DocumentItem) => ({
         ...d,
         syncStatus: d.syncStatus || 'synced',
@@ -1119,7 +1355,7 @@ class HospitalStorageService {
         driveFolderId: d.driveFolderId || this.getSettings().googleDriveFolderId || '1CLSWorkHub_MainFolder_GoogleDrive_ID'
       }));
     } catch (e) {
-      return sampleDemoData.initialDocuments;
+      return initialDocuments;
     }
   }
 
@@ -1499,15 +1735,24 @@ class HospitalStorageService {
               role: (s.role as UserRole) || 'Staff',
               title: (s.title as CLSTitle) || 'Nhân viên',
               department: s.departmentSection || 'Khoa Cận Lâm Sàng',
+              room: s.room,
               phone: s.phone,
               avatar: s.avatar || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
               status: isInactive ? 'Inactive' : 'Active',
-              password: '123456'
+              password: '123456',
+              managementLevel: s.managementLevel,
+              managedDepartments: s.managedDepartments,
+              managedRooms: s.managedRooms,
+              permissionOverrides: s.permissionOverrides,
             });
           } else if (users[existingIdx].id !== 'USR-ADMIN' && users[existingIdx].role !== 'Admin') {
             users[existingIdx] = {
               ...users[existingIdx],
-              status: isInactive ? 'Inactive' : users[existingIdx].status
+              status: isInactive ? 'Inactive' : users[existingIdx].status,
+              managementLevel: users[existingIdx].managementLevel ?? s.managementLevel,
+              managedDepartments: users[existingIdx].managedDepartments ?? s.managedDepartments,
+              managedRooms: users[existingIdx].managedRooms ?? s.managedRooms,
+              permissionOverrides: users[existingIdx].permissionOverrides ?? s.permissionOverrides,
             };
           }
         }
@@ -1551,6 +1796,35 @@ class HospitalStorageService {
       users.push(user);
     }
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+
+    // Sync RBAC & department/room fields back to matching StaffProfile if it exists
+    try {
+      const profiles = this.getStaffProfiles();
+      const pIdx = profiles.findIndex(
+        p => p.userId === user.id || (user.name && p.fullName.trim().toLowerCase() === user.name.trim().toLowerCase())
+      );
+      if (pIdx >= 0) {
+        profiles[pIdx] = {
+          ...profiles[pIdx],
+          role: user.role,
+          title: user.title || profiles[pIdx].title,
+          departmentSection: user.department || profiles[pIdx].departmentSection,
+          room: user.room ?? profiles[pIdx].room,
+          managementLevel: user.managementLevel,
+          managedDepartments: user.managedDepartments,
+          managedRooms: user.managedRooms,
+          permissionOverrides: user.permissionOverrides,
+        };
+        localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(profiles));
+      }
+    } catch (e) {
+      // ignore staff profile sync error
+    }
+
+    if (this.currentUser.id === user.id) {
+      this.currentUser = user;
+    }
+
     this.logAudit('UPDATE_USER', 'User', undefined, user);
     this.notify();
     return user;
@@ -2250,34 +2524,58 @@ class HospitalStorageService {
       list.unshift(profile);
     }
     localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
-    if (isResignedOrEndedStaff(profile)) {
-      this.clearResignedStaffAssignments([profile]);
-    } else if (prevProfile && isResignedOrEndedStaff(prevProfile)) {
-      try {
-        const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
-        if (rawUsers) {
-          const users: User[] = JSON.parse(rawUsers);
-          const targetName = (profile.fullName || '').trim().toLowerCase();
-          let usersChanged = false;
-          const nextUsers = users.map(u => {
-            if (
-              (u.id === profile.userId || (targetName && u.name.trim().toLowerCase() === targetName)) &&
-              u.id !== 'USR-ADMIN' &&
-              u.role !== 'Admin' &&
-              u.status === 'Inactive'
-            ) {
-              usersChanged = true;
-              return { ...u, status: 'Active' as const };
-            }
-            return u;
-          });
-          if (usersChanged) {
-            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
+
+    // Sync RBAC and structural assignment updates to USERS bucket
+    try {
+      const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
+      if (rawUsers) {
+        const users: User[] = JSON.parse(rawUsers);
+        const targetName = (profile.fullName || '').trim().toLowerCase();
+        let usersChanged = false;
+        const isInactive = isResignedOrEndedStaff(profile);
+        const nextUsers = users.map(u => {
+          if (
+            (u.id === profile.userId || (targetName && u.name.trim().toLowerCase() === targetName)) &&
+            u.id !== 'USR-ADMIN' &&
+            u.role !== 'Admin'
+          ) {
+            usersChanged = true;
+            return {
+              ...u,
+              name: profile.fullName || u.name,
+              title: (profile.title as CLSTitle) || u.title,
+              role: (['Admin', 'Manager', 'Doctor', 'Staff'].includes(profile.role)
+                ? profile.role
+                : u.role) as UserRole,
+              department: profile.departmentSection || u.department,
+              room: profile.room ?? u.room,
+              status: isInactive
+                ? ('Inactive' as const)
+                : prevProfile && isResignedOrEndedStaff(prevProfile)
+                  ? ('Active' as const)
+                  : u.status,
+              managementLevel: profile.managementLevel ?? u.managementLevel,
+              managedDepartments: profile.managedDepartments ?? u.managedDepartments,
+              managedRooms: profile.managedRooms ?? u.managedRooms,
+              permissionOverrides: profile.permissionOverrides ?? u.permissionOverrides,
+            };
+          }
+          return u;
+        });
+        if (usersChanged) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
+          const updatedSelf = nextUsers.find(u => u.id === this.currentUser.id);
+          if (updatedSelf) {
+            this.currentUser = updatedSelf;
           }
         }
-      } catch (e) {
-        // ignore user sync error
       }
+    } catch (e) {
+      // ignore user sync error
+    }
+
+    if (isResignedOrEndedStaff(profile)) {
+      this.clearResignedStaffAssignments([profile]);
     }
     this.logAudit('SAVE_STAFF_PROFILE', 'HR', undefined, profile);
     this.notify();
@@ -2465,13 +2763,19 @@ class HospitalStorageService {
     localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(initialChannels));
     localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(initialAnnouncements));
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(initialEquipment));
+    localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(DEFAULT_DEPARTMENTS));
     localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(initialRooms));
+    localStorage.setItem(
+      STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS,
+      JSON.stringify({ permitMonths: 60, calibrationMonths: 12, radiationSurveyMonths: 12, maintenanceMonths: 3 })
+    );
     localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(initialStaffProfiles));
     localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(initialLeaveRequests));
     localStorage.setItem(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(initialTrainingCourses));
     localStorage.setItem(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(initialMeetings));
     localStorage.setItem(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(initialIntegrationEndpoints));
     localStorage.setItem(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(initialIntegrationPayloads));
+    localStorage.setItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify([]));
     
     // Xóa bộ nhớ tạm Google Sheet demo (tất cả 12 tháng)
     Array.from({ length: 12 }, (_, idx) => `Tháng ${idx + 1}`).forEach(m => {
@@ -2527,7 +2831,7 @@ class HospitalStorageService {
     this.purgeAllTrialData();
   }
 
-  // --- Data Sync History (Google Sheet <-> Firebase) ---
+  // --- Data Sync History (Google Sheet <-> System / PostgreSQL) ---
   public getSyncHistory(): SyncHistoryEntry[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SYNC_HISTORY);

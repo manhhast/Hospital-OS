@@ -2,14 +2,20 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, Wrench, ShieldCheck, AlertTriangle, CheckCircle2, Clock, 
   Calendar, User, MapPin, FileText, Cpu, Zap, Award, AlertCircle, 
-  Plus, History, Printer, Check, Edit3, Save, Trash2, RotateCcw, AlertOctagon
+  Plus, History, Printer, Check, Edit3, Save, Trash2, RotateCcw, AlertOctagon, Lock
 } from 'lucide-react';
-import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
+import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog, ParaclinicalRoom, StaffProfile, DepartmentUnit } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
 import { formatRoomStorageValue, resolveRoomDisplay } from '../../utils/roomDisplay';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
+import {
+  MANAGEMENT_TIER_META,
+  resolveEffectiveUserAccess,
+  canManageEquipmentTarget,
+  filterSelectableRoomsForActor,
+} from '../../utils/rbac';
 
 interface EquipmentDetailModalProps {
   equipment: EquipmentItem;
@@ -32,16 +38,41 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   const [isEditingProfile, setIsEditingProfile] = useState(initialEdit);
   const [isEditingDocs, setIsEditingDocs] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [confirmDeleteLog, setConfirmDeleteLog] = useState<{ type: 'maint' | 'repair'; id: string } | null>(null);
   const [roomsList, setRoomsList] = useState<ParaclinicalRoom[]>(() => storageService.getRooms());
+  const [departmentsList, setDepartmentsList] = useState<DepartmentUnit[]>(() => storageService.getDepartments());
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>(() => storageService.getStaffProfiles());
+  const [allUsers, setAllUsers] = useState(() => storageService.getUsers());
 
   useEffect(() => {
     return storageService.subscribe(() => {
       setRoomsList(storageService.getRooms());
+      setDepartmentsList(storageService.getDepartments());
       setStaffProfiles(storageService.getStaffProfiles());
+      setAllUsers(storageService.getUsers());
     });
   }, []);
+
+  const currentUser = storageService.getCurrentUser();
+  const actorAccess = useMemo(
+    () => resolveEffectiveUserAccess(currentUser, staffProfiles, departmentsList, roomsList),
+    [currentUser, staffProfiles, departmentsList, roomsList, allUsers]
+  );
+
+  const canEditEq = canManageEquipmentTarget(actorAccess, 'edit', equipment, roomsList, departmentsList);
+  const canDeleteEq = canManageEquipmentTarget(actorAccess, 'delete', equipment, roomsList, departmentsList);
+  const canMaintEq = canManageEquipmentTarget(actorAccess, 'maintenance', equipment, roomsList, departmentsList);
+  const canRepairManageEq = canManageEquipmentTarget(actorAccess, 'repair_manage', equipment, roomsList, departmentsList);
+  const canReportIssueEq = canManageEquipmentTarget(actorAccess, 'report_issue', equipment, roomsList, departmentsList);
+
+  useEffect(() => {
+    if (!canEditEq) {
+      setIsEditingProfile(false);
+      setIsEditingDocs(false);
+    }
+  }, [canEditEq]);
 
   const activeStaffProfiles = useMemo(
     () => filterActiveStaffProfiles(staffProfiles),
@@ -222,11 +253,23 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   }, [equipment]);
 
   const showNotification = (msg: string) => {
+    setSaveErrorMsg('');
     setSaveSuccessMsg(msg);
     setTimeout(() => setSaveSuccessMsg(''), 3500);
   };
 
+  const showErrorNotice = (msg: string) => {
+    setSaveSuccessMsg('');
+    setSaveErrorMsg(msg);
+    setTimeout(() => setSaveErrorMsg(''), 4500);
+  };
+
   const handleSaveStatus = (newStatus: EquipmentStatus) => {
+    if (!canEditEq) {
+      showErrorNotice('Bạn không có quyền thay đổi trạng thái thiết bị ngoài phạm vi quản lý.');
+      setIsChangingStatus(false);
+      return;
+    }
     const updated: EquipmentItem = {
       ...equipment,
       status: newStatus
@@ -241,8 +284,20 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   // --- SAVE TAB 1: PROFILE ---
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditEq) {
+      showErrorNotice('Bạn không có quyền chỉnh sửa lý lịch thiết bị ngoài phạm vi quản lý.');
+      return;
+    }
     if (!editName.trim() || !editCode.trim()) {
-      alert('Vui lòng nhập đầy đủ Mã thiết bị và Tên thiết bị.');
+      showErrorNotice('Vui lòng nhập đầy đủ Mã thiết bị và Tên thiết bị.');
+      return;
+    }
+    const targetRoomVal = editRoom.trim() || 'Chưa phân phòng';
+    if (
+      !actorAccess.isDepartmentWide &&
+      !canManageEquipmentTarget(actorAccess, 'edit', { category: editCategory, room: targetRoomVal }, roomsList, departmentsList)
+    ) {
+      showErrorNotice('Không thể chuyển thiết bị sang phòng/bộ phận ngoài phạm vi quản lý của bạn.');
       return;
     }
 
@@ -312,6 +367,10 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   // --- SAVE TAB 4: PHẦN 2 (GIẤY PHÉP, KIỂM ĐỊNH, KIỂM XẠ, BẢO DƯỠNG & GHI CHÚ) ---
   const handleSaveDocs = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditEq) {
+      showErrorNotice('Bạn không có quyền chỉnh sửa giấy phép, kiểm định thiết bị này.');
+      return;
+    }
     const updatedItem: EquipmentItem = {
       ...equipment,
       operatingPermitNumber: editOperatingPermitNumber.trim() || undefined,
@@ -368,6 +427,10 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   // --- TAB 2: MAINTENANCE ADD, EDIT, DELETE ---
   const handleAddMaintenance = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canMaintEq) {
+      showErrorNotice('Bạn không có quyền ghi nhật ký bảo trì thiết bị này.');
+      return;
+    }
     const log: MaintenanceLog = {
       id: `MNT-${Date.now()}`,
       equipmentId: equipment.id,
@@ -389,6 +452,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   };
 
   const handleStartEditMaint = (log: MaintenanceLog) => {
+    if (!canMaintEq) return;
     setEditingMaintLog(log);
     setMaintType(log.type);
     setMaintDate(log.date);
@@ -401,7 +465,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
 
   const handleSaveEditMaint = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMaintLog) return;
+    if (!editingMaintLog || !canMaintEq) return;
     const updated: MaintenanceLog = {
       ...editingMaintLog,
       type: maintType,
@@ -419,17 +483,17 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   };
 
   const handleDeleteMaintenance = (logId: string) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa nhật ký bảo trì này do ghi sai hoặc thay đổi?')) {
-      storageService.deleteMaintenanceLog(equipment.id, logId);
-      showNotification('Đã xóa dòng nhật ký bảo trì!');
-      onUpdate();
+    if (!canMaintEq) {
+      showErrorNotice('Bạn không có quyền xóa nhật ký bảo trì thiết bị này.');
+      return;
     }
+    setConfirmDeleteLog({ type: 'maint', id: logId });
   };
 
   // --- TAB 3: REPAIR ADD, EDIT, DELETE ---
   const handleAddRepair = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repairDesc) return;
+    if (!repairDesc || !canReportIssueEq) return;
     const log: RepairLog = {
       id: `RPR-${Date.now()}`,
       equipmentId: equipment.id,
@@ -452,6 +516,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   };
 
   const handleStartEditRepair = (log: RepairLog) => {
+    if (!canRepairManageEq) return;
     setEditingRepairLog(log);
     setRepairDesc(log.issueDescription);
     setRepairParts(log.replacedParts || '');
@@ -462,7 +527,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
 
   const handleSaveEditRepair = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingRepairLog) return;
+    if (!editingRepairLog || !canRepairManageEq) return;
     const updated: RepairLog = {
       ...editingRepairLog,
       issueDescription: repairDesc,
@@ -478,11 +543,25 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
   };
 
   const handleDeleteRepair = (logId: string) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi sự cố này do ghi sai hoặc thay đổi?')) {
-      storageService.deleteRepairLog(equipment.id, logId);
+    if (!canRepairManageEq) {
+      showErrorNotice('Bạn không có quyền xóa bản ghi sự cố thiết bị này.');
+      return;
+    }
+    setConfirmDeleteLog({ type: 'repair', id: logId });
+  };
+
+  const handleConfirmDeleteLog = () => {
+    if (!confirmDeleteLog) return;
+    if (confirmDeleteLog.type === 'maint' && canMaintEq) {
+      storageService.deleteMaintenanceLog(equipment.id, confirmDeleteLog.id);
+      showNotification('Đã xóa dòng nhật ký bảo trì!');
+      onUpdate();
+    } else if (confirmDeleteLog.type === 'repair' && canRepairManageEq) {
+      storageService.deleteRepairLog(equipment.id, confirmDeleteLog.id);
       showNotification('Đã xóa dòng nhật ký sự cố!');
       onUpdate();
     }
+    setConfirmDeleteLog(null);
   };
 
   const getStatusBadge = (status: EquipmentStatus) => {
@@ -529,8 +608,13 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     [equipment.room, roomsList]
   );
 
+  const selectableRooms = useMemo(
+    () => (actorAccess.isDepartmentWide ? roomsList : filterSelectableRoomsForActor(actorAccess, roomsList)),
+    [actorAccess, roomsList]
+  );
+
   const roomOptions: ComboboxOption[] = useMemo(() => {
-    const opts: ComboboxOption[] = roomsList.map((r) => {
+    const opts: ComboboxOption[] = selectableRooms.map((r) => {
       const full = formatRoomStorageValue(r);
       return {
         value: full,
@@ -555,7 +639,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
       });
     }
     return opts;
-  }, [roomsList, editRoom]);
+  }, [selectableRooms, editRoom]);
 
   const isNextMaintenanceOverdue = isDatePastVN(equipment.nextMaintenanceDate);
   const radExpirySummary = equipment.radiationSurveyExpiry || equipment.radiationLicenseExpiry;
@@ -598,49 +682,59 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
           </div>
 
           {/* Header Quick Actions & Status */}
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 flex-wrap justify-end">
             {saveSuccessMsg && (
               <span className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 border border-emerald-300 dark:border-emerald-800 animate-in fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 {saveSuccessMsg}
               </span>
             )}
+            {saveErrorMsg && (
+              <span className="px-3 py-1.5 bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 rounded-xl text-xs font-bold flex items-center gap-1 border border-rose-300 dark:border-rose-800 animate-in fade-in">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                {saveErrorMsg}
+              </span>
+            )}
 
-            <div className="relative">
+            {canEditEq && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsChangingStatus(!isChangingStatus)}
+                  className="px-3.5 py-2 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 shadow-xs hover:shadow-sm"
+                >
+                  <span>Đổi trạng thái</span>
+                </button>
+                {isChangingStatus && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-30">
+                    {(['Hoạt động tốt', 'Cần bảo trì', 'Sự cố hỏng hóc', 'Đang hiệu chuẩn', 'Tạm ngưng'] as EquipmentStatus[]).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => handleSaveStatus(st)}
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                          currentStatus === st ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30' : 'text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <span>{st}</span>
+                        {currentStatus === st && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {canDeleteEq && (
               <button
                 type="button"
-                onClick={() => setIsChangingStatus(!isChangingStatus)}
-                className="px-3.5 py-2 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 shadow-xs hover:shadow-sm"
+                onClick={() => setShowDeleteModal(true)}
+                className="p-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl border border-rose-200 dark:border-rose-900/60 transition-all shadow-xs"
+                title="Xóa thiết bị này khỏi danh sách"
               >
-                <span>Đổi trạng thái</span>
+                <Trash2 className="w-4 h-4" />
               </button>
-              {isChangingStatus && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-30">
-                  {(['Hoạt động tốt', 'Cần bảo trì', 'Sự cố hỏng hóc', 'Đang hiệu chuẩn', 'Tạm ngưng'] as EquipmentStatus[]).map((st) => (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => handleSaveStatus(st)}
-                      className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
-                        currentStatus === st ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30' : 'text-slate-700 dark:text-slate-300'
-                      }`}
-                    >
-                      <span>{st}</span>
-                      {currentStatus === st && <Check className="w-3.5 h-3.5" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowDeleteModal(true)}
-              className="p-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl border border-rose-200 dark:border-rose-900/60 transition-all shadow-xs"
-              title="Xóa thiết bị này khỏi danh sách"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            )}
 
             <button
               type="button"
@@ -804,33 +898,39 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     Hồ sơ lý lịch kỹ thuật gốc của máy. Áp dụng quyền <strong>Chỉnh Sửa Hồ Sơ</strong> để cập nhật thông tin thiết bị.
                   </span>
                 </div>
-                {!isEditingProfile ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingProfile(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 shrink-0"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    <span>Chỉnh Sửa Lý Lịch & Hồ Sơ Máy</span>
-                  </button>
+                {canEditEq ? (
+                  !isEditingProfile ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingProfile(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 shrink-0"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      <span>Chỉnh Sửa Lý Lịch & Hồ Sơ Máy</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleCancelProfile}
+                        className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 shadow-xs"
+                      >
+                        Hủy bỏ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveProfile}
+                        className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/25 active:scale-95"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Lưu Hồ Sơ Máy</span>
+                      </button>
+                    </div>
+                  )
                 ) : (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleCancelProfile}
-                      className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 shadow-xs"
-                    >
-                      Hủy bỏ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveProfile}
-                      className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/25 active:scale-95"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>Lưu Hồ Sơ Máy</span>
-                    </button>
-                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shrink-0">
+                    <Lock className="w-3.5 h-3.5" /> Chế độ chỉ xem (ngoài phạm vi)
+                  </span>
                 )}
               </div>
 
@@ -1199,17 +1299,23 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     Chu kỳ quy định: <strong className="font-bold">{equipment.maintenanceIntervalMonths} tháng/lần</strong>. Hạn tiếp theo: <strong className="font-bold">{formatDateVN(equipment.nextMaintenanceDate)}</strong>
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingMaintLog(null);
-                    setShowAddMaint(!showAddMaint);
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{showAddMaint ? 'Đóng Form' : '+ Ghi Thêm Nhật Ký Bảo Trì'}</span>
-                </button>
+                {canMaintEq ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMaintLog(null);
+                      setShowAddMaint(!showAddMaint);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{showAddMaint ? 'Đóng Form' : '+ Ghi Thêm Nhật Ký Bảo Trì'}</span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shrink-0">
+                    <Lock className="w-3.5 h-3.5" /> Chỉ xem nhật ký bảo trì
+                  </span>
+                )}
               </div>
 
               {/* Form Ghi Thêm Hoặc Sửa Dòng Nhật Ký Bảo Trì */}
@@ -1364,26 +1470,28 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                           <span className="text-slate-500 dark:text-slate-400">
                             Thực hiện: <strong className="text-slate-700 dark:text-slate-200">{m.performedBy}</strong>
                           </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditMaint(m)}
-                              className="px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
-                              title="Sửa dòng nhật ký bảo trì này khi ghi sai"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                              <span>Sửa</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMaintenance(m.id)}
-                              className="px-2.5 py-1 bg-white dark:bg-slate-800 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
-                              title="Xóa dòng nhật ký bảo trì này"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Xóa</span>
-                            </button>
-                          </div>
+                          {canMaintEq && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditMaint(m)}
+                                className="px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
+                                title="Sửa dòng nhật ký bảo trì này khi ghi sai"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Sửa</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMaintenance(m.id)}
+                                className="px-2.5 py-1 bg-white dark:bg-slate-800 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
+                                title="Xóa dòng nhật ký bảo trì này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Xóa</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <p className="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -1412,17 +1520,19 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     Theo dõi lịch sử hỏng hóc, sửa chữa khẩn cấp và thời gian khôi phục hoạt động của thiết bị.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingRepairLog(null);
-                    setShowAddRepair(!showAddRepair);
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all shadow-md hover:shadow-lg shadow-rose-600/20 active:scale-95 shrink-0"
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>{showAddRepair ? 'Đóng Form' : '+ Ghi Thêm Báo Cáo Sự Cố'}</span>
-                </button>
+                {canReportIssueEq && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingRepairLog(null);
+                      setShowAddRepair(!showAddRepair);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all shadow-md hover:shadow-lg shadow-rose-600/20 active:scale-95 shrink-0"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>{showAddRepair ? 'Đóng Form' : '+ Ghi Thêm Báo Cáo Sự Cố'}</span>
+                  </button>
+                )}
               </div>
 
               {/* Form Ghi Thêm Hoặc Sửa Dòng Sự Cố */}
@@ -1557,26 +1667,28 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                           <span className="text-slate-500 dark:text-slate-400">
                             Người báo: <strong className="text-slate-700 dark:text-slate-200">{r.reportedBy}</strong>
                           </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditRepair(r)}
-                              className="px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
-                              title="Sửa dòng sự cố này khi ghi sai hoặc cập nhật trạng thái"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                              <span>Sửa</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteRepair(r.id)}
-                              className="px-2.5 py-1 bg-white dark:bg-slate-800 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
-                              title="Xóa dòng sự cố này"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Xóa</span>
-                            </button>
-                          </div>
+                          {canRepairManageEq && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditRepair(r)}
+                                className="px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
+                                title="Sửa dòng sự cố này khi ghi sai hoặc cập nhật trạng thái"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Sửa</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRepair(r.id)}
+                                className="px-2.5 py-1 bg-white dark:bg-slate-800 text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg border border-slate-200 dark:border-slate-700 font-bold transition-all flex items-center gap-1 shadow-xs"
+                                title="Xóa dòng sự cố này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Xóa</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <p className="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -1606,16 +1718,17 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     <strong>Phần 2:</strong> Thông tin Giấy phép lưu hành BYT, Kiểm định ISO, Kiểm xạ ATBX, Chu kỳ bảo dưỡng thiết bị &amp; Ghi chú theo dõi.
                   </span>
                 </div>
-                {!isEditingDocs ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingDocs(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md hover:shadow-lg shadow-emerald-600/20 active:scale-95 shrink-0 cursor-pointer"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    <span>Chỉnh Sửa Phần 2 (Giấy Phép, Kiểm Định, Bảo Dưỡng)</span>
-                  </button>
-                ) : (
+                {canEditEq ? (
+                  !isEditingDocs ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDocs(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md hover:shadow-lg shadow-emerald-600/20 active:scale-95 shrink-0 cursor-pointer"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      <span>Chỉnh Sửa Phần 2 (Giấy Phép, Kiểm Định, Bảo Dưỡng)</span>
+                    </button>
+                  ) : (
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
@@ -1633,6 +1746,11 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                       <span>Lưu Thông Tin Phần 2</span>
                     </button>
                   </div>
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shrink-0">
+                    <Lock className="w-3.5 h-3.5" /> Chế độ chỉ xem (ngoài phạm vi)
+                  </span>
                 )}
               </div>
 
@@ -2074,7 +2192,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             Mã thiết bị: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{equipment.code}</span> • Lần cập nhật cuối: {formatDateVN(equipment.lastMaintenanceDate)}
           </div>
           <div className="flex items-center gap-2.5 justify-end flex-wrap">
-            {activeTab === 'profile' && !isEditingProfile && (
+            {canEditEq && activeTab === 'profile' && !isEditingProfile && (
               <button
                 type="button"
                 onClick={() => setIsEditingProfile(true)}
@@ -2085,7 +2203,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               </button>
             )}
 
-            {activeTab === 'profile' && isEditingProfile && (
+            {canEditEq && activeTab === 'profile' && isEditingProfile && (
               <>
                 <button
                   type="button"
@@ -2105,7 +2223,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               </>
             )}
 
-            {activeTab === 'docs' && !isEditingDocs && (
+            {canEditEq && activeTab === 'docs' && !isEditingDocs && (
               <button
                 type="button"
                 onClick={() => setIsEditingDocs(true)}
@@ -2116,7 +2234,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               </button>
             )}
 
-            {activeTab === 'docs' && isEditingDocs && (
+            {canEditEq && activeTab === 'docs' && isEditingDocs && (
               <>
                 <button
                   type="button"
@@ -2136,7 +2254,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               </>
             )}
 
-            {activeTab === 'maintenance' && (
+            {canMaintEq && activeTab === 'maintenance' && (
               <button
                 type="button"
                 onClick={() => {
@@ -2150,7 +2268,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               </button>
             )}
 
-            {activeTab === 'repairs' && (
+            {canReportIssueEq && activeTab === 'repairs' && (
               <button
                 type="button"
                 onClick={() => {
@@ -2174,6 +2292,46 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* CONFIRM DELETE LOG DIALOG IN MODAL */}
+      {confirmDeleteLog && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 rounded-2xl shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {confirmDeleteLog.type === 'maint' ? 'Xác Nhận Xóa Nhật Ký Bảo Trì' : 'Xác Nhận Xóa Bản Ghi Sự Cố'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {confirmDeleteLog.type === 'maint'
+                    ? 'Bạn có chắc chắn muốn xóa dòng nhật ký bảo trì này?'
+                    : 'Bạn có chắc chắn muốn xóa bản ghi sự cố này?'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteLog(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold text-xs transition-all"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteLog}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-rose-600/20 active:scale-95 inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xác Nhận Xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CONFIRM DELETE DIALOG IN MODAL */}
       {showDeleteModal && (

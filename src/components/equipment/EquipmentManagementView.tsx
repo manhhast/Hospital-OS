@@ -6,8 +6,15 @@ import {
   Gauge, DollarSign, ShieldAlert, Lock, Unlock, Settings, Sliders, BellRing, Send, CheckSquare
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
-import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
+import { EquipmentItem, EquipmentDurationDefaults, MaintenanceLog, RepairLog, EquipmentStatus, ParaclinicalRoom, StaffProfile, DepartmentUnit } from '../../types/hospital';
 import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
+import {
+  MANAGEMENT_TIER_META,
+  resolveEffectiveUserAccess,
+  canManageEquipmentTarget,
+  filterSelectableRoomsForActor,
+  isEquipmentInAccessScope,
+} from '../../utils/rbac';
 import { EquipmentDetailModal } from './EquipmentDetailModal';
 import { SafetyInterlockTab } from './SafetyInterlockTab';
 import { OeeReliabilityTab } from './OeeReliabilityTab';
@@ -29,11 +36,14 @@ import {
 export const EquipmentManagementView: React.FC = () => {
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
   const [roomsList, setRoomsList] = useState<ParaclinicalRoom[]>(() => storageService.getRooms());
+  const [departmentsList, setDepartmentsList] = useState<DepartmentUnit[]>(() => storageService.getDepartments());
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>(() => storageService.getStaffProfiles());
+  const [allUsers, setAllUsers] = useState(() => storageService.getUsers());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'overdue' | 'within30' | 'within60'>('all');
+  const [scopeOnlyFilter, setScopeOnlyFilter] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'list' | 'expirations' | 'interlock' | 'oee' | 'utilization' | 'maintenance' | 'repairs'>('list');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); // Default to LIST as requested
   const [reminderTick, setReminderTick] = useState(0);
@@ -123,12 +133,27 @@ export const EquipmentManagementView: React.FC = () => {
     const list = storageService.getEquipment();
     setEquipmentList(list);
     setRoomsList(storageService.getRooms());
+    setDepartmentsList(storageService.getDepartments());
     setStaffProfiles(storageService.getStaffProfiles());
+    setAllUsers(storageService.getUsers());
     if (detailEquipment) {
       const refreshedItem = list.find(e => e.id === detailEquipment.id);
       if (refreshedItem) setDetailEquipment(refreshedItem);
     }
   };
+
+  const currentUser = storageService.getCurrentUser();
+  const actorAccess = useMemo(
+    () => resolveEffectiveUserAccess(currentUser, staffProfiles, departmentsList, roomsList),
+    [currentUser, staffProfiles, departmentsList, roomsList, allUsers]
+  );
+  const canCreateAnyEquipment = canManageEquipmentTarget(actorAccess, 'create', undefined, roomsList, departmentsList);
+  const canConfigDurations = actorAccess.isDepartmentWide && actorAccess.permissions.canEditEquipment;
+
+  const selectableRoomsForActor = useMemo(
+    () => filterSelectableRoomsForActor(actorAccess, roomsList),
+    [actorAccess, roomsList]
+  );
 
   const activeStaffProfiles = useMemo(
     () => filterActiveStaffProfiles(staffProfiles),
@@ -153,7 +178,7 @@ export const EquipmentManagementView: React.FC = () => {
 
   const roomOptions: ComboboxOption[] = useMemo(
     () =>
-      roomsList.map((r) => {
+      (actorAccess.isDepartmentWide ? roomsList : selectableRoomsForActor).map((r) => {
         const full = formatRoomStorageValue(r);
         return {
           value: full,
@@ -163,7 +188,7 @@ export const EquipmentManagementView: React.FC = () => {
           subLabel: [r.departmentSection, r.floor, r.status].filter(Boolean).join(' • ')
         };
       }),
-    [roomsList]
+    [actorAccess.isDepartmentWide, roomsList, selectableRoomsForActor]
   );
 
   useEffect(() => {
@@ -209,7 +234,8 @@ export const EquipmentManagementView: React.FC = () => {
         matchesDeadline = eqAlerts.length > 0;
       }
     }
-    return matchesSearch && matchesCategory && matchesStatus && matchesDeadline;
+    const matchesScope = !scopeOnlyFilter || actorAccess.isDepartmentWide || isEquipmentInAccessScope(actorAccess, item, roomsList, departmentsList);
+    return matchesSearch && matchesCategory && matchesStatus && matchesDeadline && matchesScope;
   });
 
   // Analytics counters
@@ -254,6 +280,10 @@ export const EquipmentManagementView: React.FC = () => {
   };
 
   const handleOpenAddModal = () => {
+    if (!canCreateAnyEquipment) {
+      showQuickToast('Bạn không có quyền thêm thiết bị mới trong phạm vi quản lý hiện tại.');
+      return;
+    }
     const latestDefaults = storageService.getEquipmentDurationDefaults();
     setDurationDefaults(latestDefaults);
     setDraftDefaults(latestDefaults);
@@ -270,11 +300,18 @@ export const EquipmentManagementView: React.FC = () => {
     setCalibExpiryManual(false);
     setRadExpiryManual(false);
     setMaintExpiryManual(false);
+    if (!actorAccess.isDepartmentWide && selectableRoomsForActor.length > 0 && !newEqRoom) {
+      setNewEqRoom(formatRoomStorageValue(selectableRoomsForActor[0]));
+    }
     setShowAddModal(true);
   };
 
   const handleSaveDurationDefaults = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canConfigDurations) {
+      showQuickToast('Chỉ Admin hoặc Ban Chủ Nhiệm khoa mới được cấu hình thời hạn mặc định.');
+      return;
+    }
     const saved = storageService.saveEquipmentDurationDefaults(draftDefaults);
     setDurationDefaults(saved);
     setDraftDefaults(saved);
@@ -307,6 +344,18 @@ export const EquipmentManagementView: React.FC = () => {
   const handleCreateEquipment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEqName || !newEqCode) return;
+    if (
+      !canManageEquipmentTarget(
+        actorAccess,
+        'create',
+        { category: newEqCategory, room: newEqRoom.trim() || 'Chưa phân phòng' },
+        roomsList,
+        departmentsList
+      )
+    ) {
+      showQuickToast('Bạn không có quyền thêm thiết bị tại phòng/bộ phận ngoài phạm vi quản lý.');
+      return;
+    }
 
     const baseMaintDate = newEqLastMaintDate || newEqInstallDate || getTodayISODateVN();
     const computedNextMaint =
@@ -424,6 +473,10 @@ export const EquipmentManagementView: React.FC = () => {
   const handleAddRepairLog = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    if (!canManageEquipmentTarget(actorAccess, 'report_issue', selectedItem, roomsList, departmentsList)) {
+      showQuickToast('Bạn không có quyền báo sự cố thiết bị này.');
+      return;
+    }
     const log: RepairLog = {
       id: `RPR-${Date.now()}`,
       equipmentId: selectedItem.id,
@@ -445,6 +498,10 @@ export const EquipmentManagementView: React.FC = () => {
   const handleAddMaintenanceLog = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
+    if (!canManageEquipmentTarget(actorAccess, 'maintenance', selectedItem, roomsList, departmentsList)) {
+      showQuickToast('Bạn không có quyền ghi nhận bảo trì thiết bị ngoài phạm vi quản lý.');
+      return;
+    }
     const log: MaintenanceLog = {
       id: `MNT-${Date.now()}`,
       equipmentId: selectedItem.id,
@@ -463,6 +520,12 @@ export const EquipmentManagementView: React.FC = () => {
   };
 
   const handleDeleteEquipment = (equipmentId: string) => {
+    const targetEq = equipmentList.find(e => e.id === equipmentId) || deleteTarget;
+    if (!canManageEquipmentTarget(actorAccess, 'delete', targetEq, roomsList, departmentsList)) {
+      showQuickToast('Bạn không có quyền xóa thiết bị này.');
+      setShowDeleteConfirm(false);
+      return;
+    }
     const success = storageService.deleteEquipment(equipmentId);
     if (success) {
       setShowDeleteConfirm(false);
@@ -505,24 +568,36 @@ export const EquipmentManagementView: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            type="button"
-            onClick={() => {
-              setDraftDefaults(storageService.getEquipmentDurationDefaults());
-              setShowDurationSettingsModal(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
-            title="Cài đặt sẵn thời hạn mặc định cho Giấy phép, Kiểm định, Kiểm xạ, Bảo dưỡng trước khi nhập thiết bị"
+          <span
+            title={`Phạm vi quyền hạn: ${actorAccess.scopeLabel}`}
+            className={`hidden lg:inline-flex px-3 py-1.5 rounded-xl text-xs font-bold items-center gap-1.5 border ${MANAGEMENT_TIER_META[actorAccess.tier].badgeClass}`}
           >
-            <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span>Cài Đặt Thời Hạn</span>
-          </button>
-          <button
-            onClick={handleOpenAddModal}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" /> Thêm Thiết Bị Mới
-          </button>
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span>{actorAccess.shortTierLabel}</span>
+            <span className="opacity-75 font-medium">• {actorAccess.scopeLabel}</span>
+          </span>
+          {canConfigDurations && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraftDefaults(storageService.getEquipmentDurationDefaults());
+                setShowDurationSettingsModal(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+              title="Cài đặt sẵn thời hạn mặc định cho Giấy phép, Kiểm định, Kiểm xạ, Bảo dưỡng trước khi nhập thiết bị"
+            >
+              <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Cài Đặt Thời Hạn</span>
+            </button>
+          )}
+          {canCreateAnyEquipment && (
+            <button
+              onClick={handleOpenAddModal}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Thêm Thiết Bị Mới
+            </button>
+          )}
         </div>
       </div>
 
@@ -646,14 +721,16 @@ export const EquipmentManagementView: React.FC = () => {
           >
             Mở bảng chi tiết hạn ({compliance.alerts.length})
           </button>
-          <button
-            type="button"
-            onClick={handleBatchRemindExpiring}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Nhắc tất cả ≤ 30 ngày</span>
-          </button>
+          {actorAccess.tier !== 'staff' && (
+            <button
+              type="button"
+              onClick={handleBatchRemindExpiring}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Nhắc tất cả ≤ 30 ngày</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -842,13 +919,30 @@ export const EquipmentManagementView: React.FC = () => {
               <option value="Đang hiệu chuẩn">Đang hiệu chuẩn</option>
             </select>
 
-            {(searchTerm || selectedCategory !== 'all' || selectedStatus !== 'all' || deadlineFilter !== 'all') && (
+            {!actorAccess.isDepartmentWide && (actorAccess.allowedDepartments.length > 0 || actorAccess.allowedRooms.length > 0) && (
+              <button
+                type="button"
+                onClick={() => setScopeOnlyFilter(prev => !prev)}
+                title="Chỉ hiển thị thiết bị thuộc phạm vi bạn quản lý"
+                className={`px-2.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
+                  scopeOnlyFilter
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Trong phạm vi quản lý</span>
+              </button>
+            )}
+
+            {(searchTerm || selectedCategory !== 'all' || selectedStatus !== 'all' || deadlineFilter !== 'all' || scopeOnlyFilter) && (
               <button
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedCategory('all');
                   setSelectedStatus('all');
                   setDeadlineFilter('all');
+                  setScopeOnlyFilter(false);
                 }}
                 className="px-2.5 py-2 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/30 rounded-xl transition-colors shrink-0"
                 title="Xóa tất cả bộ lọc"
@@ -1162,58 +1256,64 @@ export const EquipmentManagementView: React.FC = () => {
                                 </div>
 
                                 {/* Ghi Bảo Trì */}
-                                <div className="relative group/tip">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedItem(item);
-                                      setShowMaintenanceModal(true);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white dark:bg-emerald-950/60 dark:hover:bg-emerald-600 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-all shadow-2xs hover:shadow-xs active:scale-90"
-                                    title="Ghi Bảo Trì"
-                                    aria-label="Ghi Bảo Trì"
-                                  >
-                                    <Wrench className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover/tip:inline-block px-2 py-0.5 text-[11px] font-semibold text-white bg-slate-900/95 dark:bg-slate-800 rounded shadow-md whitespace-nowrap z-30">
-                                    Ghi Bảo Trì
-                                  </span>
-                                </div>
+                                {canManageEquipmentTarget(actorAccess, 'maintenance', item, roomsList, departmentsList) && (
+                                  <div className="relative group/tip">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedItem(item);
+                                        setShowMaintenanceModal(true);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white dark:bg-emerald-950/60 dark:hover:bg-emerald-600 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-all shadow-2xs hover:shadow-xs active:scale-90"
+                                      title="Ghi Bảo Trì"
+                                      aria-label="Ghi Bảo Trì"
+                                    >
+                                      <Wrench className="w-3.5 h-3.5" />
+                                    </button>
+                                    <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover/tip:inline-block px-2 py-0.5 text-[11px] font-semibold text-white bg-slate-900/95 dark:bg-slate-800 rounded shadow-md whitespace-nowrap z-30">
+                                      Ghi Bảo Trì
+                                    </span>
+                                  </div>
+                                )}
 
                                 {/* Báo Sự Cố */}
-                                <div className="relative group/tip">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedItem(item);
-                                      setShowRepairModal(true);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-600 text-amber-600 hover:text-white dark:bg-amber-950/60 dark:hover:bg-amber-600 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 transition-all shadow-2xs hover:shadow-xs active:scale-90"
-                                    title="Báo Sự Cố"
-                                    aria-label="Báo Sự Cố"
-                                  >
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover/tip:inline-block px-2 py-0.5 text-[11px] font-semibold text-white bg-slate-900/95 dark:bg-slate-800 rounded shadow-md whitespace-nowrap z-30">
-                                    Báo Sự Cố
-                                  </span>
-                                </div>
+                                {canManageEquipmentTarget(actorAccess, 'report_issue', item, roomsList, departmentsList) && (
+                                  <div className="relative group/tip">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedItem(item);
+                                        setShowRepairModal(true);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-600 text-amber-600 hover:text-white dark:bg-amber-950/60 dark:hover:bg-amber-600 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 transition-all shadow-2xs hover:shadow-xs active:scale-90"
+                                      title="Báo Sự Cố"
+                                      aria-label="Báo Sự Cố"
+                                    >
+                                      <AlertTriangle className="w-3.5 h-3.5" />
+                                    </button>
+                                    <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover/tip:inline-block px-2 py-0.5 text-[11px] font-semibold text-white bg-slate-900/95 dark:bg-slate-800 rounded shadow-md whitespace-nowrap z-30">
+                                      Báo Sự Cố
+                                    </span>
+                                  </div>
+                                )}
 
                                 {/* Xóa Thiết Bị */}
-                                <div className="relative group/tip">
-                                  <button
-                                    onClick={() => {
-                                      setDeleteTarget(item);
-                                      setShowDeleteConfirm(true);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/60 dark:hover:bg-rose-600 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 transition-all shadow-2xs hover:shadow-xs active:scale-90"
-                                    title="Xóa Thiết Bị"
-                                    aria-label="Xóa Thiết Bị"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover/tip:inline-block px-2 py-0.5 text-[11px] font-semibold text-white bg-slate-900/95 dark:bg-slate-800 rounded shadow-md whitespace-nowrap z-30">
-                                    Xóa Thiết Bị
-                                  </span>
-                                </div>
+                                {canManageEquipmentTarget(actorAccess, 'delete', item, roomsList, departmentsList) && (
+                                  <div className="relative group/tip">
+                                    <button
+                                      onClick={() => {
+                                        setDeleteTarget(item);
+                                        setShowDeleteConfirm(true);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/60 dark:hover:bg-rose-600 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 transition-all shadow-2xs hover:shadow-xs active:scale-90"
+                                      title="Xóa Thiết Bị"
+                                      aria-label="Xóa Thiết Bị"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover/tip:inline-block px-2 py-0.5 text-[11px] font-semibold text-white bg-slate-900/95 dark:bg-slate-800 rounded shadow-md whitespace-nowrap z-30">
+                                      Xóa Thiết Bị
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1337,30 +1437,42 @@ export const EquipmentManagementView: React.FC = () => {
                           <Eye className="w-4 h-4" />
                           <span>Xem Toàn Bộ Hồ Sơ Máy</span>
                         </button>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setShowMaintenanceModal(true);
-                            }}
-                            className="py-1.5 px-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs font-bold text-center transition-all inline-flex items-center justify-center gap-1 shadow-2xs active:scale-95"
-                            title="Ghi bảo trì"
-                          >
-                            <Wrench className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span>Ghi Bảo Trì</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setShowRepairModal(true);
-                            }}
-                            className="py-1.5 px-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs font-bold text-center transition-all inline-flex items-center justify-center gap-1 shadow-2xs active:scale-95"
-                            title="Báo sự cố"
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                            <span>Báo Sự Cố</span>
-                          </button>
-                        </div>
+                        {(canManageEquipmentTarget(actorAccess, 'maintenance', item, roomsList, departmentsList) ||
+                          canManageEquipmentTarget(actorAccess, 'report_issue', item, roomsList, departmentsList)) && (
+                          <div className={`grid gap-2 ${
+                            canManageEquipmentTarget(actorAccess, 'maintenance', item, roomsList, departmentsList) &&
+                            canManageEquipmentTarget(actorAccess, 'report_issue', item, roomsList, departmentsList)
+                              ? 'grid-cols-2'
+                              : 'grid-cols-1'
+                          }`}>
+                            {canManageEquipmentTarget(actorAccess, 'maintenance', item, roomsList, departmentsList) && (
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(item);
+                                  setShowMaintenanceModal(true);
+                                }}
+                                className="py-1.5 px-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs font-bold text-center transition-all inline-flex items-center justify-center gap-1 shadow-2xs active:scale-95"
+                                title="Ghi bảo trì"
+                              >
+                                <Wrench className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                <span>Ghi Bảo Trì</span>
+                              </button>
+                            )}
+                            {canManageEquipmentTarget(actorAccess, 'report_issue', item, roomsList, departmentsList) && (
+                              <button
+                                onClick={() => {
+                                  setSelectedItem(item);
+                                  setShowRepairModal(true);
+                                }}
+                                className="py-1.5 px-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs font-bold text-center transition-all inline-flex items-center justify-center gap-1 shadow-2xs active:scale-95"
+                                title="Báo sự cố"
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                                <span>Báo Sự Cố</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1383,14 +1495,16 @@ export const EquipmentManagementView: React.FC = () => {
                   Theo dõi tập trung 4 mốc: Giấy phép hoạt động, Kiểm định ISO 15189, Kiểm xạ ATBX và Bảo dưỡng định kỳ.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleBatchRemindExpiring}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Gửi nhắc tất cả ≤ 30 ngày</span>
-              </button>
+              {actorAccess.tier !== 'staff' && (
+                <button
+                  type="button"
+                  onClick={handleBatchRemindExpiring}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Gửi nhắc tất cả ≤ 30 ngày</span>
+                </button>
+              )}
             </div>
 
             {compliance.alerts.length === 0 ? (
@@ -1470,24 +1584,29 @@ export const EquipmentManagementView: React.FC = () => {
                           </td>
                           <td className="py-3 px-4 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleCreateAlertTask(al)}
-                                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-600 rounded-lg text-[11px] font-bold border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer inline-flex items-center gap-1"
-                                title="Tạo công việc xử lý & gán ngày hạn tự động"
-                              >
-                                <CheckSquare className="w-3.5 h-3.5" />
-                                <span>Tạo việc</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleSendAlertReminder(al)}
-                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-600 rounded-lg text-[11px] font-bold border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer inline-flex items-center gap-1"
-                                title="Gửi nhắc nhở qua Telegram/In-App"
-                              >
-                                <Send className="w-3.5 h-3.5" />
-                                <span>Nhắc</span>
-                              </button>
+                              {eqObj && (canManageEquipmentTarget(actorAccess, 'edit', eqObj, roomsList, departmentsList) ||
+                                canManageEquipmentTarget(actorAccess, 'maintenance', eqObj, roomsList, departmentsList)) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCreateAlertTask(al)}
+                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-600 rounded-lg text-[11px] font-bold border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  title="Tạo công việc xử lý & gán ngày hạn tự động"
+                                >
+                                  <CheckSquare className="w-3.5 h-3.5" />
+                                  <span>Tạo việc</span>
+                                </button>
+                              )}
+                              {actorAccess.tier !== 'staff' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendAlertReminder(al)}
+                                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-600 rounded-lg text-[11px] font-bold border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  title="Gửi nhắc nhở qua Telegram/In-App"
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                  <span>Nhắc</span>
+                                </button>
+                              )}
                               {eqObj && (
                                 <button
                                   type="button"
@@ -1586,15 +1705,17 @@ export const EquipmentManagementView: React.FC = () => {
                           >
                             Lý lịch máy
                           </button>
-                          <button
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setShowMaintenanceModal(true);
-                            }}
-                            className="px-3 py-1 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-md font-semibold text-xs transition-all"
-                          >
-                            Cập nhật bảo trì
-                          </button>
+                          {canManageEquipmentTarget(actorAccess, 'maintenance', item, roomsList, departmentsList) && (
+                            <button
+                              onClick={() => {
+                                setSelectedItem(item);
+                                setShowMaintenanceModal(true);
+                              }}
+                              className="px-3 py-1 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-md font-semibold text-xs transition-all"
+                            >
+                              Cập nhật bảo trì
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
