@@ -155,8 +155,9 @@ const getStatusStyle = (status: LeaveRequest['status']) => {
   switch (status) {
     case 'Đã phê duyệt':
       return {
-        bar: 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-100 border-emerald-200 dark:border-emerald-800/80 hover:bg-emerald-100/90 dark:hover:bg-emerald-900/70',
-        matrixCell: 'bg-emerald-500/90 dark:bg-emerald-500/80 text-white hover:bg-emerald-600',
+        bar: 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-950 dark:text-emerald-50 border-emerald-300 dark:border-emerald-500/65 hover:bg-emerald-100 dark:hover:bg-emerald-900/80',
+        subText: 'text-emerald-800 dark:text-emerald-200',
+        matrixCell: 'bg-emerald-600 dark:bg-emerald-500 text-white hover:bg-emerald-700',
         avatar: 'bg-emerald-600 text-white',
         label: 'Đã duyệt',
         icon: CheckCircle2,
@@ -165,8 +166,9 @@ const getStatusStyle = (status: LeaveRequest['status']) => {
       };
     case 'Từ chối':
       return {
-        bar: 'bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-100 border-rose-200 dark:border-rose-800/80 hover:bg-rose-100/90 dark:hover:bg-rose-900/60',
-        matrixCell: 'bg-rose-400/90 dark:bg-rose-500/80 text-white hover:bg-rose-500',
+        bar: 'bg-rose-50 dark:bg-rose-900/55 text-rose-950 dark:text-rose-50 border-rose-300 dark:border-rose-500/65 hover:bg-rose-100 dark:hover:bg-rose-900/75',
+        subText: 'text-rose-800 dark:text-rose-200',
+        matrixCell: 'bg-rose-500 dark:bg-rose-500 text-white hover:bg-rose-600',
         avatar: 'bg-rose-600 text-white',
         label: 'Từ chối',
         icon: XCircle,
@@ -175,7 +177,8 @@ const getStatusStyle = (status: LeaveRequest['status']) => {
       };
     default:
       return {
-        bar: 'bg-amber-50 dark:bg-amber-950/65 text-amber-950 dark:text-amber-100 border-amber-300/80 dark:border-amber-700/80 hover:bg-amber-100/90 dark:hover:bg-amber-900/65',
+        bar: 'bg-amber-50 dark:bg-amber-900/55 text-amber-950 dark:text-amber-50 border-amber-300 dark:border-amber-500/65 hover:bg-amber-100 dark:hover:bg-amber-900/75',
+        subText: 'text-amber-800 dark:text-amber-200',
         matrixCell: 'bg-amber-400 dark:bg-amber-500 text-slate-950 hover:bg-amber-500',
         avatar: 'bg-amber-600 text-white',
         label: 'Chờ duyệt',
@@ -588,25 +591,25 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
   const hasExtraFilters = departmentFilter !== 'all' || leaveTypeFilter !== 'all' || statusFilter !== 'all';
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
+    <div className="p-4 space-y-4">
       {/* 1. Unified Command Toolbar */}
-      <div className="flex flex-col gap-3.5 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col gap-3 pb-3.5 border-b border-[#DFE7F0] dark:border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           {/* Left: Period Nav + Title + Filters */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="inline-flex items-center border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center border border-[#DFE7F0] dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 overflow-hidden">
               <button
                 type="button"
                 onClick={() => handleNavigatePeriod(-1)}
                 aria-label={calendarView === 'week' ? 'Tuần trước' : 'Tháng trước'}
-                className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1.5 text-[#263445] dark:text-slate-300 hover:bg-[#EAF4FF] dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 onClick={handleJumpToday}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border-x border-slate-200 dark:border-slate-700 whitespace-nowrap shrink-0 transition-colors cursor-pointer"
+                className="px-2.5 py-1.5 text-xs font-semibold text-[#263445] dark:text-slate-200 hover:bg-[#EAF4FF] dark:hover:bg-slate-800 border-x border-[#DFE7F0] dark:border-slate-700 whitespace-nowrap shrink-0 transition-colors cursor-pointer"
               >
                 Hôm nay
               </button>
@@ -614,24 +617,24 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                 type="button"
                 onClick={() => handleNavigatePeriod(1)}
                 aria-label={calendarView === 'week' ? 'Tuần sau' : 'Tháng sau'}
-                className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1.5 text-[#263445] dark:text-slate-300 hover:bg-[#EAF4FF] dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
-            <h3 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white tabular-nums whitespace-nowrap pr-1">
+            <h3 className="text-base font-bold tracking-tight text-[#263445] dark:text-white tabular-nums whitespace-nowrap pr-1">
               {periodTitle}
             </h3>
 
             {/* Department / Room Dropdown */}
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 text-xs">
-              <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#DFE7F0] dark:border-slate-700 bg-[#F4F7FB] dark:bg-slate-800/70 text-xs">
+              <Building2 className="w-3.5 h-3.5 text-[#718096] dark:text-slate-500 shrink-0" />
               <select
                 value={departmentFilter}
                 onChange={(e) => setDepartmentFilter(e.target.value)}
                 aria-label="Lọc theo phòng hoặc bộ phận"
-                className="bg-transparent outline-none font-medium text-slate-700 dark:text-slate-200 cursor-pointer max-w-[155px] truncate"
+                className="bg-transparent outline-none font-medium text-[#263445] dark:text-slate-200 cursor-pointer max-w-[155px] truncate"
               >
                 <option value="all" className="dark:bg-slate-900">Tất cả phòng / bộ phận</option>
                 {departmentOptions.map((dept) => (
@@ -643,13 +646,13 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
             </div>
 
             {/* Leave Type Dropdown */}
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 text-xs">
-              <Filter className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#DFE7F0] dark:border-slate-700 bg-[#F4F7FB] dark:bg-slate-800/70 text-xs">
+              <Filter className="w-3.5 h-3.5 text-[#718096] dark:text-slate-500 shrink-0" />
               <select
                 value={leaveTypeFilter}
                 onChange={(e) => setLeaveTypeFilter(e.target.value as LeaveTypeFilter)}
                 aria-label="Lọc theo hình thức nghỉ"
-                className="bg-transparent outline-none font-medium text-slate-700 dark:text-slate-200 cursor-pointer"
+                className="bg-transparent outline-none font-medium text-[#263445] dark:text-slate-200 cursor-pointer"
               >
                 <option value="all" className="dark:bg-slate-900">Mọi hình thức nghỉ</option>
                 {LEAVE_TYPE_OPTIONS.map((lt) => (
@@ -668,7 +671,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                   setLeaveTypeFilter('all');
                   setStatusFilter('all');
                 }}
-                className="px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className="px-2.5 py-1.5 text-xs font-medium text-[#718096] hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 Đặt lại lọc
               </button>
@@ -676,20 +679,20 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
           </div>
 
           {/* Right: View Switcher + Primary Action */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <div
               role="group"
               aria-label="Chế độ hiển thị lịch nghỉ"
-              className="inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700"
+              className="inline-flex items-center p-0.5 bg-[#F4F7FB] dark:bg-slate-800 rounded-lg border border-[#DFE7F0] dark:border-slate-700"
             >
               <button
                 type="button"
                 onClick={() => setCalendarView('month')}
                 aria-pressed={calendarView === 'month'}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   calendarView === 'month'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-slate-900 text-[#1976D2] dark:text-white shadow-xs'
+                    : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                 }`}
               >
                 <CalendarDays className="w-3.5 h-3.5" />
@@ -699,10 +702,10 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                 type="button"
                 onClick={() => setCalendarView('week')}
                 aria-pressed={calendarView === 'week'}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   calendarView === 'week'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-slate-900 text-[#1976D2] dark:text-white shadow-xs'
+                    : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                 }`}
               >
                 <CalendarRange className="w-3.5 h-3.5" />
@@ -712,10 +715,10 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                 type="button"
                 onClick={() => setCalendarView('roster')}
                 aria-pressed={calendarView === 'roster'}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   calendarView === 'roster'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-slate-900 text-[#1976D2] dark:text-white shadow-xs'
+                    : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
@@ -726,7 +729,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
             <button
               type="button"
               onClick={() => onOpenCreateModal(selectedDayIso || todayIso)}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+              className="px-3.5 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-xs"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Đăng Ký Nghỉ</span>
@@ -736,13 +739,13 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
 
         {/* Row 2: Unboxed Metrics Strip (Left) + Segmented Status Filter (Right) */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1">
-          <div className="flex flex-wrap items-center gap-y-2 text-xs divide-x divide-slate-200 dark:divide-slate-800">
+          <div className="flex flex-wrap items-center gap-y-2 text-xs divide-x divide-[#DFE7F0] dark:divide-slate-800">
             <div className="pr-4">
-              <span className="text-slate-500 dark:text-slate-400">Trong kỳ: </span>
-              <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+              <span className="text-[#718096] dark:text-slate-400">Trong kỳ: </span>
+              <span className="font-bold text-[#263445] dark:text-white tabular-nums">
                 {periodMetrics.inPeriodCount} lượt
               </span>
-              <span className="text-slate-400 dark:text-slate-500 mx-1" aria-hidden="true">·</span>
+              <span className="text-[#718096] dark:text-slate-500 mx-1" aria-hidden="true">·</span>
               <span className="text-emerald-700 dark:text-emerald-400 font-semibold tabular-nums">
                 {periodMetrics.approvedInPeriod} đã duyệt
               </span>
@@ -754,12 +757,12 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
               className="px-4 text-left hover:opacity-80 transition-opacity cursor-pointer"
               title="Nhấn để lọc đơn đang chờ phê duyệt"
             >
-              <span className="text-slate-500 dark:text-slate-400">Chờ duyệt: </span>
+              <span className="text-[#718096] dark:text-slate-400">Chờ duyệt: </span>
               <span
                 className={`font-bold tabular-nums ${
                   periodMetrics.pendingTotal > 0
                     ? 'text-amber-700 dark:text-amber-400'
-                    : 'text-slate-800 dark:text-slate-200'
+                    : 'text-[#263445] dark:text-slate-200'
                 }`}
               >
                 {periodMetrics.pendingTotal} đơn
@@ -767,18 +770,18 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
             </button>
 
             <div className="px-4">
-              <span className="text-slate-500 dark:text-slate-400">Nghỉ hôm nay ({formatDateCompactVN(todayIso)}): </span>
-              <span className="font-bold text-indigo-700 dark:text-indigo-400 tabular-nums">
+              <span className="text-[#718096] dark:text-slate-400">Nghỉ hôm nay ({formatDateCompactVN(todayIso)}): </span>
+              <span className="font-bold text-[#1976D2] dark:text-blue-400 tabular-nums">
                 {periodMetrics.offToday} cán bộ
               </span>
             </div>
 
             <div className="pl-4">
-              <span className="text-slate-500 dark:text-slate-400">Quân số sẵn sàng: </span>
-              <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+              <span className="text-[#718096] dark:text-slate-400">Quân số sẵn sàng: </span>
+              <span className="font-bold text-[#263445] dark:text-white tabular-nums">
                 {periodMetrics.readyCount}/{periodMetrics.totalActiveStaff}
               </span>
-              <span className="text-slate-500 dark:text-slate-400 tabular-nums ml-1">
+              <span className="text-[#718096] dark:text-slate-400 tabular-nums ml-1">
                 ({periodMetrics.readinessPct}%)
               </span>
             </div>
@@ -788,7 +791,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
           <div
             role="group"
             aria-label="Lọc theo trạng thái phê duyệt"
-            className="inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 self-start lg:self-auto"
+            className="inline-flex items-center p-0.5 bg-[#F4F7FB] dark:bg-slate-800 rounded-lg border border-[#DFE7F0] dark:border-slate-700 self-start lg:self-auto"
           >
             {(
               [
@@ -803,10 +806,10 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                 type="button"
                 onClick={() => setStatusFilter(item.key)}
                 aria-pressed={statusFilter === item.key}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer tabular-nums ${
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer tabular-nums ${
                   statusFilter === item.key
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-slate-900 text-[#1976D2] dark:text-white shadow-xs'
+                    : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                 }`}
               >
                 {item.label} <span className="opacity-70">({item.count})</span>
@@ -817,21 +820,21 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
       </div>
 
       {/* 2. Master-Detail Workspace: Primary Calendar Canvas (Left) + Day & Approval Inspector (Right) */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-5 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_330px] gap-4 items-start">
         {/* LEFT: CALENDAR VIEWPORT */}
         <div className="min-w-0 space-y-3">
           {/* VIEW 1: MONTH VIEW WITH CONTINUOUS MULTI-DAY SPANNING BARS */}
           {calendarView === 'month' && (
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+            <div className="border border-[#CBD5E1] dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-[#162033]">
               {/* Weekday Header */}
-              <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-800/70">
+              <div className="grid grid-cols-7 border-b border-[#CBD5E1] dark:border-slate-700 bg-[#EAF2FA] dark:bg-slate-800">
                 {WEEKDAY_LABELS.map((dayName, idx) => (
                   <div
                     key={dayName}
-                    className={`py-2.5 px-2 text-center text-xs font-semibold border-r last:border-r-0 border-slate-200 dark:border-slate-800 ${
+                    className={`py-2 px-2 text-center text-xs font-bold border-r last:border-r-0 border-[#DFE7F0] dark:border-slate-700 ${
                       idx >= 5
-                        ? 'text-slate-500 dark:text-slate-400'
-                        : 'text-slate-700 dark:text-slate-200'
+                        ? 'text-[#475569] dark:text-slate-300'
+                        : 'text-[#155A9C] dark:text-sky-200'
                     }`}
                   >
                     <span className="hidden sm:inline">{dayName}</span>
@@ -842,7 +845,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
 
               {/* Week-by-week Rows */}
               <div
-                className="divide-y divide-slate-200 dark:divide-slate-800"
+                className="divide-y divide-[#DFE7F0] dark:divide-slate-700"
                 onMouseLeave={() => setHoveredDayIso(null)}
               >
                 {monthWeekLayouts.map((weekLayout, weekIdx) => {
@@ -858,14 +861,14 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                               onClick={() => handleSelectDay(cell.iso)}
                               onDoubleClick={() => onOpenCreateModal(cell.iso)}
                               onMouseEnter={() => setHoveredDayIso(cell.iso)}
-                              className={`border-r last:border-r-0 border-slate-200 dark:border-slate-800 transition-colors cursor-pointer ${
+                              className={`border-r last:border-r-0 border-[#DFE7F0] dark:border-slate-700/90 transition-colors cursor-pointer ${
                                 isSelected
-                                  ? 'bg-indigo-50/50 dark:bg-indigo-950/30 ring-1 ring-inset ring-indigo-500/70'
+                                  ? 'bg-[#DCEEFF] dark:bg-sky-900/35 ring-2 ring-inset ring-[#1976D2] dark:ring-sky-400'
                                   : !cell.isCurrentMonth
-                                  ? 'bg-slate-50/75 dark:bg-slate-950/60'
+                                  ? 'bg-[#EEF3F8] dark:bg-slate-900/95'
                                   : cell.isWeekend
-                                  ? 'bg-slate-50/40 dark:bg-slate-900/50 hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
-                                  : 'bg-white dark:bg-slate-900 hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                                  ? 'bg-[#F5F8FC] dark:bg-slate-800/50 hover:bg-[#EAF4FF]/70 dark:hover:bg-slate-700/50'
+                                  : 'bg-white dark:bg-[#162033] hover:bg-[#EAF4FF]/60 dark:hover:bg-slate-800/75'
                               }`}
                             />
                           );
@@ -873,7 +876,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                       </div>
 
                       {/* Layer 2: Flow Foreground (Day Headers + Auto-expanding Event Lanes + Overflow) */}
-                      <div className="relative z-10 pointer-events-none flex flex-col min-h-[84px] pb-1.5">
+                      <div className="relative z-10 pointer-events-none flex flex-col min-h-[88px] pb-1.5">
                         {/* Day Header Row */}
                         <div className="grid grid-cols-7">
                           {weekLayout.week.map((cell) => {
@@ -890,12 +893,12 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                                 <span
                                   className={`inline-flex items-center justify-center text-xs font-bold tabular-nums ${
                                     isToday
-                                      ? 'w-6 h-6 rounded-full bg-indigo-600 text-white'
+                                      ? 'w-6 h-6 rounded-full bg-[#1976D2] text-white shadow-xs'
                                       : isSelected
-                                      ? 'text-indigo-700 dark:text-indigo-300'
+                                      ? 'text-[#155A9C] dark:text-sky-300'
                                       : cell.isCurrentMonth
-                                      ? 'text-slate-800 dark:text-slate-200'
-                                      : 'text-slate-400 dark:text-slate-600'
+                                      ? 'text-[#1E293B] dark:text-slate-100'
+                                      : 'text-slate-500 dark:text-slate-400'
                                   }`}
                                 >
                                   {cell.date.getDate()}
@@ -904,7 +907,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                                 <div className="flex items-center gap-1">
                                   {dayLeaves.length > 0 && (
                                     <span
-                                      className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 tabular-nums"
+                                      className="text-[10px] font-bold text-[#475569] dark:text-slate-300 tabular-nums"
                                       title={`${dayLeaves.length} cán bộ nghỉ`}
                                     >
                                       {dayLeaves.length}
@@ -917,7 +920,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                                       onOpenCreateModal(cell.iso);
                                     }}
                                     title={`Đăng ký nghỉ ngày ${formatDateShortVN(cell.iso)}`}
-                                    className={`pointer-events-auto p-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-opacity cursor-pointer focus-visible:opacity-100 ${
+                                    className={`pointer-events-auto p-0.5 rounded bg-[#EAF4FF] dark:bg-sky-900/70 text-[#1976D2] dark:text-sky-200 hover:bg-blue-100 dark:hover:bg-sky-800 transition-opacity cursor-pointer focus-visible:opacity-100 ${
                                       isHovered ? 'opacity-100' : 'opacity-0'
                                     }`}
                                   >
@@ -962,21 +965,21 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                                       title={`${seg.leave.userName}${staff?.room ? ` (${staff.room})` : ''} · ${seg.leave.leaveType} · ${formatDateShortVN(seg.leave.startDate)} → ${formatDateShortVN(seg.leave.endDate)} (${seg.leave.totalDays} ngày) · ${st.label}`}
                                       className={`pointer-events-auto min-h-[26px] px-1.5 py-1 border text-[11px] leading-[1.25] flex items-start gap-1 text-left transition-colors cursor-pointer ${st.bar} ${roundedClasses}`}
                                     >
-                                      <StatusIcon className={`w-3 h-3 shrink-0 mt-[1.5px] ${st.textClass}`} />
+                                      <StatusIcon className={`w-3.5 h-3.5 shrink-0 mt-[1px] ${st.textClass}`} />
                                       {seg.spanCols === 1 ? (
                                         <span className="font-semibold whitespace-normal break-words min-w-0 flex-1">
                                           {seg.leave.userName}
                                         </span>
                                       ) : (
                                         <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
-                                          <span className="font-semibold whitespace-normal break-words">
+                                          <span className="font-bold whitespace-normal break-words">
                                             {seg.leave.userName}
                                           </span>
-                                          <span className="opacity-80 truncate hidden sm:inline">
+                                          <span className={`font-medium truncate hidden sm:inline ${st.subText}`}>
                                             · {seg.leave.leaveType} ({seg.leave.totalDays}N)
                                           </span>
                                           {seg.spanCols >= 3 && staff?.room && (
-                                            <span className="opacity-65 truncate hidden md:inline">
+                                            <span className={`font-medium truncate hidden md:inline ${st.subText}`}>
                                               · {staff.room}
                                             </span>
                                           )}
@@ -1004,7 +1007,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                                         e.stopPropagation();
                                         setExpandedDayIso(cell.iso);
                                       }}
-                                      className="pointer-events-auto text-left text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer whitespace-nowrap"
+                                      className="pointer-events-auto text-left text-[11px] font-semibold text-[#1976D2] dark:text-blue-400 hover:underline cursor-pointer whitespace-nowrap"
                                     >
                                       +{hiddenCount} lượt khác
                                     </button>
@@ -1024,7 +1027,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
 
           {/* VIEW 2: WEEK SHIFT & COVERAGE VIEW */}
           {calendarView === 'week' && (
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto bg-white dark:bg-slate-900">
+            <div className="border border-[#CBD5E1] dark:border-slate-700 rounded-xl overflow-x-auto bg-white dark:bg-[#162033]">
               <div className="grid grid-cols-7 min-w-[820px]">
                 {weekDays.map((cell, idx) => {
                   const dayLeaves = leavesByDayIso.get(cell.iso) || [];
@@ -1035,38 +1038,38 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                     <div
                       key={cell.iso}
                       onClick={() => handleSelectDay(cell.iso)}
-                      className={`border-r last:border-r-0 border-slate-200 dark:border-slate-800 flex flex-col min-h-[360px] cursor-pointer transition-colors ${
+                      className={`border-r last:border-r-0 border-[#DFE7F0] dark:border-slate-700 flex flex-col min-h-[360px] cursor-pointer transition-colors ${
                         isSelected
-                          ? 'bg-indigo-50/35 dark:bg-indigo-950/20'
+                          ? 'bg-[#EAF4FF]/60 dark:bg-sky-900/30'
                           : cell.isWeekend
-                          ? 'bg-slate-50/50 dark:bg-slate-900/50'
-                          : 'bg-white dark:bg-slate-900'
+                          ? 'bg-[#F5F8FC] dark:bg-slate-800/45'
+                          : 'bg-white dark:bg-[#162033]'
                       }`}
                     >
                       {/* Column Header */}
                       <div
-                        className={`px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-1 ${
+                        className={`px-3 py-2 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between gap-1 ${
                           isToday
-                            ? 'bg-indigo-50 dark:bg-indigo-950/60'
+                            ? 'bg-[#EAF4FF] dark:bg-sky-900/60'
                             : isSelected
-                            ? 'bg-slate-100/80 dark:bg-slate-800/80'
-                            : 'bg-slate-50/80 dark:bg-slate-800/50'
+                            ? 'bg-blue-50/70 dark:bg-slate-800'
+                            : 'bg-[#EAF2FA] dark:bg-slate-800/80'
                         }`}
                       >
                         <div>
                           <div
                             className={`text-xs font-bold ${
-                              isToday ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-800 dark:text-slate-100'
+                              isToday ? 'text-[#155A9C] dark:text-sky-200' : 'text-[#263445] dark:text-slate-100'
                             }`}
                           >
                             {WEEKDAY_LABELS[idx]}
                           </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          <div className="text-[11px] text-slate-600 dark:text-slate-300 tabular-nums">
                             {formatDateCompactVN(cell.iso)}
                             {isToday ? ' · Hôm nay' : ''}
                           </div>
                         </div>
-                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tabular-nums">
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 tabular-nums">
                           {dayLeaves.length}
                         </span>
                       </div>
@@ -1075,7 +1078,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                       <div className="flex-1 p-2 space-y-2">
                         {dayLeaves.length === 0 ? (
                           <div className="h-full min-h-[160px] flex items-center justify-center text-center px-2">
-                            <span className="text-[11px] text-slate-400 dark:text-slate-600">
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
                               Đủ quân số trực
                             </span>
                           </div>
@@ -1164,7 +1167,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                             e.stopPropagation();
                             onOpenCreateModal(cell.iso);
                           }}
-                          className="w-full py-1.5 rounded-lg text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          className="w-full py-1.5 rounded-lg text-[11px] font-semibold text-[#718096] dark:text-slate-400 hover:text-[#1976D2] dark:hover:text-blue-400 hover:bg-[#EAF4FF] dark:hover:bg-blue-950/40 flex items-center justify-center gap-1 transition-colors cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
                           <span>Đăng ký</span>
@@ -1179,17 +1182,17 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
 
           {/* VIEW 3: STAFF ROSTER TIMELINE MATRIX (MONTHLY) */}
           {calendarView === 'roster' && (
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
-              <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-semibold text-slate-700 dark:text-slate-200">
+            <div className="border border-[#CBD5E1] dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-[#162033]">
+              <div className="px-4 py-2.5 bg-[#EAF2FA] dark:bg-slate-800 border-b border-[#DFE7F0] dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-[#155A9C] dark:text-slate-100">
                   Bảng phân bổ nghỉ phép theo từng cán bộ ({rosterStaffList.length} nhân sự)
                 </span>
-                <label className="inline-flex items-center gap-2 text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                <label className="inline-flex items-center gap-2 text-[#475569] dark:text-slate-200 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={rosterOnlyWithLeaves}
                     onChange={(e) => setRosterOnlyWithLeaves(e.target.checked)}
-                    className="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    className="rounded border-slate-300 dark:border-slate-600 text-[#1976D2] focus:ring-[#1976D2] cursor-pointer"
                   />
                   <span>Chỉ hiển thị cán bộ có lịch nghỉ trong tháng</span>
                 </label>
@@ -1198,8 +1201,8 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800">
-                      <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-800 text-left px-3 py-2 font-semibold text-slate-700 dark:text-slate-200 min-w-[210px] border-r border-slate-200 dark:border-slate-700">
+                    <tr className="bg-[#EAF2FA] dark:bg-slate-800 border-b border-[#DFE7F0] dark:border-slate-700">
+                      <th className="sticky left-0 z-20 bg-[#EAF2FA] dark:bg-slate-800 text-left px-3 py-2 font-bold text-[#155A9C] dark:text-slate-100 min-w-[210px] border-r border-[#DFE7F0] dark:border-slate-700">
                         Cán bộ / Phòng chuyên môn
                       </th>
                       {currentMonthDays.map((cell) => {
@@ -1211,27 +1214,27 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                           <th
                             key={`roster-h-${cell.iso}`}
                             onClick={() => handleSelectDay(cell.iso)}
-                            className={`min-w-[30px] py-1.5 px-0.5 text-center border-r last:border-r-0 border-slate-200 dark:border-slate-800 cursor-pointer tabular-nums ${
+                            className={`min-w-[30px] py-1.5 px-0.5 text-center border-r last:border-r-0 border-[#DFE7F0] dark:border-slate-700 cursor-pointer tabular-nums ${
                               isToday
-                                ? 'bg-indigo-600 text-white'
+                                ? 'bg-[#1976D2] text-white'
                                 : isSelected
-                                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200'
+                                ? 'bg-[#DCEEFF] dark:bg-sky-900/60 text-[#155A9C] dark:text-sky-200'
                                 : cell.isWeekend
-                                ? 'bg-slate-100/70 dark:bg-slate-900/70 text-slate-400 dark:text-slate-500'
-                                : 'text-slate-600 dark:text-slate-300'
+                                ? 'bg-slate-200/60 dark:bg-slate-900/70 text-[#475569] dark:text-slate-300'
+                                : 'text-[#263445] dark:text-slate-200'
                             }`}
                           >
-                            <div className="text-[10px] font-medium opacity-80">{WEEKDAY_SHORT[shortIdx]}</div>
+                            <div className="text-[10px] font-medium opacity-90">{WEEKDAY_SHORT[shortIdx]}</div>
                             <div className="text-[11px] font-bold">{cell.date.getDate()}</div>
                           </th>
                         );
                       })}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-700">
                     {rosterStaffList.length === 0 ? (
                       <tr>
-                        <td colSpan={currentMonthDays.length + 1} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                        <td colSpan={currentMonthDays.length + 1} className="py-10 text-center text-slate-600 dark:text-slate-300">
                           Không có nhân sự phù hợp bộ lọc trong tháng này.
                         </td>
                       </tr>
@@ -1245,13 +1248,13 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                         return (
                           <tr
                             key={`roster-row-${staff.userId}`}
-                            className="hover:bg-slate-50/70 dark:hover:bg-slate-800/35 transition-colors"
+                            className="hover:bg-[#EAF4FF]/50 dark:hover:bg-slate-800/60 transition-colors"
                           >
-                            <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 px-3 py-2 border-r border-slate-200 dark:border-slate-800">
+                            <td className="sticky left-0 z-10 bg-white dark:bg-[#162033] px-3 py-2 border-r border-[#DFE7F0] dark:border-slate-700">
                               <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[195px]">
                                 {staff.fullName}
                               </div>
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[195px]">
+                              <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate max-w-[195px]">
                                 {staff.room || staff.departmentSection || staff.title}
                               </div>
                             </td>
@@ -1264,7 +1267,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                                 return (
                                   <td
                                     key={`rc-${staff.userId}-${cell.iso}`}
-                                    className="p-0.5 border-r last:border-r-0 border-slate-200 dark:border-slate-800 text-center"
+                                    className="p-0.5 border-r last:border-r-0 border-[#DFE7F0] dark:border-slate-700 text-center"
                                   >
                                     <button
                                       type="button"
@@ -1291,13 +1294,13 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                                   onClick={() => handleSelectDay(cell.iso)}
                                   onDoubleClick={() => onOpenCreateModal(cell.iso)}
                                   title={`${staff.fullName} · Ngày ${formatDateShortVN(cell.iso)} (Nhấn đúp để đăng ký nghỉ)`}
-                                  className={`border-r last:border-r-0 border-slate-200 dark:border-slate-800 h-8 cursor-pointer ${
+                                  className={`border-r last:border-r-0 border-[#DFE7F0] dark:border-slate-700 h-8 cursor-pointer ${
                                     isToday
-                                      ? 'bg-indigo-50/70 dark:bg-indigo-950/30'
+                                      ? 'bg-[#EAF4FF] dark:bg-sky-900/35'
                                       : isSelected
-                                      ? 'bg-indigo-50/30 dark:bg-indigo-950/20'
+                                      ? 'bg-[#EAF4FF]/45 dark:bg-sky-900/20'
                                       : cell.isWeekend
-                                      ? 'bg-slate-50/60 dark:bg-slate-900/50'
+                                      ? 'bg-[#F5F8FC] dark:bg-slate-800/50'
                                       : ''
                                   }`}
                                 />
@@ -1314,7 +1317,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
           )}
 
           {/* Compact Footer Legend */}
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 px-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#475569] dark:text-slate-300 px-1">
             <div className="flex flex-wrap items-center gap-4">
               <span className="inline-flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -1329,28 +1332,28 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                 <span>Từ chối</span>
               </span>
               {calendarView === 'roster' && (
-                <span className="text-slate-400 dark:text-slate-500">
+                <span className="text-[#475569] dark:text-slate-300">
                   Ký hiệu: P (Phép năm) · KL (Không lương) · Ô (Ốm) · HT (Học tập) · TS (Thai sản)
                 </span>
               )}
             </div>
 
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">
+            <span className="text-[11px] text-[#475569] dark:text-slate-300">
               Nhấn ngày để xem chi tiết bên phải · Nhấn đúp hoặc nút + để đăng ký nhanh
             </span>
           </div>
         </div>
 
         {/* RIGHT: DOCKED DAY COVERAGE & APPROVAL INSPECTOR PANEL */}
-        <aside className="border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 overflow-hidden">
+        <aside className="border border-[#CBD5E1] dark:border-slate-700 rounded-xl bg-white dark:bg-[#162033] overflow-hidden">
           {/* Selected Date Header */}
-          <div className="px-4 py-3.5 bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+          <div className="px-4 py-3 bg-[#EAF2FA] dark:bg-slate-800 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between gap-2">
             <div>
-              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              <div className="text-[11px] font-medium text-[#475569] dark:text-slate-300">
                 {getWeekdayLabelVN(selectedDayIso)}
                 {selectedDayIso === todayIso ? ' · Hôm nay' : ''}
               </div>
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white tabular-nums">
+              <h4 className="text-sm font-bold text-[#155A9C] dark:text-white tabular-nums">
                 Ngày {formatDateShortVN(selectedDayIso)}
               </h4>
             </div>
@@ -1358,7 +1361,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
             <button
               type="button"
               onClick={() => onOpenCreateModal(selectedDayIso)}
-              className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Đăng ký</span>
@@ -1381,23 +1384,23 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
           {/* Selected Day Absences List */}
           <div className="p-3.5 space-y-2.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-700 dark:text-slate-200">
+              <span className="font-semibold text-[#263445] dark:text-slate-200">
                 Nhân sự nghỉ trong ngày
               </span>
-              <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+              <span className="font-bold text-[#263445] dark:text-white tabular-nums">
                 {selectedDayLeaves.length} lượt
               </span>
             </div>
 
             {selectedDayLeaves.length === 0 ? (
-              <div className="py-7 px-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center space-y-2">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+              <div className="py-6 px-3 rounded-lg border border-dashed border-[#DFE7F0] dark:border-slate-800 text-center space-y-2">
+                <p className="text-xs text-[#718096] dark:text-slate-400">
                   Không có cán bộ đăng ký nghỉ trong ngày {formatDateCompactVN(selectedDayIso)}. Toàn khoa đủ quân số trực.
                 </p>
                 <button
                   type="button"
                   onClick={() => onOpenCreateModal(selectedDayIso)}
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  className="text-xs font-semibold text-[#1976D2] dark:text-blue-400 hover:underline cursor-pointer"
                 >
                   + Tạo đăng ký nghỉ cho ngày này
                 </button>
@@ -1417,7 +1420,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                     <div
                       key={`insp-${leave.id}`}
                       onClick={() => setSelectedLeave(leave)}
-                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 bg-slate-50/50 dark:bg-slate-800/35 space-y-2 cursor-pointer transition-colors"
+                      className="p-3 rounded-lg border border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2] dark:hover:border-blue-700 bg-[#F4F7FB]/60 dark:bg-slate-800/35 space-y-2 cursor-pointer transition-colors"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -1622,14 +1625,14 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                   setExpandedDayIso(null);
                   onOpenCreateModal(dt);
                 }}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Đăng ký thêm
               </button>
               <button
                 type="button"
                 onClick={() => setExpandedDayIso(null)}
-                className="px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer"
+                className="px-3.5 py-2 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-semibold cursor-pointer"
               >
                 Đóng
               </button>
@@ -1645,19 +1648,19 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
           onClick={() => setSelectedLeave(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md shadow-xl overflow-hidden"
+            className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 w-full max-w-md shadow-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-800/60 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/70 text-[#1976D2] dark:text-blue-400 flex items-center justify-center">
                   <CalendarIcon className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  <h4 className="text-sm font-bold text-[#263445] dark:text-white">
                     Chi Tiết Đăng Ký Nghỉ
                   </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-[#718096] dark:text-slate-400">
                     {selectedLeave.leaveType} · {selectedLeave.status}
                   </p>
                 </div>
@@ -1672,11 +1675,11 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
             </div>
 
             <div className="p-5 space-y-3 text-xs">
-              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[#DFE7F0] dark:border-slate-800">
+                <span className="text-[#718096] dark:text-slate-400 flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5" /> Cán bộ đăng ký:
                 </span>
-                <span className="font-bold text-slate-900 dark:text-white text-right">
+                <span className="font-bold text-[#263445] dark:text-white text-right">
                   {selectedLeave.userName} ({selectedLeave.userRole})
                 </span>
               </div>
@@ -1684,27 +1687,27 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
               {(() => {
                 const staff = profileByUserId.get(selectedLeave.userId);
                 return staff?.room || staff?.departmentSection ? (
-                  <div className="flex items-start justify-between gap-3 py-1.5 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[#DFE7F0] dark:border-slate-800">
+                    <span className="text-[#718096] dark:text-slate-400 flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5" /> Phòng / Bộ phận:
                     </span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-right">
+                    <span className="font-semibold text-[#263445] dark:text-slate-200 text-right">
                       {[staff.room, staff.departmentSection].filter(Boolean).join(' · ')}
                     </span>
                   </div>
                 ) : null;
               })()}
 
-              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400">Thời gian nghỉ:</span>
-                <span className="font-bold text-slate-900 dark:text-white tabular-nums text-right">
+              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[#DFE7F0] dark:border-slate-800">
+                <span className="text-[#718096] dark:text-slate-400">Thời gian nghỉ:</span>
+                <span className="font-bold text-[#263445] dark:text-white tabular-nums text-right">
                   {formatDateShortVN(selectedLeave.startDate)} → {formatDateShortVN(selectedLeave.endDate)} ({selectedLeave.totalDays} ngày)
                 </span>
               </div>
 
-              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400">Hình thức nghỉ:</span>
-                <span className="font-semibold text-indigo-700 dark:text-indigo-300 text-right">
+              <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[#DFE7F0] dark:border-slate-800">
+                <span className="text-[#718096] dark:text-slate-400">Hình thức nghỉ:</span>
+                <span className="font-semibold text-[#155A9C] dark:text-blue-300 text-right">
                   {selectedLeave.leaveType}
                 </span>
               </div>

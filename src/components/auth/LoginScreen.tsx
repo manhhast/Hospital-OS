@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  KeyRound, Lock, Eye, EyeOff, ShieldCheck, 
-  RefreshCw, CheckCircle2, AlertCircle, X, HelpCircle, ArrowRight,
-  Search, User as UserIcon, Check, Sparkles, LogIn, Activity,
-  Sun, Moon, Hospital, Building2, UserCheck, RotateCcw,
-  Cloud, CloudOff
+import {
+  Lock, Eye, EyeOff, RefreshCw, X, Search,
+  Activity, Sun, Moon, Cloud, CloudOff, HelpCircle, ChevronRight,
+  ShieldCheck, Microscope, Users
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
 import { User } from '../../types/hospital';
 import { removeVietnameseTones } from '../../services/searchService';
+import loginClsHero from '../../assets/images/login_cls_hero_1795182757386.jpg';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: User) => void;
@@ -28,20 +27,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSearching, setIsSearching] = useState<boolean>(false);
-  
-  // Password fields
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showHelpTip, setShowHelpTip] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [heroImgFailed, setHeroImgFailed] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const pickerContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setUsers(storageService.getUsers());
     setSelectedUserId('');
     setPassword('');
     setSearchQuery('');
+    setErrorMsg('');
     void postgresSyncService.refreshDirectory();
 
     const unsubStorage = storageService.subscribe(() => {
@@ -54,6 +58,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       unsubStorage();
       unsubPg();
     };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pickerContainerRef.current && !pickerContainerRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const effectiveUsers: User[] =
@@ -73,66 +87,66 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         })
       : users;
 
-  const selectedUser = effectiveUsers.find(u => u.id === selectedUserId);
+  const selectedUser = effectiveUsers.find((u) => u.id === selectedUserId) || null;
 
-  // Diacritic-insensitive filtering by staff name and department/title
   const filteredUsers = effectiveUsers.filter((u) => {
-    if (!searchQuery.trim()) return false;
-    const q = removeVietnameseTones(searchQuery);
+    const raw = searchQuery.trim();
+    if (!raw) return true;
+    const q = removeVietnameseTones(raw);
     const nameNorm = removeVietnameseTones(u.name);
     const deptNorm = removeVietnameseTones(u.department || '');
     const titleNorm = removeVietnameseTones(u.title || '');
+    const roleNorm = removeVietnameseTones(u.role || '');
     const phone = u.phone || '';
     return (
       nameNorm.includes(q) ||
       deptNorm.includes(q) ||
       titleNorm.includes(q) ||
+      roleNorm.includes(q) ||
       phone.includes(q)
     );
   });
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'Admin':
-        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800';
-      case 'Doctor':
-        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
-      case 'Manager':
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800';
-      case 'Staff':
-      default:
-        return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
-    }
-  };
-
   const handleSelectStaff = (u: User) => {
     setSelectedUserId(u.id);
-    setSearchQuery(u.name);
-    setIsSearching(false);
+    setSearchQuery('');
+    setIsDropdownOpen(false);
+    setErrorMsg('');
+    window.setTimeout(() => {
+      passwordInputRef.current?.focus();
+    }, 30);
   };
 
   const handleClearSelection = () => {
     setSelectedUserId('');
     setSearchQuery('');
     setPassword('');
-    setIsSearching(false);
-    setTimeout(() => {
+    setErrorMsg('');
+    setIsDropdownOpen(true);
+    window.setTimeout(() => {
       searchInputRef.current?.focus();
-    }, 50);
+    }, 30);
   };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserId) {
-      onShowToast('Chưa chọn cán bộ', 'Vui lòng nhập tên vào ô tìm kiếm và chọn cán bộ nhân viên đăng nhập', 'warning');
+      const msg = 'Vui lòng chọn tài khoản cán bộ trước khi đăng nhập.';
+      setErrorMsg(msg);
+      setIsDropdownOpen(true);
+      onShowToast('Chưa chọn tài khoản', msg, 'warning');
       searchInputRef.current?.focus();
       return;
     }
     if (!password) {
-      onShowToast('Thiếu mật khẩu', 'Vui lòng nhập mật khẩu truy cập (mặc định: 123456)', 'warning');
+      const msg = 'Vui lòng nhập mật khẩu truy cập.';
+      setErrorMsg(msg);
+      onShowToast('Thiếu mật khẩu', msg, 'warning');
+      passwordInputRef.current?.focus();
       return;
     }
 
+    setErrorMsg('');
     setLoading(true);
     void (async () => {
       try {
@@ -143,7 +157,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           onShowToast('Đăng nhập thành công', `Chào mừng ${res.user.name} truy cập hệ thống!`, 'success');
           onLoginSuccess(res.user);
         } else {
-          onShowToast('Đăng nhập thất bại', res.message, 'error');
+          const msg = res.message || 'Thông tin đăng nhập không chính xác.';
+          setErrorMsg(msg);
+          onShowToast('Đăng nhập thất bại', msg, 'error');
         }
       } finally {
         setLoading(false);
@@ -151,371 +167,383 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     })();
   };
 
-  // Condition to show filtered list: user has typed characters and hasn't explicitly locked in a selection or is searching
-  const hasTypedQuery = searchQuery.trim().length > 0;
-  const shouldShowFilteredList = hasTypedQuery && (!selectedUser || isSearching);
-
   return (
-    <div className="min-h-screen w-full flex flex-col justify-between bg-gradient-to-br from-slate-100 via-blue-50/40 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">
-      
-      {/* Top Navigation / Brand Header */}
-      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-slate-200/70 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20 font-black">
-            <Activity className="w-6 h-6 stroke-[2.5]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                BỆNH VIỆN ĐA KHOA SÔNG THƯƠNG
-              </span>
-              <span className="px-1.5 py-0.2 text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded">
-                KHOA CẬN LÂM SÀNG
-              </span>
+    <div className="min-h-screen w-full flex flex-col justify-between bg-[#F4F7FB] dark:bg-[#0b0f19] text-[#263445] dark:text-slate-100 transition-colors duration-200">
+      {/* Clean HIS Top Bar */}
+      <header className="w-full border-b border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 h-14 flex items-center justify-between gap-8">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Activity className="w-4 h-4 stroke-[2.5]" />
             </div>
-            <h1 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white leading-tight">
-              Hệ Thống Điều Hành & Giám Sát Chuyên Môn Y Tế (Hospital OS)
-            </h1>
+            <span className="text-base font-bold tracking-tight text-[#155A9C] dark:text-slate-50 whitespace-nowrap shrink-0">
+              CLS WorkHub
+            </span>
           </div>
-        </div>
 
-        {/* Theme Toggle Button */}
-        <button
-          onClick={onToggleTheme}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-2xs"
-          title="Chuyển đổi giao diện Sáng / Tối"
-        >
-          {isDarkMode ? (
-            <>
-              <Sun className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">Chế độ Sáng</span>
-            </>
-          ) : (
-            <>
-              <Moon className="w-4 h-4 text-indigo-500" />
-              <span className="hidden sm:inline">Chế độ Tối</span>
-            </>
-          )}
-        </button>
+          <div className="hidden md:flex items-center gap-2 text-xs text-[#718096] dark:text-slate-400 whitespace-nowrap">
+            <span>Bệnh viện Đa khoa Sông Thương</span>
+            <span aria-hidden="true">·</span>
+            <span>Khoa Cận Lâm Sàng</span>
+            <span aria-hidden="true">·</span>
+            <span className="font-mono">ISO 15189:2022</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[#DFE7F0] dark:border-slate-700 bg-[#F4F7FB] dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 text-[#263445] dark:text-slate-300 transition-colors cursor-pointer shrink-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#1976D2]"
+            title={isDarkMode ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'}
+            aria-label={isDarkMode ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'}
+          >
+            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-[#155A9C]" />}
+          </button>
+        </div>
       </header>
 
-      {/* Main Login Card Container */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 my-auto">
-        <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-          
-          {/* Card Top Title Banner */}
-          <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-b from-blue-50/60 to-transparent dark:from-blue-950/20 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-3 shadow-xs border border-blue-200/60 dark:border-blue-800/60">
-              <KeyRound className="w-7 h-7" />
-            </div>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              ĐĂNG NHẬP HỆ THỐNG HOSPITAL OS
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-              Nhập tên cán bộ để tìm kiếm và chọn tài khoản truy cập hệ thống
-            </p>
-          </div>
-
-          <div className="p-6 space-y-4">
-            {/* PostgreSQL Server Sync Banner (Zero Google Login) OR Local Storage Mode */}
-            {pgState.configured ? (
-              <div className={`p-3 rounded-2xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
-                pgState.connected
-                  ? 'bg-emerald-50/70 dark:bg-emerald-950/25 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300'
-                  : 'bg-rose-50/70 dark:bg-rose-950/25 border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-300'
-              }`}>
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {pgState.connected ? (
-                    <Cloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  ) : (
-                    <CloudOff className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <div className="font-bold truncate">
-                      {pgState.connected
-                        ? `Đồng bộ PostgreSQL Server (${effectiveUsers.length} tài khoản)`
-                        : 'Lỗi kết nối máy chủ PostgreSQL'}
-                    </div>
-                    <div className="text-[11px] opacity-85">
-                      {pgState.connected
-                        ? 'Đăng nhập bằng tài khoản nội bộ để tự động đồng bộ toàn bộ dữ liệu khoa.'
-                        : pgState.errorMessage || 'Vui lòng kiểm tra cấu hình EXTERNAL_DATABASE_URL.'}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void postgresSyncService.refreshDirectory()}
-                  className="px-2.5 py-1 rounded-xl bg-white/80 dark:bg-slate-800 border border-emerald-300/70 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px] shrink-0 cursor-pointer hover:bg-white"
-                >
-                  Làm mới
-                </button>
-              </div>
+      {/* Main Architectural Split Viewport */}
+      <main className="flex-1 flex items-center justify-center px-4 sm:px-8 py-6 sm:py-8">
+        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-stretch">
+          {/* Left Architectural Hospital Banner (7 cols on desktop) */}
+          <section className="lg:col-span-7 relative rounded-xl overflow-hidden border border-[#DFE7F0] dark:border-slate-800 bg-[#155A9C] min-h-[260px] sm:min-h-[340px] lg:min-h-[520px] flex flex-col justify-end">
+            {!heroImgFailed ? (
+              <img
+                src={loginClsHero}
+                alt="Không gian Khoa Cận Lâm Sàng Bệnh viện Đa khoa Sông Thương"
+                referrerPolicy="no-referrer"
+                onError={() => setHeroImgFailed(true)}
+                className="absolute inset-0 w-full h-full object-cover object-center"
+              />
             ) : (
-              <div className="p-3 rounded-2xl border text-xs flex items-center gap-2.5 bg-slate-50/90 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300">
-                <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                <div className="min-w-0">
-                  <div className="font-bold truncate">
-                    Chế độ Lưu trữ Cục bộ &amp; Sẵn sàng PostgreSQL ({effectiveUsers.length} tài khoản)
-                  </div>
-                  <div className="text-[11px] opacity-80">
-                    Đăng nhập bằng tài khoản nội bộ để làm việc; quản trị viên có thể kết nối PostgreSQL trong Cấu Hình Hệ Thống.
-                  </div>
-                </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-sky-950 to-slate-900 flex items-center justify-center">
+                <Microscope className="w-20 h-20 text-sky-400/20" />
               </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-4 text-xs">
-              
-              {/* Staff Name Search Input */}
-              <div className="space-y-1.5 relative">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-xs">
-                    <UserIcon className="w-4 h-4 text-blue-500" />
-                    <span>Tên cán bộ nhân viên đăng nhập *</span>
-                  </label>
-                  {shouldShowFilteredList && (
-                    <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
-                      Tìm thấy {filteredUsers.length} cán bộ
-                    </span>
-                  )}
+            {/* Measured Scrim ensuring >= 7:1 contrast for foreground copy */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/55 to-slate-950/15" />
+
+            <div className="relative z-10 p-6 sm:p-8 lg:p-10 space-y-6 text-white">
+              <div className="space-y-3 max-w-xl">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-sky-200/90 font-medium">
+                  <span>Bệnh viện Đa khoa Sông Thương</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Khoa Cận Lâm Sàng</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="font-mono">ISO 15189:2022</span>
                 </div>
 
-                {/* Input Field */}
-                <div className="relative flex items-center">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setIsSearching(true);
-                      if (selectedUserId && e.target.value !== selectedUser?.name) {
-                        setSelectedUserId('');
-                      }
-                    }}
-                    onFocus={() => {
-                      if (searchQuery.trim().length > 0) {
-                        setIsSearching(true);
-                      }
-                    }}
-                    placeholder="Nhập họ tên cán bộ để tìm kiếm (vd: An, Mai, Nam, Admin)..."
-                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
-                    autoComplete="off"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={handleClearSelection}
-                      className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                      title="Xóa tìm kiếm"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                <h1
+                  className="text-2xl sm:text-3xl lg:text-[34px] font-bold tracking-tight leading-[1.18] text-white"
+                  style={{ textWrap: 'balance' }}
+                >
+                  Hệ thống Điều hành &amp; Giám sát Chuyên môn Cận Lâm Sàng
+                </h1>
+
+                <p className="text-sm text-slate-200/90 leading-relaxed max-w-lg">
+                  Nền tảng quản trị tập trung cho hoạt động xét nghiệm, chẩn đoán hình ảnh, kiểm định thiết bị y tế và điều phối nhân sự trực theo thời gian thực.
+                </p>
+              </div>
+
+              {/* Clean Architectural Pillars Divider Strip (No Pill Clutter) */}
+              <div className="pt-5 border-t border-white/15 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-xs">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-white">
+                    <Microscope className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                    <span>Báo cáo số ca hằng ngày</span>
+                  </div>
+                  <p className="text-slate-300 leading-snug">
+                    Tổng hợp BHYT, Viện phí &amp; tỷ lệ tăng giảm từng kỹ thuật.
+                  </p>
                 </div>
 
-                {/* FILTERED STAFF LIST (Only visible when typing) */}
-                {shouldShowFilteredList && (
-                  <div className="border border-blue-200/80 dark:border-blue-900/60 rounded-2xl overflow-hidden bg-white dark:bg-slate-800 shadow-xl mt-1.5 animate-in fade-in slide-in-from-top-1 duration-150 z-20">
-                    <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700/60 custom-scrollbar">
-                      {filteredUsers.length === 0 ? (
-                        <div className="py-6 px-4 text-center">
-                          <Search className="w-6 h-6 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
-                          <p className="font-semibold text-slate-600 dark:text-slate-300 text-xs">
-                            Không tìm thấy cán bộ phù hợp
-                          </p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            Không có nhân sự nào khớp với từ khóa "{searchQuery}"
-                          </p>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-white">
+                    <ShieldCheck className="w-3.5 h-3.5 text-teal-300 shrink-0" />
+                    <span>Kiểm định thiết bị 4 chu kỳ</span>
+                  </div>
+                  <p className="text-slate-300 leading-snug">
+                    Cảnh báo sớm hạn hiệu chuẩn, bảo dưỡng &amp; hồ sơ ISO.
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-white">
+                    <Users className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span>Quản lý nhân sự chuyên nghiệp</span>
+                  </div>
+                  <p className="text-slate-300 leading-snug">
+                    Phân quyền theo phạm vi phụ trách, hồ sơ đào tạo, chứng chỉ &amp; lịch trực.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Right Clinical Authentication Panel (5 cols on desktop) */}
+          <section className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 p-6 sm:p-7 flex flex-col justify-between shadow-2xs">
+            <div className="space-y-5">
+              <div className="space-y-1 pb-4 border-b border-[#DFE7F0] dark:border-slate-800">
+                <div className="flex items-center gap-2 text-xs font-semibold text-[#1976D2] dark:text-sky-400">
+                  <span>Cổng xác thực nội bộ HIS</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="tabular-nums font-mono">{effectiveUsers.length} cán bộ</span>
+                </div>
+                <h2 className="text-lg font-bold tracking-tight text-[#263445] dark:text-slate-50">
+                  Đăng nhập hệ thống
+                </h2>
+                <p className="text-xs text-[#718096] dark:text-slate-400 leading-relaxed">
+                  Chọn hồ sơ cán bộ phụ trách và nhập mật khẩu để mở phân quyền tương ứng.
+                </p>
+              </div>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                {/* Staff Combobox / Inline Selected Row */}
+                <div className="space-y-1.5 relative" ref={pickerContainerRef}>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-[#263445] dark:text-slate-200">
+                      Tài khoản cán bộ
+                    </label>
+                    {selectedUser && (
+                      <button
+                        type="button"
+                        onClick={handleClearSelection}
+                        className="text-xs font-semibold text-[#1976D2] hover:text-[#155A9C] dark:text-sky-400 cursor-pointer"
+                      >
+                        Đổi cán bộ
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedUser ? (
+                    <div className="min-h-[46px] px-3 py-2 rounded-lg border border-[#1976D2]/30 dark:border-slate-700 bg-[#EAF4FF] dark:bg-slate-800/70 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {selectedUser.avatar ? (
+                          <img
+                            src={selectedUser.avatar}
+                            alt={selectedUser.name}
+                            referrerPolicy="no-referrer"
+                            className="w-8 h-8 rounded-full object-cover border border-[#1976D2]/30 dark:border-slate-600 shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-[#1976D2] text-white text-xs font-bold flex items-center justify-center shrink-0">
+                            {selectedUser.name.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-[#263445] dark:text-slate-100 truncate leading-tight">
+                            {selectedUser.name}
+                          </div>
+                          <div className="text-xs text-[#718096] dark:text-slate-400 truncate leading-tight mt-0.5">
+                            {selectedUser.role === 'Admin'
+                              ? 'Quản trị hệ thống'
+                              : `${selectedUser.title || selectedUser.role} · ${selectedUser.department || 'Khoa CLS'}`}
+                          </div>
                         </div>
-                      ) : (
-                        filteredUsers.map((u, idx) => {
-                          const isSelected = u.id === selectedUserId;
-                          return (
-                            <div
-                              key={`${u.id}-${idx}`}
-                              onClick={() => handleSelectStaff(u)}
-                              className={`px-3.5 py-2.5 flex items-center justify-between cursor-pointer transition-all ${
-                                isSelected
-                                  ? 'bg-blue-50/90 dark:bg-blue-900/40 border-l-4 border-blue-600 dark:border-blue-400 pl-3'
-                                  : 'hover:bg-blue-50/50 dark:hover:bg-slate-700/60'
-                              }`}
-                            >
-                              <div className="flex items-center space-x-3 min-w-0 pr-2">
-                                <img
-                                  src={u.avatar}
-                                  alt={u.name}
-                                  className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                                  onError={(e) => {
-                                    (e.target as HTMLElement).style.display = 'none';
-                                  }}
-                                />
-                                <div className="min-w-0">
-                                  <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate flex items-center gap-1.5">
-                                    <span>{u.name}</span>
-                                    {isSelected && (
-                                      <span className="text-[9px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-1.5 py-0.2 rounded-full">
-                                        Đã chọn
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                    {u.role === 'Admin'
-                                      ? 'Quản trị ứng dụng & Hệ thống'
-                                      : `${u.title || 'Cán bộ'} • ${u.department || 'Khoa Cận Lâm Sàng'}`}
-                                  </div>
-                                </div>
-                              </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearSelection}
+                        className="p-1.5 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-md hover:bg-white/70 dark:hover:bg-slate-700 transition-colors cursor-pointer shrink-0"
+                        title="Chọn tài khoản khác"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-[#718096] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        value={searchQuery}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setIsDropdownOpen(true);
+                          if (errorMsg) setErrorMsg('');
+                        }}
+                        placeholder="Tìm theo họ tên, chức danh hoặc bộ phận..."
+                        autoComplete="off"
+                        className="w-full h-10 pl-9 pr-9 text-sm bg-white dark:bg-slate-800/80 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 placeholder-[#718096] focus:outline-hidden focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] transition-colors"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            searchInputRef.current?.focus();
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-md cursor-pointer"
+                          title="Xóa từ khóa"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
 
-                              <div className="shrink-0 flex items-center gap-2">
-                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${getRoleBadgeColor(u.role)}`}>
-                                  {u.role}
-                                </span>
-                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
-                                  isSelected 
-                                    ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500' 
-                                    : 'border-slate-300 dark:border-slate-600'
-                                }`}>
-                                  {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                                </div>
+                      {isDropdownOpen && (
+                        <div className="absolute left-0 right-0 mt-1.5 rounded-lg border border-[#DFE7F0] dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg z-30 overflow-hidden">
+                          <div className="max-h-60 overflow-y-auto divide-y divide-[#DFE7F0]/60 dark:divide-slate-700/60 custom-scrollbar">
+                            {filteredUsers.length === 0 ? (
+                              <div className="py-6 px-4 text-center text-xs text-[#718096] dark:text-slate-400">
+                                Không tìm thấy cán bộ phù hợp
                               </div>
-                            </div>
-                          );
-                        })
+                            ) : (
+                              filteredUsers.map((u, idx) => (
+                                <button
+                                  key={`${u.id}-${idx}`}
+                                  type="button"
+                                  onClick={() => handleSelectStaff(u)}
+                                  className="w-full text-left px-3.5 py-2 flex items-center justify-between gap-3 hover:bg-[#EAF4FF] dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    {u.avatar ? (
+                                      <img
+                                        src={u.avatar}
+                                        alt={u.name}
+                                        referrerPolicy="no-referrer"
+                                        className="w-8 h-8 rounded-full object-cover border border-[#DFE7F0] dark:border-slate-600 shrink-0"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="w-8 h-8 rounded-full bg-[#EAF4FF] dark:bg-slate-700 text-[#155A9C] dark:text-slate-300 text-xs font-bold flex items-center justify-center shrink-0">
+                                        {u.name.slice(0, 1).toUpperCase()}
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-semibold text-[#263445] dark:text-slate-100 truncate">
+                                        {u.name}
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                        {u.role === 'Admin'
+                                          ? 'Quản trị hệ thống'
+                                          : `${u.title || 'Cán bộ'} · ${u.department || 'Khoa CLS'}`}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* Selected Staff Card Display */}
-              {selectedUser ? (
-                <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/60 dark:from-blue-950/40 dark:to-indigo-950/30 border border-blue-200/80 dark:border-blue-900/50 flex items-center justify-between shadow-2xs animate-in fade-in duration-150">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="relative shrink-0">
-                      <img
-                        src={selectedUser.avatar}
-                        alt={selectedUser.name}
-                        className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-slate-700 shadow-xs"
-                      />
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900" title="Sẵn sàng đăng nhập"></span>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400 tracking-wider flex items-center gap-1">
-                        <UserCheck className="w-3 h-3" />
-                        <span>Cán bộ đã chọn:</span>
-                      </div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                        {selectedUser.name}
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                        {selectedUser.role === 'Admin'
-                          ? 'Quản trị ứng dụng & Hệ thống'
-                          : `${selectedUser.title || 'Cán bộ'} • ${selectedUser.department || 'Khoa Cận Lâm Sàng'}`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md shadow-2xs ${getRoleBadgeColor(selectedUser.role)}`}>
-                      {selectedUser.role}
-                    </span>
+                {/* Password Input */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      Mật khẩu truy cập
+                    </label>
                     <button
                       type="button"
-                      onClick={handleClearSelection}
-                      className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
-                      title="Chọn cán bộ khác"
+                      onClick={() => setShowHelpTip((prev) => !prev)}
+                      className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>Gợi ý</span>
                     </button>
                   </div>
-                </div>
-              ) : (
-                /* Subtle Guidance when not typed yet */
-                !hasTypedQuery && (
-                  <div className="py-3 px-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>Gợi ý: Gõ một vài ký tự trong tên nhân viên (vd: <em>An</em>, <em>Mai</em>, <em>Nam</em>, <em>Admin</em>...) để hệ thống lọc danh sách.</span>
+
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      ref={passwordInputRef}
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (errorMsg) setErrorMsg('');
+                      }}
+                      placeholder="Nhập mật khẩu bảo mật"
+                      className="w-full h-10 pl-9 pr-10 text-sm bg-white dark:bg-slate-800/80 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 placeholder-[#718096] focus:outline-hidden focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] font-mono transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 cursor-pointer"
+                      title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
-                )
-              )}
 
-              {/* Password Input Field with Eye Toggle */}
-              <div className="space-y-1 pt-1">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-xs">
-                    <Lock className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Mật khẩu truy cập *</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setPassword('123456')}
-                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline flex items-center gap-1"
-                    title="Tự động điền mật khẩu mặc định 123456"
-                  >
-                    <Sparkles className="w-3 h-3 text-amber-500" />
-                    <span>Điền 123456</span>
-                  </button>
+                  {showHelpTip && (
+                    <p className="text-xs text-[#718096] dark:text-slate-400 leading-relaxed pt-0.5">
+                      Mật khẩu khởi tạo mặc định: <span className="font-mono font-semibold text-[#263445] dark:text-slate-300">123456</span> (nhân viên) hoặc <span className="font-mono font-semibold text-[#263445] dark:text-slate-300">admin</span> (quản trị). Vui lòng đổi sau khi đăng nhập.
+                    </p>
+                  )}
+
+                  {errorMsg && (
+                    <p className="text-xs font-medium text-rose-600 dark:text-rose-400 pt-0.5">
+                      {errorMsg}
+                    </p>
+                  )}
                 </div>
 
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="Nhập mật khẩu (mặc định: 123456)"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-hidden font-mono text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                    title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
+                {/* Primary CTA */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-10 px-4 bg-[#1976D2] hover:bg-[#155A9C] dark:bg-[#1976D2] dark:hover:bg-[#155A9C] text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#1976D2] focus-visible:ring-offset-2"
+                >
+                  {loading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <span>Đăng nhập vào hệ thống</span>
+                  )}
+                </button>
+              </form>
+            </div>
 
-              {/* Default Password Hint Notice */}
-              <div className="flex flex-wrap items-center justify-between gap-1 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl px-3.5 py-2.5 text-[11px] text-amber-800 dark:text-amber-300">
-                <div className="flex items-center space-x-1.5">
-                  <HelpCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>Mật khẩu mặc định: <strong className="font-mono font-bold">123456</strong> (Nhân viên) · <strong className="font-mono font-bold">admin</strong> (Quản trị viên)</span>
-                </div>
-                <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 italic">
-                  (Đổi mật khẩu sau khi đăng nhập)
+            {/* Clean Database Synchronization Footer Row */}
+            <div className="mt-5 pt-3.5 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between gap-3 text-xs text-[#718096] dark:text-slate-400">
+              <div className="flex items-center gap-2 min-w-0">
+                {pgState.configured ? (
+                  pgState.connected ? (
+                    <Cloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  ) : (
+                    <CloudOff className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  )
+                ) : (
+                  <Cloud className="w-4 h-4 text-[#718096] shrink-0" />
+                )}
+                <span className="truncate tabular-nums">
+                  {pgState.configured
+                    ? pgState.connected
+                      ? `Đồng bộ PostgreSQL · ${effectiveUsers.length} tài khoản`
+                      : 'Mất kết nối PostgreSQL'
+                    : `Lưu cục bộ · ${effectiveUsers.length} tài khoản`}
                 </span>
               </div>
 
-              {/* Submit Login Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold rounded-xl transition-all shadow-md shadow-blue-500/25 flex items-center justify-center space-x-2 text-xs"
-              >
-                {loading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    <span>Xác nhận Đăng nhập vào Hệ thống</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
+              {pgState.configured && (
+                <button
+                  type="button"
+                  onClick={() => void postgresSyncService.refreshDirectory()}
+                  className="text-[#1976D2] hover:text-[#155A9C] dark:text-sky-400 dark:hover:text-white font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap"
+                  title="Làm mới danh sách tài khoản"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Làm mới</span>
+                </button>
+              )}
+            </div>
+          </section>
         </div>
       </main>
 
-      {/* Footer info */}
-      <footer className="w-full py-4 px-6 text-center text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200/60 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 backdrop-blur-xs">
-        <p>Hệ thống quản lý nội bộ tuân thủ chuẩn ISO 15189:2022 & Tiêu chí chất lượng Bệnh viện Bộ Y Tế</p>
-        <p className="mt-0.5 text-slate-400 dark:text-slate-500 font-mono text-[10px]">Hospital OS • Phiên bản 2.6.4 Clinical Release</p>
+      {/* Clean Institutional Footer */}
+      <footer className="w-full py-3 px-6 border-t border-[#DFE7F0] dark:border-slate-800/60 bg-white dark:bg-slate-900/50 text-center text-xs text-[#718096] dark:text-slate-500">
+        CLS WorkHub · Bệnh viện Đa khoa Sông Thương · Chuẩn quản lý chất lượng ISO 15189:2022
       </footer>
     </div>
   );

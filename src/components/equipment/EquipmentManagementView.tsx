@@ -555,22 +555,22 @@ export const EquipmentManagementView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 w-full">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-sm font-semibold mb-1">
-            <Wrench className="w-4 h-4" /> QUẢN LÝ MÁY MÓC & THIẾT BỊ CẬN LÂM SÀNG
+          <div className="flex items-center gap-2 text-[#1976D2] dark:text-sky-400 text-[11px] font-bold uppercase tracking-wider mb-0.5">
+            <Wrench className="w-3.5 h-3.5" /> QUẢN LÝ MÁY MÓC &amp; THIẾT BỊ CẬN LÂM SÀNG
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Danh Mục Thiết Bị, Máy Chụp & Xét Nghiệm</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <h1 className="text-lg font-bold text-[#263445] dark:text-white leading-tight">Danh Mục Thiết Bị, Máy Chụp &amp; Xét Nghiệm</h1>
+          <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">
             Quản lý hồ sơ lý lịch máy, người phụ trách, thời hạn kiểm định/cấp phép ATBX và toàn bộ nhật ký bảo dưỡng - sửa chữa.
           </p>
         </div>
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <span
             title={`Phạm vi quyền hạn: ${actorAccess.scopeLabel}`}
-            className={`hidden lg:inline-flex px-3 py-1.5 rounded-xl text-xs font-bold items-center gap-1.5 border ${MANAGEMENT_TIER_META[actorAccess.tier].badgeClass}`}
+            className={`hidden lg:inline-flex px-2.5 py-1.5 rounded-lg text-xs font-bold items-center gap-1.5 border ${MANAGEMENT_TIER_META[actorAccess.tier].badgeClass}`}
           >
             <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
             <span>{actorAccess.shortTierLabel}</span>
@@ -583,17 +583,17 @@ export const EquipmentManagementView: React.FC = () => {
                 setDraftDefaults(storageService.getEquipmentDurationDefaults());
                 setShowDurationSettingsModal(true);
               }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F4F7FB] hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] dark:text-slate-200 rounded-lg font-semibold text-xs border border-[#DFE7F0] dark:border-slate-700 transition-colors cursor-pointer"
               title="Cài đặt sẵn thời hạn mặc định cho Giấy phép, Kiểm định, Kiểm xạ, Bảo dưỡng trước khi nhập thiết bị"
             >
-              <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <Sliders className="w-3.5 h-3.5 text-[#1976D2] dark:text-sky-400" />
               <span>Cài Đặt Thời Hạn</span>
             </button>
           )}
           {canCreateAnyEquipment && (
             <button
               onClick={handleOpenAddModal}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold text-xs transition-colors shadow-xs active:scale-[0.99] cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Thêm Thiết Bị Mới
             </button>
@@ -602,62 +602,62 @@ export const EquipmentManagementView: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Tổng Số Máy</p>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalEquipment}</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Toàn khoa CLS</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#718096] dark:text-slate-400">Tổng Số Máy</p>
+            <h3 className="text-2xl font-bold text-[#263445] dark:text-white mt-0.5 tabular-nums">{totalEquipment}</h3>
+            <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">Toàn khoa CLS</p>
           </div>
-          <div className="p-3 bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 rounded-xl">
-            <Layers className="w-6 h-6" />
+          <div className="p-2.5 bg-[#EAF4FF] text-[#1976D2] dark:bg-sky-950/60 dark:text-sky-400 rounded-lg">
+            <Layers className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Đang Vận Hành Tốt</p>
-            <h3 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-1">{activeCount}</h3>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{Math.round((activeCount / (totalEquipment || 1)) * 100)}% công suất</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Đang Vận Hành Tốt</p>
+            <h3 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 tabular-nums">{activeCount}</h3>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">{Math.round((activeCount / (totalEquipment || 1)) * 100)}% công suất</p>
           </div>
-          <div className="p-3 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-xl">
-            <Activity className="w-6 h-6" />
+          <div className="p-2.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-lg">
+            <Activity className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Đến Hạn Bảo Trì / HC</p>
-            <h3 className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-1">{maintenanceNeededCount}</h3>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Cần theo dõi sát</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Đến Hạn Bảo Trì / HC</p>
+            <h3 className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-0.5 tabular-nums">{maintenanceNeededCount}</h3>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Cần theo dõi sát</p>
           </div>
-          <div className="p-3 bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 rounded-xl">
-            <Clock className="w-6 h-6" />
+          <div className="p-2.5 bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 rounded-lg">
+            <Clock className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">Sự Cố Hỏng Hóc</p>
-            <h3 className="text-2xl font-bold text-red-700 dark:text-red-400 mt-1">{brokenCount}</h3>
-            <p className="text-xs text-red-600 dark:text-red-400 mt-1">{brokenCount > 0 ? 'Cần xử lý khẩn' : 'An toàn'}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-red-400">Sự Cố Hỏng Hóc</p>
+            <h3 className="text-2xl font-bold text-rose-700 dark:text-red-400 mt-0.5 tabular-nums">{brokenCount}</h3>
+            <p className="text-xs text-rose-600 dark:text-red-400 mt-0.5">{brokenCount > 0 ? 'Cần xử lý khẩn' : 'An toàn'}</p>
           </div>
-          <div className="p-3 bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 rounded-xl">
-            <AlertTriangle className="w-6 h-6" />
+          <div className="p-2.5 bg-rose-50 text-rose-600 dark:bg-red-950/60 dark:text-red-400 rounded-lg">
+            <AlertTriangle className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* 4-Track Compliance Expiration Strip */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 pr-3 border-r border-slate-200 dark:border-slate-800">
-            <BellRing className={`w-4 h-4 ${compliance.overdueCount + compliance.critical7Count > 0 ? 'text-rose-600' : 'text-indigo-600'}`} />
+          <div className="flex items-center gap-2 pr-3 border-r border-[#DFE7F0] dark:border-slate-800">
+            <BellRing className={`w-4 h-4 ${compliance.overdueCount + compliance.critical7Count > 0 ? 'text-rose-600' : 'text-[#1976D2]'}`} />
             <div>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+              <p className="text-xs font-bold text-[#263445] dark:text-slate-100 uppercase tracking-wider">
                 Kiểm Soát Thời Hạn 4 Chu Kỳ
               </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-[#718096] dark:text-slate-400">
                 Giấy phép &middot; Kiểm định &middot; Kiểm xạ &middot; Bảo dưỡng
               </p>
             </div>
@@ -669,7 +669,7 @@ export const EquipmentManagementView: React.FC = () => {
               setActiveTab('list');
               setDeadlineFilter(deadlineFilter === 'overdue' ? 'all' : 'overdue');
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
               deadlineFilter === 'overdue' && activeTab === 'list'
                 ? 'bg-rose-600 text-white border-rose-600'
                 : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60 hover:bg-rose-100'
@@ -684,7 +684,7 @@ export const EquipmentManagementView: React.FC = () => {
               setActiveTab('list');
               setDeadlineFilter(deadlineFilter === 'within30' ? 'all' : 'within30');
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
               deadlineFilter === 'within30' && activeTab === 'list'
                 ? 'bg-amber-600 text-white border-amber-600'
                 : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100'
@@ -699,16 +699,16 @@ export const EquipmentManagementView: React.FC = () => {
               setActiveTab('list');
               setDeadlineFilter(deadlineFilter === 'within60' ? 'all' : 'within60');
             }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold tabular-nums border transition-colors cursor-pointer ${
               deadlineFilter === 'within60' && activeTab === 'list'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/60 hover:bg-blue-100'
+                ? 'bg-[#1976D2] text-white border-[#1976D2]'
+                : 'bg-[#EAF4FF] text-[#155A9C] border-[#1976D2]/25 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/60 hover:bg-[#EAF4FF]/80'
             }`}
           >
             Theo dõi ≤ 60 ngày ({compliance.alerts.length})
           </button>
 
-          <span className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+          <span className="px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
             Đạt chuẩn: {compliance.compliantEquipmentCount}/{totalEquipment} máy
           </span>
         </div>
@@ -717,7 +717,7 @@ export const EquipmentManagementView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('expirations')}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+            className="px-3 py-1.5 bg-[#F4F7FB] hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] dark:text-slate-100 rounded-lg text-xs font-semibold border border-[#DFE7F0] dark:border-slate-700 transition-colors cursor-pointer"
           >
             Mở bảng chi tiết hạn ({compliance.alerts.length})
           </button>
@@ -725,7 +725,7 @@ export const EquipmentManagementView: React.FC = () => {
             <button
               type="button"
               onClick={handleBatchRemindExpiring}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Nhắc tất cả ≤ 30 ngày</span>
@@ -735,22 +735,22 @@ export const EquipmentManagementView: React.FC = () => {
       </div>
 
       {/* Tabs & Search Filter Divided Into Two Rows */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs overflow-hidden">
         {/* Dòng 1: Thanh Menu / Tabs Chuyên Mục */}
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar p-1 bg-slate-200/70 dark:bg-slate-800/80 rounded-2xl border border-slate-300/80 dark:border-slate-700">
+        <div className="px-3.5 py-2.5 border-b border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar p-1 bg-white dark:bg-slate-800/80 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
             <button
               onClick={() => setActiveTab('list')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'list' 
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.01]' 
-                  : 'bg-white/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-2xs' 
+                  : 'text-[#263445] dark:text-slate-300 hover:text-[#155A9C] hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
-              <Wrench className={`w-3.5 h-3.5 ${activeTab === 'list' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
+              <Wrench className={`w-3.5 h-3.5 ${activeTab === 'list' ? 'text-white' : 'text-[#1976D2] dark:text-sky-400'}`} />
               <span>Danh Sách Máy</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black tabular-nums ${
-                activeTab === 'list' ? 'bg-white/30 text-white' : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold tabular-nums ${
+                activeTab === 'list' ? 'bg-white/25 text-white' : 'bg-[#EAF4FF] dark:bg-sky-950 text-[#155A9C] dark:text-sky-300'
               }`}>
                 {equipmentList.length}
               </span>
@@ -758,16 +758,16 @@ export const EquipmentManagementView: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('expirations')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'expirations' 
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30 scale-[1.01]' 
-                  : 'bg-white/80 dark:bg-slate-800/60 text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 shadow-xs'
+                  ? 'bg-amber-600 text-white shadow-2xs' 
+                  : 'text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40'
               }`}
             >
               <Clock className={`w-3.5 h-3.5 ${activeTab === 'expirations' ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`} />
               <span>Cảnh Báo Thời Hạn</span>
               {compliance.alerts.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black tabular-nums ${
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold tabular-nums ${
                   activeTab === 'expirations' ? 'bg-white text-amber-800' : 'bg-amber-500 text-white'
                 }`}>
                   {compliance.alerts.length}
@@ -777,16 +777,16 @@ export const EquipmentManagementView: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('interlock')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'interlock' 
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30 scale-[1.01]' 
-                  : 'bg-white/80 dark:bg-slate-800/60 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 shadow-xs'
+                  ? 'bg-rose-600 text-white shadow-2xs' 
+                  : 'text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
               }`}
             >
               <ShieldAlert className={`w-3.5 h-3.5 ${activeTab === 'interlock' ? 'text-white' : 'text-rose-600 dark:text-rose-400'}`} />
               <span>Khóa Chéo An Toàn (LOTO)</span>
               {safetyViolations.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                   activeTab === 'interlock' ? 'bg-white text-rose-700' : 'bg-rose-600 text-white animate-pulse'
                 }`}>
                   {safetyViolations.length}
@@ -796,46 +796,46 @@ export const EquipmentManagementView: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('oee')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'oee' 
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.01]' 
-                  : 'bg-white/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-2xs' 
+                  : 'text-[#263445] dark:text-slate-300 hover:text-[#155A9C] hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
-              <Gauge className={`w-3.5 h-3.5 ${activeTab === 'oee' ? 'text-white' : 'text-sky-600 dark:text-sky-400'}`} />
-              <span>Hiệu Suất OEE & MTBF</span>
+              <Gauge className={`w-3.5 h-3.5 ${activeTab === 'oee' ? 'text-white' : 'text-[#1976D2] dark:text-sky-400'}`} />
+              <span>Hiệu Suất OEE &amp; MTBF</span>
             </button>
 
             <button
               onClick={() => setActiveTab('utilization')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'utilization' 
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.01]' 
-                  : 'bg-white/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-2xs' 
+                  : 'text-[#263445] dark:text-slate-300 hover:text-[#155A9C] hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
               <DollarSign className={`w-3.5 h-3.5 ${activeTab === 'utilization' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
-              <span>Khấu Hao & Công Suất Phòng</span>
+              <span>Khấu Hao &amp; Công Suất Phòng</span>
             </button>
 
             <button
               onClick={() => setActiveTab('maintenance')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'maintenance' 
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.01]' 
-                  : 'bg-white/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-2xs' 
+                  : 'text-[#263445] dark:text-slate-300 hover:text-[#155A9C] hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
               <Calendar className={`w-3.5 h-3.5 ${activeTab === 'maintenance' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
-              <span>Lịch Bảo Trì & KĐ</span>
+              <span>Lịch Bảo Trì &amp; KĐ</span>
             </button>
 
             <button
               onClick={() => setActiveTab('repairs')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'repairs' 
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.01]' 
-                  : 'bg-white/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-2xs' 
+                  : 'text-[#263445] dark:text-slate-300 hover:text-[#155A9C] hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
               <FileText className={`w-3.5 h-3.5 ${activeTab === 'repairs' ? 'text-white' : 'text-amber-500 dark:text-amber-400'}`} />
@@ -845,29 +845,29 @@ export const EquipmentManagementView: React.FC = () => {
 
           {/* View Mode Toggle for main tab */}
           {activeTab === 'list' && (
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 self-end sm:self-auto shrink-0">
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-lg border border-[#DFE7F0] dark:border-slate-700 self-end sm:self-auto shrink-0">
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                   viewMode === 'list'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    ? 'bg-[#1976D2] text-white'
+                    : 'text-[#718096] hover:text-[#263445] dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
                 title="Hiển thị dạng danh sách (List view)"
               >
-                <LayoutList className="w-4 h-4" />
+                <LayoutList className="w-3.5 h-3.5" />
                 <span className="text-[11px]">Dạng Bảng List</span>
               </button>
               <button
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                   viewMode === 'grid'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    ? 'bg-[#1976D2] text-white'
+                    : 'text-[#718096] hover:text-[#263445] dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
                 title="Hiển thị dạng thẻ lưới (Grid view)"
               >
-                <LayoutGrid className="w-4 h-4" />
+                <LayoutGrid className="w-3.5 h-3.5" />
                 <span className="text-[11px]">Dạng Thẻ</span>
               </button>
             </div>
@@ -875,22 +875,22 @@ export const EquipmentManagementView: React.FC = () => {
         </div>
 
         {/* Dòng 2: Thanh Tìm Kiếm và Bộ Lọc */}
-        <div className="p-3 md:px-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="p-3 md:px-4 border-b border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
           {/* Ô Tìm Kiếm */}
           <div className="relative flex-1 max-w-lg">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#718096]" />
             <input
               type="text"
               placeholder="Tìm tên máy, mã thiết bị, vị trí phòng, người quản lý..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+              className="w-full pl-9 pr-3 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] outline-none"
             />
           </div>
 
           {/* Bộ Lọc Theo Danh Mục & Trạng Thái */}
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0 font-medium mr-1">
+            <div className="flex items-center gap-1.5 text-xs text-[#718096] shrink-0 font-medium mr-0.5">
               <Filter className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Lọc theo:</span>
             </div>
@@ -898,7 +898,7 @@ export const EquipmentManagementView: React.FC = () => {
             <select
               value={selectedCategory}
               onChange={e => setSelectedCategory(e.target.value)}
-              className="flex-1 sm:flex-none px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+              className="flex-1 sm:flex-none px-2.5 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] outline-none cursor-pointer"
             >
               <option value="all">Tất cả bộ phận</option>
               <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh</option>
@@ -910,7 +910,7 @@ export const EquipmentManagementView: React.FC = () => {
             <select
               value={selectedStatus}
               onChange={e => setSelectedStatus(e.target.value)}
-              className="flex-1 sm:flex-none px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+              className="flex-1 sm:flex-none px-2.5 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] outline-none cursor-pointer"
             >
               <option value="all">Tất cả trạng thái</option>
               <option value="Hoạt động tốt">Hoạt động tốt</option>
@@ -924,10 +924,10 @@ export const EquipmentManagementView: React.FC = () => {
                 type="button"
                 onClick={() => setScopeOnlyFilter(prev => !prev)}
                 title="Chỉ hiển thị thiết bị thuộc phạm vi bạn quản lý"
-                className={`px-2.5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 border shrink-0 cursor-pointer ${
                   scopeOnlyFilter
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                    ? 'bg-[#1976D2] text-white border-[#1976D2]'
+                    : 'bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 border-[#DFE7F0] dark:border-slate-700 hover:bg-[#EAF4FF]'
                 }`}
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
@@ -944,7 +944,7 @@ export const EquipmentManagementView: React.FC = () => {
                   setDeadlineFilter('all');
                   setScopeOnlyFilter(false);
                 }}
-                className="px-2.5 py-2 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/30 rounded-xl transition-colors shrink-0"
+                className="px-2.5 py-1.5 text-xs font-medium text-[#718096] hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-[#F4F7FB] hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/30 rounded-lg transition-colors shrink-0 border border-[#DFE7F0] dark:border-slate-700"
                 title="Xóa tất cả bộ lọc"
               >
                 Xóa lọc
@@ -958,38 +958,38 @@ export const EquipmentManagementView: React.FC = () => {
           <div>
             {viewMode === 'list' ? (
               /* DẠNG LIST / TABLE BẢNG CHI TIẾT */
-              <div className="overflow-x-auto rounded-xl border-2 border-slate-300 dark:border-slate-700 shadow-sm bg-white dark:bg-slate-900">
-                <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300 border-collapse">
-                  <thead className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold uppercase tracking-wider text-[11px] border-b-2 border-slate-300 dark:border-slate-700">
+              <div className="overflow-x-auto bg-white dark:bg-slate-900">
+                <table className="w-full text-left text-xs text-[#263445] dark:text-slate-300 border-collapse">
+                  <thead className="bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-100 font-bold uppercase tracking-wider text-[11px] border-b border-[#DFE7F0] dark:border-slate-700">
                     <tr>
-                      <th className="py-3.5 px-4 border-r border-slate-200 dark:border-slate-700/80 min-w-[215px]">
+                      <th className="py-2.5 px-3.5 border-r border-[#DFE7F0] dark:border-slate-700/80 min-w-[215px]">
                         <div className="leading-tight">Mã &amp; Tên<br/>Thiết Bị</div>
                       </th>
-                      <th className="py-3.5 px-3.5 border-r border-slate-200 dark:border-slate-700/80 min-w-[195px]">
+                      <th className="py-2.5 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 min-w-[195px]">
                         <div className="leading-tight">Phòng &amp;<br/>Bộ Phận</div>
                       </th>
-                      <th className="py-3.5 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[155px]">Model / Hãng SX</th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[165px]">
+                      <th className="py-2.5 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 min-w-[155px]">Model / Hãng SX</th>
+                      <th className="py-2.5 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 min-w-[165px]">
                         <div className="leading-tight">Người<br/>Quản Lý</div>
                       </th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[115px]">
+                      <th className="py-2.5 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 min-w-[115px]">
                         <div className="leading-tight">Lịch<br/>Bảo Dưỡng</div>
                       </th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[135px]">
+                      <th className="py-2.5 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 min-w-[135px]">
                         <div className="leading-tight">Kiểm Định<br/>&amp; Kiểm Xạ</div>
                       </th>
-                      <th className="py-3 px-3 border-r border-slate-200 dark:border-slate-700/80 min-w-[135px]">
+                      <th className="py-2.5 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 min-w-[135px]">
                         <div className="leading-tight">Thời Hạn<br/>Cấp Phép</div>
                       </th>
-                      <th className="py-3 px-1 text-center w-12 whitespace-nowrap">
+                      <th className="py-2.5 px-1 text-center w-12 whitespace-nowrap">
                         <div className="leading-tight text-[10px]">Thao<br/>Tác</div>
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y-[2px] divide-slate-300 dark:divide-slate-700 bg-white dark:bg-slate-900">
+                  <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-700 bg-white dark:bg-slate-900">
                     {filteredList.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                        <td colSpan={8} className="py-12 text-center text-[#718096] dark:text-slate-500">
                           Không tìm thấy thiết bị nào phù hợp với điều kiện tìm kiếm.
                         </td>
                       </tr>
@@ -1005,12 +1005,12 @@ export const EquipmentManagementView: React.FC = () => {
                         return (
                           <tr 
                             key={item.id} 
-                            className={`hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40 transition-colors group even:bg-slate-50/70 dark:even:bg-slate-800/40 border-b-[3px] border-slate-300 dark:border-slate-700 ${
+                            className={`hover:bg-[#EAF4FF]/70 dark:hover:bg-sky-950/30 transition-colors group even:bg-[#F4F7FB]/50 dark:even:bg-slate-800/30 ${
                               item.isLockedOut ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''
                             }`}
                           >
                             {/* Mã & Tên máy (Mã ở trên, Tên máy ở dưới) */}
-                            <td className="py-4 px-4 border-r-2 border-slate-200 dark:border-slate-700/80">
+                            <td className="py-3 px-3.5 border-r border-[#DFE7F0] dark:border-slate-700/80">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono uppercase border border-slate-300 dark:border-slate-700">
@@ -1034,13 +1034,13 @@ export const EquipmentManagementView: React.FC = () => {
                                 <div>
                                   <button
                                     onClick={() => setDetailEquipment(item)}
-                                    className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 text-left transition-colors flex items-start gap-1 group-hover:underline text-xs leading-snug"
+                                    className="font-bold text-[#263445] dark:text-white hover:text-[#1976D2] dark:hover:text-sky-400 text-left transition-colors flex items-start gap-1 group-hover:underline text-xs leading-snug"
                                     title="Nhấn để xem toàn bộ hồ sơ lý lịch máy, người quản lý, hạn kiểm định và nhật ký"
                                   >
                                     <span>{item.name}</span>
-                                    <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+                                    <ArrowUpRight className="w-3.5 h-3.5 text-[#1976D2] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
                                   </button>
-                                  <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                  <div className="text-[11px] text-[#718096] dark:text-slate-500 mt-0.5">
                                     S/N: {item.serialNumber} • Ngày nhập: {formatDateVN(item.purchaseDate || item.installationDate)}
                                   </div>
                                 </div>
@@ -1048,14 +1048,14 @@ export const EquipmentManagementView: React.FC = () => {
                             </td>
 
                             {/* Vị trí phòng & bộ phận */}
-                            <td className="py-4 px-3.5 border-r-2 border-slate-200 dark:border-slate-700/80 align-middle">
+                            <td className="py-3 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 align-middle">
                               {(() => {
                                 const roomDisplay = resolveRoomDisplay(item.room, roomsList);
                                 return (
-                                  <div className="space-y-1.5">
+                                  <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       {roomDisplay.code && (
-                                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap shrink-0">
+                                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#EAF4FF] dark:bg-sky-950/80 text-[#155A9C] dark:text-sky-300 border border-[#1976D2]/25 dark:border-sky-800 whitespace-nowrap shrink-0">
                                           {roomDisplay.code}
                                         </span>
                                       )}
@@ -1074,25 +1074,25 @@ export const EquipmentManagementView: React.FC = () => {
                             </td>
 
                             {/* Model & Hãng */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80">
-                              <div className="font-medium text-slate-800 dark:text-slate-200">{item.model}</div>
-                              <div className="text-[11px] text-slate-400 dark:text-slate-500">{item.manufacturer} ({item.originCountry || 'Chính hãng'})</div>
+                            <td className="py-3 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80">
+                              <div className="font-medium text-[#263445] dark:text-slate-200">{item.model}</div>
+                              <div className="text-[11px] text-[#718096] dark:text-slate-500">{item.manufacturer} ({item.originCountry || 'Chính hãng'})</div>
                             </td>
 
                             {/* Người quản lý & KTV */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80">
+                            <td className="py-3 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80">
                               {(() => {
                                 const activeManager = filterActiveStaffDisplayName(item.managerInCharge, inactiveStaff.names);
                                 const activeTech = filterActiveStaffDisplayName(item.assignedTechnician, inactiveStaff.names);
                                 return (
                                   <>
-                                    <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-start gap-1 leading-snug">
+                                    <div className="font-semibold text-[#263445] dark:text-slate-200 flex items-start gap-1 leading-snug">
                                       <User className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
                                       <span className="break-words">
                                         {activeManager || 'Chưa chỉ định'}
                                       </span>
                                     </div>
-                                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-snug break-words">
+                                    <div className="text-[11px] text-[#718096] dark:text-slate-500 mt-1 leading-snug break-words">
                                       KTV: {activeTech || 'Chưa phân công'}
                                     </div>
                                   </>
@@ -1101,15 +1101,15 @@ export const EquipmentManagementView: React.FC = () => {
                             </td>
 
                             {/* Lịch Bảo Dưỡng */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80 tabular-nums">
+                            <td className="py-3 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 tabular-nums">
                               {(() => {
                                 const maintDays = getDaysDiffFromTodayVN(item.nextMaintenanceDate);
                                 return (
                                   <div className="space-y-0.5">
-                                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                    <div className="text-[11px] font-bold text-[#718096] dark:text-slate-300">
                                       Lịch BD:
                                     </div>
-                                    <div className={`text-xs font-bold ${isOverdueMaint ? 'text-red-600 dark:text-red-400' : maintDays !== null && maintDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                    <div className={`text-xs font-bold ${isOverdueMaint ? 'text-red-600 dark:text-red-400' : maintDays !== null && maintDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-[#263445] dark:text-slate-200'}`}>
                                       {formatDateVN(item.nextMaintenanceDate)}
                                     </div>
                                     {maintDays !== null && maintDays <= 60 ? (
@@ -1123,7 +1123,7 @@ export const EquipmentManagementView: React.FC = () => {
                                         {formatDaysRemainingLabel(maintDays)}
                                       </span>
                                     ) : (
-                                      <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                      <div className="text-[10px] text-[#718096] dark:text-slate-500 mt-0.5">
                                         CK {item.maintenanceIntervalMonths}T
                                       </div>
                                     )}
@@ -1133,7 +1133,7 @@ export const EquipmentManagementView: React.FC = () => {
                             </td>
 
                             {/* Cột 6: Kiểm Định & Kiểm Xạ */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80 tabular-nums">
+                            <td className="py-3 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 tabular-nums">
                               {(() => {
                                 const calibDays = getDaysDiffFromTodayVN(item.calibrationExpiry);
                                 const radDays = getDaysDiffFromTodayVN(radExpiryValue);
@@ -1141,10 +1141,10 @@ export const EquipmentManagementView: React.FC = () => {
                                   <div className="space-y-1.5">
                                     {/* Hạn Kiểm Định */}
                                     <div className="space-y-0.5">
-                                      <div className="text-[11px] font-bold text-sky-700 dark:text-sky-300 flex items-center gap-1">
+                                      <div className="text-[11px] font-bold text-[#155A9C] dark:text-sky-300 flex items-center gap-1">
                                         <span>🔬 Hạn KĐ:</span>
                                       </div>
-                                      <div className={`text-xs font-bold ${isOverdueCalib ? 'text-red-600 dark:text-red-400' : calibDays !== null && calibDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                      <div className={`text-xs font-bold ${isOverdueCalib ? 'text-red-600 dark:text-red-400' : calibDays !== null && calibDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-[#263445] dark:text-slate-200'}`}>
                                         {formatDateVN(item.calibrationExpiry, 'Hàng năm')}
                                       </div>
                                       {calibDays !== null && calibDays <= 60 && (
@@ -1161,17 +1161,17 @@ export const EquipmentManagementView: React.FC = () => {
                                     </div>
 
                                     {/* Hạn Kiểm Xạ */}
-                                    <div className="pt-1 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
+                                    <div className="pt-1 border-t border-[#DFE7F0] dark:border-slate-800 space-y-0.5">
                                       <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
                                         <span>☢️ Hạn KX:</span>
                                       </div>
                                       <div className="text-xs font-bold">
                                         {radExpiryValue ? (
-                                          <span className={isOverdueRad ? 'text-red-600 dark:text-red-400' : radDays !== null && radDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}>
+                                          <span className={isOverdueRad ? 'text-red-600 dark:text-red-400' : radDays !== null && radDays <= 30 ? 'text-amber-700 dark:text-amber-400' : 'text-[#263445] dark:text-slate-200'}>
                                             {formatDateVN(radExpiryValue)}
                                           </span>
                                         ) : (
-                                          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal italic">K.áp dụng</span>
+                                          <span className="text-[11px] text-[#718096] dark:text-slate-500 font-normal italic">K.áp dụng</span>
                                         )}
                                       </div>
                                       {radExpiryValue && radDays !== null && radDays <= 60 && (
@@ -1192,7 +1192,7 @@ export const EquipmentManagementView: React.FC = () => {
                             </td>
 
                             {/* Cột 7: Thời Hạn Cấp Phép */}
-                            <td className="py-4 px-3 border-r-2 border-slate-200 dark:border-slate-700/80 tabular-nums">
+                            <td className="py-3 px-3 border-r border-[#DFE7F0] dark:border-slate-700/80 tabular-nums">
                               {(() => {
                                 const permitDate = item.operatingPermitExpiry || item.radiationLicenseExpiry;
                                 const permitDays = getDaysDiffFromTodayVN(permitDate);
@@ -1244,7 +1244,7 @@ export const EquipmentManagementView: React.FC = () => {
                                 <div className="relative group/tip">
                                   <button
                                     onClick={() => setDetailEquipment(item)}
-                                    className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white dark:bg-indigo-950/60 dark:hover:bg-indigo-600 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 transition-all shadow-2xs hover:shadow-xs active:scale-90"
+                                    className="p-1.5 rounded-lg bg-[#EAF4FF] hover:bg-[#1976D2] text-[#1976D2] hover:text-white dark:bg-sky-950/60 dark:hover:bg-[#1976D2] dark:text-sky-300 border border-[#1976D2]/25 dark:border-sky-800/60 transition-colors active:scale-90 cursor-pointer"
                                     title="Hồ Sơ Máy"
                                     aria-label="Hồ Sơ Máy"
                                   >
@@ -1325,13 +1325,13 @@ export const EquipmentManagementView: React.FC = () => {
               </div>
             ) : (
               /* DẠNG GRID THẺ */
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredList.map(item => {
                   const oee = calculateEquipmentOEE(item);
                   return (
                     <div 
                       key={item.id} 
-                      className={`bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:shadow-lg transition-all p-5 flex flex-col justify-between space-y-4 shadow-sm ${
+                      className={`bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 hover:border-[#1976D2] dark:hover:border-sky-400 hover:shadow-md transition-all p-4 flex flex-col justify-between space-y-3 shadow-2xs ${
                         item.isLockedOut ? 'ring-2 ring-rose-500 bg-rose-50/20 dark:bg-rose-950/20' : ''
                       }`}
                     >
@@ -1339,7 +1339,7 @@ export const EquipmentManagementView: React.FC = () => {
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase tracking-wider border border-slate-300 dark:border-slate-700">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 uppercase tracking-wider border border-[#DFE7F0] dark:border-slate-700">
                                 {item.code}
                               </span>
                               {item.isLockedOut ? (
@@ -1361,7 +1361,7 @@ export const EquipmentManagementView: React.FC = () => {
                               onClick={() => setDetailEquipment(item)}
                               className="text-left block mt-1"
                             >
-                              <h3 className="text-base font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-2">
+                              <h3 className="text-sm font-bold text-[#263445] dark:text-white hover:text-[#1976D2] dark:hover:text-sky-400 transition-colors line-clamp-2">
                                 {item.name}
                               </h3>
                             </button>
@@ -1369,19 +1369,19 @@ export const EquipmentManagementView: React.FC = () => {
                           {getStatusBadge(item.status)}
                         </div>
 
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        <p className="text-xs text-[#718096] dark:text-slate-400 font-medium">
                           {item.manufacturer} ({item.originCountry || 'Đức'}) • Model: {item.model}
                         </p>
 
-                        <div className="mt-4 space-y-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <div className="mt-3 space-y-1.5 text-xs text-[#263445] dark:text-slate-300 bg-[#F4F7FB] dark:bg-slate-800/50 p-3 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
                           <div className="flex items-start justify-between gap-2">
-                            <span className="text-slate-400 dark:text-slate-500 shrink-0">Vị trí phòng:</span>
+                            <span className="text-[#718096] dark:text-slate-500 shrink-0">Vị trí phòng:</span>
                             {(() => {
                               const roomDisplay = resolveRoomDisplay(item.room, roomsList);
                               return (
-                                <span className="font-semibold text-slate-800 dark:text-slate-200 text-right flex items-center justify-end gap-1.5 flex-wrap">
+                                <span className="font-semibold text-[#263445] dark:text-slate-200 text-right flex items-center justify-end gap-1.5 flex-wrap">
                                   {roomDisplay.code && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#EAF4FF] dark:bg-sky-950/80 text-[#155A9C] dark:text-sky-300 border border-[#1976D2]/25 dark:border-sky-800 whitespace-nowrap">
                                       {roomDisplay.code}
                                     </span>
                                   )}
@@ -1429,12 +1429,12 @@ export const EquipmentManagementView: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+                      <div className="pt-2.5 border-t border-[#DFE7F0] dark:border-slate-800 flex flex-col gap-2">
                         <button
                           onClick={() => setDetailEquipment(item)}
-                          className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold text-center transition-all inline-flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95"
+                          className="w-full py-2 px-3 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold text-center transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
                           <span>Xem Toàn Bộ Hồ Sơ Máy</span>
                         </button>
                         {(canManageEquipmentTarget(actorAccess, 'maintenance', item, roomsList, departmentsList) ||
@@ -1484,14 +1484,14 @@ export const EquipmentManagementView: React.FC = () => {
 
         {/* Tab Content: Cảnh Báo Thời Hạn Thiết Bị (60 ngày & Quá hạn) */}
         {activeTab === 'expirations' && (
-          <div className="p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800">
+          <div className="p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#DFE7F0] dark:border-slate-800">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm font-bold text-[#263445] dark:text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
                   <span>Danh Sách Cảnh Báo Thời Hạn Pháp Lý &amp; Bảo Dưỡng (Trong 60 Ngày &amp; Quá Hạn)</span>
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">
                   Theo dõi tập trung 4 mốc: Giấy phép hoạt động, Kiểm định ISO 15189, Kiểm xạ ATBX và Bảo dưỡng định kỳ.
                 </p>
               </div>
@@ -1499,7 +1499,7 @@ export const EquipmentManagementView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleBatchRemindExpiring}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  className="px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Gửi nhắc tất cả ≤ 30 ngày</span>
@@ -1508,7 +1508,7 @@ export const EquipmentManagementView: React.FC = () => {
             </div>
 
             {compliance.alerts.length === 0 ? (
-              <div className="p-10 text-center bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-2xl space-y-2">
+              <div className="p-8 text-center bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl space-y-2">
                 <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-600" />
                 <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
                   Toàn bộ thiết bị đều còn hiệu lực trên 60 ngày!
@@ -1518,62 +1518,62 @@ export const EquipmentManagementView: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="overflow-x-auto rounded-lg border border-[#DFE7F0] dark:border-slate-800">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 uppercase font-bold text-[11px] border-b border-slate-200 dark:border-slate-700">
+                  <thead className="bg-[#F4F7FB] dark:bg-slate-800/80 text-[#263445] dark:text-slate-300 uppercase font-bold text-[11px] border-b border-[#DFE7F0] dark:border-slate-700">
                     <tr>
-                      <th className="py-3 px-4">Mức Độ &amp; Còn Lại</th>
-                      <th className="py-3 px-4">Thiết Bị &amp; Phòng</th>
-                      <th className="py-3 px-4">Hạng Mục Thời Hạn</th>
-                      <th className="py-3 px-4">Ngày Hết Hạn</th>
-                      <th className="py-3 px-4">Phụ Trách</th>
-                      <th className="py-3 px-4 text-right">Hành Động Nhanh</th>
+                      <th className="py-2.5 px-3.5">Mức Độ &amp; Còn Lại</th>
+                      <th className="py-2.5 px-3.5">Thiết Bị &amp; Phòng</th>
+                      <th className="py-2.5 px-3.5">Hạng Mục Thời Hạn</th>
+                      <th className="py-2.5 px-3.5">Ngày Hết Hạn</th>
+                      <th className="py-2.5 px-3.5">Phụ Trách</th>
+                      <th className="py-2.5 px-3.5 text-right">Hành Động Nhanh</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                  <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-800 bg-white dark:bg-slate-900">
                     {compliance.alerts.map((al) => {
                       const eqObj = equipmentList.find((e) => e.id === al.equipmentId);
                       const rInfo = getEquipmentReminderInfo(al.id);
                       const isOverdue = al.daysRemaining < 0;
                       const isCritical = al.daysRemaining >= 0 && al.daysRemaining <= 7;
                       return (
-                        <tr key={al.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3 px-4 tabular-nums whitespace-nowrap">
+                        <tr key={al.id} className="hover:bg-[#EAF4FF]/60 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-2.5 px-3.5 tabular-nums whitespace-nowrap">
                             <span
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ${
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
                                 isOverdue
                                   ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-900'
                                   : isCritical
                                   ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-900'
                                   : al.daysRemaining <= 30
                                   ? 'bg-amber-50/60 text-amber-700 border-amber-200/80 dark:bg-amber-950/30 dark:text-amber-300'
-                                  : 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900'
+                                  : 'bg-[#EAF4FF] text-[#155A9C] border-[#1976D2]/25 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900'
                               }`}
                             >
                               {formatDaysRemainingLabel(al.daysRemaining)}
                             </span>
                           </td>
-                          <td className="py-3 px-4">
-                            <div className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                          <td className="py-2.5 px-3.5">
+                            <div className="font-mono text-[11px] font-bold text-[#1976D2] dark:text-sky-400">
                               {al.equipmentCode}
                             </div>
-                            <div className="font-bold text-slate-900 dark:text-slate-100">{al.equipmentName}</div>
-                            <div className="text-[11px] text-slate-500">{al.room}</div>
+                            <div className="font-bold text-[#263445] dark:text-slate-100">{al.equipmentName}</div>
+                            <div className="text-[11px] text-[#718096]">{al.room}</div>
                           </td>
-                          <td className="py-3 px-4">
-                            <div className="font-semibold text-slate-800 dark:text-slate-200">{al.trackLabel}</div>
+                          <td className="py-2.5 px-3.5">
+                            <div className="font-semibold text-[#263445] dark:text-slate-200">{al.trackLabel}</div>
                             {al.referenceNumber && (
-                              <div className="text-[11px] font-mono text-slate-400">Số HS: {al.referenceNumber}</div>
+                              <div className="text-[11px] font-mono text-[#718096]">Số HS: {al.referenceNumber}</div>
                             )}
                           </td>
-                          <td className="py-3 px-4 font-bold tabular-nums text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 font-bold tabular-nums text-[#263445] dark:text-slate-100 whitespace-nowrap">
                             {al.expiryDateVN}
                           </td>
-                          <td className="py-3 px-4">
-                            <div className="font-medium text-slate-800 dark:text-slate-200">
+                          <td className="py-2.5 px-3.5">
+                            <div className="font-medium text-[#263445] dark:text-slate-200">
                               {filterActiveStaffDisplayName(al.assignedTechnician, inactiveStaff.names) || 'Chưa phân công'}
                             </div>
-                            <div className="text-[11px] text-slate-400">
+                            <div className="text-[11px] text-[#718096]">
                               {filterActiveStaffDisplayName(al.managerInCharge, inactiveStaff.names) || 'Chưa chỉ định'}
                             </div>
                             {rInfo && (
@@ -1582,14 +1582,14 @@ export const EquipmentManagementView: React.FC = () => {
                               </div>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5">
                               {eqObj && (canManageEquipmentTarget(actorAccess, 'edit', eqObj, roomsList, departmentsList) ||
                                 canManageEquipmentTarget(actorAccess, 'maintenance', eqObj, roomsList, departmentsList)) && (
                                 <button
                                   type="button"
                                   onClick={() => handleCreateAlertTask(al)}
-                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-600 rounded-lg text-[11px] font-bold border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  className="px-2.5 py-1 bg-[#EAF4FF] hover:bg-[#1976D2] text-[#155A9C] hover:text-white dark:bg-sky-950/50 dark:text-sky-300 dark:hover:bg-[#1976D2] rounded-lg text-[11px] font-semibold border border-[#1976D2]/25 dark:border-sky-800 transition-colors cursor-pointer inline-flex items-center gap-1"
                                   title="Tạo công việc xử lý & gán ngày hạn tự động"
                                 >
                                   <CheckSquare className="w-3.5 h-3.5" />
@@ -1600,7 +1600,7 @@ export const EquipmentManagementView: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleSendAlertReminder(al)}
-                                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-600 rounded-lg text-[11px] font-bold border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  className="px-2.5 py-1 bg-[#EAF4FF] hover:bg-[#1976D2] text-[#155A9C] hover:text-white dark:bg-sky-950/50 dark:text-sky-300 dark:hover:bg-[#1976D2] rounded-lg text-[11px] font-semibold border border-[#1976D2]/25 dark:border-sky-800 transition-colors cursor-pointer inline-flex items-center gap-1"
                                   title="Gửi nhắc nhở qua Telegram/In-App"
                                 >
                                   <Send className="w-3.5 h-3.5" />
@@ -1655,18 +1655,18 @@ export const EquipmentManagementView: React.FC = () => {
 
         {/* Tab Content: Maintenance Schedule & History */}
         {activeTab === 'maintenance' && (
-          <div className="p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Lịch Trình Bảo Trì Định Kỳ & Kiểm Định Máy Móc</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Nhấn vào tên máy để xem toàn bộ lịch sử biên bản bảo trì kỹ thuật.</p>
+                <h3 className="text-sm font-bold text-[#263445] dark:text-white">Lịch Trình Bảo Trì Định Kỳ &amp; Kiểm Định Máy Móc</h3>
+                <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">Nhấn vào tên máy để xem toàn bộ lịch sử biên bản bảo trì kỹ thuật.</p>
               </div>
             </div>
-            <div className="overflow-x-auto border-2 border-slate-300 dark:border-slate-700 rounded-xl">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider text-[11px] border-b-2 border-slate-300 dark:border-slate-700">
+            <div className="overflow-x-auto border border-[#DFE7F0] dark:border-slate-700 rounded-lg">
+              <table className="w-full text-left text-xs text-[#263445] dark:text-slate-300">
+                <thead className="bg-[#F4F7FB] dark:bg-slate-800/80 text-[#263445] dark:text-slate-300 font-bold uppercase tracking-wider text-[11px] border-b border-[#DFE7F0] dark:border-slate-700">
                   <tr>
-                    <th className="p-3">Mã & Tên Thiết Bị</th>
+                    <th className="p-3">Mã &amp; Tên Thiết Bị</th>
                     <th className="p-3">Vị Trí Phòng</th>
                     <th className="p-3">Chu Kỳ BD</th>
                     <th className="p-3">Lần Bảo Trì Cuối</th>
@@ -1675,25 +1675,25 @@ export const EquipmentManagementView: React.FC = () => {
                     <th className="p-3 text-right">Thao Tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y-2 divide-slate-300 dark:divide-slate-700 bg-white dark:bg-slate-900">
+                <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-700 bg-white dark:bg-slate-900">
                   {equipmentList.map(item => {
                     const isOverdue = isDatePastVN(item.nextMaintenanceDate);
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <tr key={item.id} className="hover:bg-[#EAF4FF]/60 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="p-3">
                           <button
                             onClick={() => setDetailEquipment(item)}
-                            className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 text-left transition-colors block"
+                            className="font-bold text-[#263445] dark:text-white hover:text-[#1976D2] dark:hover:text-sky-400 text-left transition-colors block cursor-pointer"
                           >
                             {item.name}
                           </button>
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500">{item.code} - {item.model}</div>
+                          <div className="text-[11px] text-[#718096] dark:text-slate-500">{item.code} - {item.model}</div>
                         </td>
-                        <td className="p-3 font-medium text-slate-700 dark:text-slate-300">{item.room}</td>
-                        <td className="p-3 text-slate-600 dark:text-slate-400">{item.maintenanceIntervalMonths} tháng/lần</td>
-                        <td className="p-3 text-slate-600 dark:text-slate-400">{formatDateVN(item.lastMaintenanceDate)}</td>
+                        <td className="p-3 font-medium text-[#263445] dark:text-slate-300">{item.room}</td>
+                        <td className="p-3 text-[#718096] dark:text-slate-400">{item.maintenanceIntervalMonths} tháng/lần</td>
+                        <td className="p-3 text-[#718096] dark:text-slate-400">{formatDateVN(item.lastMaintenanceDate)}</td>
                         <td className="p-3">
-                          <span className={`font-bold ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-200'}`}>
+                          <span className={`font-bold ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-[#263445] dark:text-slate-200'}`}>
                             {formatDateVN(item.nextMaintenanceDate)} {isOverdue && '⚠️ Quá hạn'}
                           </span>
                         </td>
@@ -1701,7 +1701,7 @@ export const EquipmentManagementView: React.FC = () => {
                         <td className="p-3 text-right space-x-2">
                           <button
                             onClick={() => setDetailEquipment(item)}
-                            className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-md font-semibold text-xs"
+                            className="px-2.5 py-1 bg-[#F4F7FB] dark:bg-slate-800 hover:bg-[#EAF4FF] text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 rounded-md font-semibold text-xs cursor-pointer"
                           >
                             Lý lịch máy
                           </button>
@@ -1711,7 +1711,7 @@ export const EquipmentManagementView: React.FC = () => {
                                 setSelectedItem(item);
                                 setShowMaintenanceModal(true);
                               }}
-                              className="px-3 py-1 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-md font-semibold text-xs transition-all"
+                              className="px-3 py-1 bg-[#EAF4FF] text-[#155A9C] dark:bg-sky-950 dark:text-sky-300 hover:bg-[#1976D2] hover:text-white border border-[#1976D2]/25 rounded-md font-semibold text-xs transition-colors cursor-pointer"
                             >
                               Cập nhật bảo trì
                             </button>
@@ -1728,29 +1728,29 @@ export const EquipmentManagementView: React.FC = () => {
 
         {/* Tab Content: Repair Logs */}
         {activeTab === 'repairs' && (
-          <div className="p-6 space-y-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Nhật Ký Ghi Nhận Sự Cố & Chi Phí Sửa Chữa Toàn Bộ Thiết Bị</h3>
-            <div className="space-y-3">
+          <div className="p-4 space-y-3.5">
+            <h3 className="text-sm font-bold text-[#263445] dark:text-white">Nhật Ký Ghi Nhận Sự Cố &amp; Chi Phí Sửa Chữa Toàn Bộ Thiết Bị</h3>
+            <div className="space-y-2.5">
               {equipmentList.flatMap(e => (e.repairHistory || [])).length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl">Chưa có sự cố hư hỏng nào được ghi nhận.</p>
+                <p className="text-sm text-[#718096] dark:text-slate-400 py-8 text-center bg-[#F4F7FB] dark:bg-slate-800/40 rounded-lg border border-[#DFE7F0] dark:border-slate-800">Chưa có sự cố hư hỏng nào được ghi nhận.</p>
               ) : (
                 equipmentList.flatMap(e => (e.repairHistory || []).map(r => ({ ...r, eqId: e.id }))).map((repair, idx) => (
-                  <div key={`${repair.eqId}-${repair.id}-${idx}`} className="p-4 bg-white dark:bg-slate-900 rounded-xl border-2 border-slate-300 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div key={`${repair.eqId}-${repair.id}-${idx}`} className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">Sự cố</span>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">{repair.equipmentName}</h4>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-red-950 dark:text-red-300">Sự cố</span>
+                        <h4 className="font-bold text-[#263445] dark:text-white text-sm">{repair.equipmentName}</h4>
                       </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300">{repair.issueDescription}</p>
-                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-400 dark:text-slate-500 mt-2">
-                        <span>Báo bởi: <strong className="text-slate-700 dark:text-slate-300">{repair.reportedBy}</strong></span>
+                      <p className="text-xs text-[#263445] dark:text-slate-300">{repair.issueDescription}</p>
+                      <div className="flex flex-wrap gap-3 text-[11px] text-[#718096] dark:text-slate-500 mt-1.5">
+                        <span>Báo bởi: <strong className="text-[#263445] dark:text-slate-300">{repair.reportedBy}</strong></span>
                         <span>Thời gian: {formatDateTimeVN(repair.reportedAt)}</span>
-                        {repair.replacedParts && <span>Linh kiện thay: <strong className="text-slate-700 dark:text-slate-300">{repair.replacedParts}</strong></span>}
+                        {repair.replacedParts && <span>Linh kiện thay: <strong className="text-[#263445] dark:text-slate-300">{repair.replacedParts}</strong></span>}
                       </div>
                     </div>
                     <div className="text-right flex flex-col md:items-end justify-center">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">Chi phí: {repair.cost ? `${repair.cost.toLocaleString('vi-VN')} VNĐ` : 'Chưa có'}</span>
-                      <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 mt-1 inline-block">
+                      <span className="text-xs font-bold text-[#263445] dark:text-white">Chi phí: {repair.cost ? `${repair.cost.toLocaleString('vi-VN')} VNĐ` : 'Chưa có'}</span>
+                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 mt-1 inline-block">
                         {repair.status}
                       </span>
                     </div>
@@ -1774,38 +1774,38 @@ export const EquipmentManagementView: React.FC = () => {
 
       {/* ADD EQUIPMENT MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-3xl w-full p-5 sm:p-6 space-y-5 shadow-xl border border-slate-200 dark:border-slate-800 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3.5">
-              <div className="flex items-center gap-2.5 text-indigo-600 dark:text-indigo-400">
-                <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/80 flex items-center justify-center">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-3xl w-full p-5 space-y-4 shadow-xl border border-[#DFE7F0] dark:border-slate-800 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-[#1976D2] dark:text-sky-400">
+                <div className="w-9 h-9 rounded-lg bg-[#EAF4FF] dark:bg-sky-950/80 flex items-center justify-center">
                   <Wrench className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Thêm Thiết Bị Mới Vào Hệ Thống</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Phân tách rõ thông tin lý lịch cố định và hồ sơ pháp lý, kiểm định, kiểm xạ, bảo dưỡng định kỳ</p>
+                  <h3 className="text-base font-bold text-[#263445] dark:text-white leading-tight">Thêm Thiết Bị Mới Vào Hệ Thống</h3>
+                  <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">Phân tách rõ thông tin lý lịch cố định và hồ sơ pháp lý, kiểm định, kiểm xạ, bảo dưỡng định kỳ</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                className="p-1.5 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateEquipment} className="space-y-5 text-xs">
+            <form onSubmit={handleCreateEquipment} className="space-y-4 text-xs">
               {/* PHẦN 1: THÔNG TIN CỐ ĐỊNH — LÝ LỊCH & THÔNG TIN THIẾT BỊ, NGÀY GHI THÊM, NGƯỜI QUẢN LÝ */}
-              <div className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/70 bg-slate-50/80 dark:bg-slate-800/45">
-                <div className="rounded-t-2xl bg-indigo-50/90 dark:bg-indigo-950/60 px-4 py-3 border-b border-indigo-200/80 dark:border-indigo-800/70 flex flex-wrap items-center justify-between gap-2">
+              <div className="rounded-xl border border-[#DFE7F0] dark:border-sky-800/70 bg-[#F4F7FB]/60 dark:bg-slate-800/45">
+                <div className="rounded-t-xl bg-[#EAF4FF] dark:bg-sky-950/60 px-4 py-2.5 border-b border-[#DFE7F0] dark:border-sky-800/70 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[11px] font-black uppercase tracking-wider">Phần 1</span>
-                    <h4 className="text-sm font-extrabold text-indigo-950 dark:text-indigo-100 uppercase tracking-wide">
+                    <span className="px-2 py-0.5 rounded bg-[#1976D2] text-white text-[10px] font-bold uppercase tracking-wider">Phần 1</span>
+                    <h4 className="text-xs font-bold text-[#155A9C] dark:text-sky-100 uppercase tracking-wide">
                       Thông Tin Cố Định: Lý Lịch Thiết Bị, Ngày Ghi Thêm &amp; Người Quản Lý
                     </h4>
                   </div>
-                  <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">Hồ sơ gốc cố định</span>
+                  <span className="text-[11px] font-semibold text-[#155A9C] dark:text-sky-300">Hồ sơ gốc cố định</span>
                 </div>
 
                 <div className="p-4 space-y-3.5">
@@ -2326,17 +2326,17 @@ export const EquipmentManagementView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                  className="px-4 py-2 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold hover:bg-[#EAF4FF] dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-sm cursor-pointer"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold transition-colors shadow-xs cursor-pointer"
                 >
                   Lưu Thiết Bị Mới
                 </button>
@@ -2348,22 +2348,22 @@ export const EquipmentManagementView: React.FC = () => {
 
       {/* MODAL CÀI ĐẶT THỜI HẠN MẶC ĐỊNH TRƯỚC KHI NHẬP THIẾT BỊ */}
       {showDurationSettingsModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-[#DFE7F0] dark:border-slate-800 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+                <div className="p-2 rounded-lg bg-[#EAF4FF] dark:bg-sky-950 text-[#1976D2] dark:text-sky-400">
                   <Sliders className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Cài Đặt Thời Hạn Mặc Định</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Tự động áp dụng khi nhập thiết bị mới</p>
+                  <h3 className="text-base font-bold text-[#263445] dark:text-white">Cài Đặt Thời Hạn Mặc Định</h3>
+                  <p className="text-[11px] text-[#718096] dark:text-slate-400">Tự động áp dụng khi nhập thiết bị mới</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowDurationSettingsModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                className="p-1.5 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2448,21 +2448,21 @@ export const EquipmentManagementView: React.FC = () => {
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-indigo-50/70 dark:bg-indigo-950/30 p-2.5 rounded-xl border border-indigo-200/70 dark:border-indigo-800/60">
+              <p className="text-[11px] text-[#155A9C] dark:text-sky-300 bg-[#EAF4FF] dark:bg-sky-950/30 p-2.5 rounded-lg border border-[#1976D2]/20 dark:border-sky-800/60">
                 💡 Khi nhập thiết bị, chỉ cần chọn ngày bắt đầu, hệ thống sẽ tự động cộng số tháng thời hạn để ra <strong>Ngày hết hạn</strong>. Bạn vẫn có thể sửa lại Thời hạn hoặc Ngày hết hạn bất cứ lúc nào.
               </p>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowDurationSettingsModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                  className="px-4 py-2 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold hover:bg-[#EAF4FF] dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   Đóng
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-sm cursor-pointer"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold transition-colors shadow-xs cursor-pointer"
                 >
                   Lưu Cài Đặt Mặc Định
                 </button>
@@ -2474,46 +2474,46 @@ export const EquipmentManagementView: React.FC = () => {
 
       {/* Repair Report Modal */}
       {showRepairModal && selectedItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200 dark:border-slate-800">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">🚨 Ghi Nhận Báo Báo Sự Cố Thiết Bị</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Thiết bị: <strong className="text-slate-800 dark:text-slate-200">{selectedItem.name}</strong> ({selectedItem.code})</p>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-[#DFE7F0] dark:border-slate-800">
+            <h3 className="text-base font-bold text-[#263445] dark:text-white">🚨 Ghi Nhận Báo Sự Cố Thiết Bị</h3>
+            <p className="text-xs text-[#718096] dark:text-slate-400">Thiết bị: <strong className="text-[#263445] dark:text-slate-200">{selectedItem.name}</strong> ({selectedItem.code})</p>
             
-            <form onSubmit={handleAddRepairLog} className="space-y-4 text-xs">
+            <form onSubmit={handleAddRepairLog} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Mô tả sự cố chi tiết:</label>
+                <label className="block font-semibold text-[#263445] dark:text-slate-300 mb-1">Mô tả sự cố chi tiết:</label>
                 <textarea
                   rows={3}
                   required
                   placeholder="Ví dụ: Báo lỗi cảnh báo áp lực dầu tản nhiệt bóng X-quang..."
                   value={newRepairDesc}
                   onChange={e => setNewRepairDesc(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Dự toán chi phí sửa chữa (VNĐ):</label>
+                <label className="block font-semibold text-[#263445] dark:text-slate-300 mb-1">Dự toán chi phí sửa chữa (VNĐ):</label>
                 <input
                   type="number"
                   placeholder="Ví dụ: 8500000"
                   value={newRepairCost}
                   onChange={e => setNewRepairCost(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2]"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowRepairModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  className="px-4 py-2 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold hover:bg-[#EAF4FF] dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-red-600 dark:bg-red-500 text-white rounded-xl font-semibold hover:bg-red-700 dark:hover:bg-red-600 transition-all shadow-sm"
+                  className="px-4 py-2 bg-rose-600 text-white rounded-lg font-semibold hover:bg-rose-700 transition-colors shadow-xs cursor-pointer"
                 >
                   Gửi Báo Cáo Sự Cố
                 </button>
@@ -2525,18 +2525,18 @@ export const EquipmentManagementView: React.FC = () => {
 
       {/* Maintenance Log Modal */}
       {showMaintenanceModal && selectedItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200 dark:border-slate-800">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">🔧 Cập Nhật Lịch Bảo Trì / Kiểm Định</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Thiết bị: <strong className="text-slate-800 dark:text-slate-200">{selectedItem.name}</strong></p>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-[#DFE7F0] dark:border-slate-800">
+            <h3 className="text-base font-bold text-[#263445] dark:text-white">🔧 Cập Nhật Lịch Bảo Trì / Kiểm Định</h3>
+            <p className="text-xs text-[#718096] dark:text-slate-400">Thiết bị: <strong className="text-[#263445] dark:text-slate-200">{selectedItem.name}</strong></p>
 
-            <form onSubmit={handleAddMaintenanceLog} className="space-y-4 text-xs">
+            <form onSubmit={handleAddMaintenanceLog} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Loại bảo trì:</label>
+                <label className="block font-semibold text-[#263445] dark:text-slate-300 mb-1">Loại bảo trì:</label>
                 <select
                   value={newMaintType}
                   onChange={e => setNewMaintType(e.target.value as any)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2]"
                 >
                   <option value="Định kỳ">Bảo trì Định kỳ</option>
                   <option value="Hiệu chuẩn">Hiệu chuẩn ISO</option>
@@ -2545,27 +2545,27 @@ export const EquipmentManagementView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ghi chú & Kết quả nghiệm thu:</label>
+                <label className="block font-semibold text-[#263445] dark:text-slate-300 mb-1">Ghi chú &amp; Kết quả nghiệm thu:</label>
                 <textarea
                   rows={3}
                   placeholder="Ghi chú nội dung kiểm tra..."
                   value={newMaintNotes}
                   onChange={e => setNewMaintNotes(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2]"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowMaintenanceModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  className="px-4 py-2 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold hover:bg-[#EAF4FF] dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-xl font-semibold hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all shadow-sm"
+                  className="px-4 py-2 bg-[#1976D2] text-white rounded-lg font-semibold hover:bg-[#155A9C] transition-colors shadow-xs cursor-pointer"
                 >
                   Lưu Nhật Ký Bảo Trì
                 </button>
@@ -2578,55 +2578,55 @@ export const EquipmentManagementView: React.FC = () => {
       {/* MODAL XÁC NHẬN XÓA THIẾT BỊ KHỎI DANH SÁCH */}
       {showDeleteConfirm && deleteTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl border border-[#DFE7F0] dark:border-slate-800 animate-in fade-in zoom-in-95">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 rounded-2xl shrink-0">
-                <Trash2 className="w-6 h-6" />
+              <div className="p-2.5 bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 rounded-xl shrink-0">
+                <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Xác Nhận Xóa Thiết Bị</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Hành động này không thể hoàn tác sau khi thực hiện.</p>
+                <h3 className="text-base font-bold text-[#263445] dark:text-white">Xác Nhận Xóa Thiết Bị</h3>
+                <p className="text-xs text-[#718096] dark:text-slate-400">Hành động này không thể hoàn tác sau khi thực hiện.</p>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-1.5 text-xs">
+            <div className="p-3 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-700/80 space-y-1.5 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Mã thiết bị:</span>
-                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{deleteTarget.code}</span>
+                <span className="text-[#718096] dark:text-slate-400">Mã thiết bị:</span>
+                <span className="font-mono font-bold text-[#263445] dark:text-slate-200">{deleteTarget.code}</span>
               </div>
               <div className="flex justify-between gap-2">
-                <span className="text-slate-500 dark:text-slate-400 shrink-0">Tên thiết bị:</span>
-                <span className="font-bold text-slate-900 dark:text-white text-right">{deleteTarget.name}</span>
+                <span className="text-[#718096] dark:text-slate-400 shrink-0">Tên thiết bị:</span>
+                <span className="font-bold text-[#263445] dark:text-white text-right">{deleteTarget.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Vị trí phòng:</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{deleteTarget.room}</span>
+                <span className="text-[#718096] dark:text-slate-400">Vị trí phòng:</span>
+                <span className="font-medium text-[#263445] dark:text-slate-200">{deleteTarget.room}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Model / Xuất xứ:</span>
-                <span className="text-slate-700 dark:text-slate-300">{deleteTarget.model} ({deleteTarget.originCountry || 'Chính hãng'})</span>
+                <span className="text-[#718096] dark:text-slate-400">Model / Xuất xứ:</span>
+                <span className="text-[#263445] dark:text-slate-300">{deleteTarget.model} ({deleteTarget.originCountry || 'Chính hãng'})</span>
               </div>
             </div>
 
-            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-700 dark:text-rose-300 leading-relaxed">
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-lg text-xs text-rose-700 dark:text-rose-300 leading-relaxed">
               ⚠️ <strong>Cảnh báo:</strong> Khi xóa, toàn bộ thông tin lý lịch máy móc, dữ liệu lịch bảo dưỡng định kỳ và các biên bản sự cố liên quan sẽ bị xóa hoàn toàn khỏi danh sách hệ thống.
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => {
                   setShowDeleteConfirm(false);
                   setDeleteTarget(null);
                 }}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold text-xs transition-all active:scale-95"
+                className="px-4 py-2 bg-[#F4F7FB] dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 text-[#263445] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold text-xs transition-colors cursor-pointer"
               >
                 Hủy Bỏ
               </button>
               <button
                 type="button"
                 onClick={() => handleDeleteEquipment(deleteTarget.id)}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-rose-600/20 active:scale-95 inline-flex items-center gap-1.5"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs transition-colors shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Xác Nhận Xóa Vĩnh Viễn</span>

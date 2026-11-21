@@ -94,32 +94,32 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-300">
+    <div className="p-4 space-y-4 animate-in fade-in duration-300">
       {/* Top Banner: Cross-Validation Overview */}
-      <div className="relative overflow-hidden bg-rose-50/90 dark:bg-gradient-to-r dark:from-slate-900 dark:via-rose-950 dark:to-slate-900 text-slate-800 dark:text-white rounded-2xl p-6 shadow-xs dark:shadow-lg border border-rose-200 dark:border-rose-800/40 transition-colors">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-3xl">
+      <div className="relative overflow-hidden bg-rose-50/90 dark:bg-gradient-to-r dark:from-slate-900 dark:via-rose-950 dark:to-slate-900 text-[#263445] dark:text-white rounded-xl p-4 shadow-2xs border border-rose-200 dark:border-rose-800/40 transition-colors">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-3xl">
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span className="px-2.5 py-0.5 bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <ShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" /> Hệ Thống Khóa Chéo An Toàn (Safety Interlock)
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">ISO 15189 & Cục An Toàn Bức Xạ</span>
+              <span className="text-xs text-[#718096] dark:text-slate-400">ISO 15189 &amp; Cục An Toàn Bức Xạ</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Ràng Buộc Dữ Liệu & Kiểm Soát Vi Phạm Hoạt Động (Data Cross-Validation)
+            <h2 className="text-base sm:text-lg font-bold text-[#263445] dark:text-white tracking-tight">
+              Ràng Buộc Dữ Liệu &amp; Kiểm Soát Vi Phạm Hoạt Động (Data Cross-Validation)
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            <p className="text-xs text-[#263445]/80 dark:text-slate-300 leading-relaxed">
               Tự động đối soát trạng thái kiểm định, kiểm xạ, giấy phép hoạt động với số lượng ca thực hiện thực tế trong ngày. Khi phát hiện máy lỗi hoặc quá hạn mà vẫn ghi nhận ca, hệ thống lập tức kích hoạt khóa chéo an toàn và phát cảnh báo khẩn cấp tới Ban Chủ Nhiệm Khoa.
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <div className="bg-white/90 dark:bg-rose-900/60 border border-rose-200 dark:border-rose-700/60 p-4 rounded-xl text-center min-w-[130px] shadow-2xs">
-              <div className="text-2xl font-black text-rose-600 dark:text-rose-300">{criticalCount}</div>
+            <div className="bg-white/95 dark:bg-rose-900/60 border border-rose-200 dark:border-rose-700/60 p-3 rounded-lg text-center min-w-[125px] shadow-2xs">
+              <div className="text-2xl font-bold text-rose-600 dark:text-rose-300 tabular-nums">{criticalCount}</div>
               <div className="text-[11px] font-bold text-rose-800 dark:text-rose-200 uppercase tracking-wider mt-0.5">Vi Phạm Khẩn Cấp</div>
             </div>
-            <div className="bg-white/90 dark:bg-amber-900/60 border border-amber-200 dark:border-amber-700/60 p-4 rounded-xl text-center min-w-[130px] shadow-2xs">
-              <div className="text-2xl font-black text-amber-600 dark:text-amber-300">{warningCount}</div>
+            <div className="bg-white/95 dark:bg-amber-900/60 border border-amber-200 dark:border-amber-700/60 p-3 rounded-lg text-center min-w-[125px] shadow-2xs">
+              <div className="text-2xl font-bold text-amber-600 dark:text-amber-300 tabular-nums">{warningCount}</div>
               <div className="text-[11px] font-bold text-amber-800 dark:text-amber-200 uppercase tracking-wider mt-0.5">Cảnh Báo Sắp Hạn</div>
             </div>
           </div>
@@ -127,25 +127,25 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
       </div>
 
       {/* Filter Chips & Search */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Lọc mức độ:</span>
+          <span className="text-xs font-semibold text-[#718096] dark:text-slate-400">Lọc mức độ:</span>
           <button
             onClick={() => setFilterSeverity('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               filterSeverity === 'ALL'
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                ? 'bg-[#1976D2] text-white'
+                : 'bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 hover:bg-[#EAF4FF] border border-[#DFE7F0] dark:border-slate-700'
             }`}
           >
             Tất cả ({violations.length})
           </button>
           <button
             onClick={() => setFilterSeverity('CRITICAL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
               filterSeverity === 'CRITICAL'
-                ? 'bg-rose-600 text-white shadow-xs'
-                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                ? 'bg-rose-600 text-white'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 border border-rose-200 dark:border-rose-900'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -153,10 +153,10 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
           </button>
           <button
             onClick={() => setFilterSeverity('WARNING')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
               filterSeverity === 'WARNING'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100'
+                ? 'bg-amber-600 text-white'
+                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 border border-amber-200 dark:border-amber-900'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-amber-500"></span>
@@ -164,8 +164,8 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
           </button>
         </div>
 
-        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+        <div className="text-xs text-[#718096] dark:text-slate-400 flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-[#1976D2]" />
           <span>Kiểm tra tự động lúc: <strong>{getNowVNString()}</strong></span>
         </div>
       </div>
@@ -298,9 +298,9 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
                     {matchedEquipment && (
                       <button
                         onClick={() => onOpenDetailModal(matchedEquipment)}
-                        className="w-full py-2 px-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                        className="w-full py-2 px-3 bg-white dark:bg-slate-800 text-[#263445] dark:text-slate-200 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                        <Eye className="w-3.5 h-3.5 text-[#1976D2]" />
                         <span>Xem Toàn Bộ Lý Lịch Máy</span>
                       </button>
                     )}
@@ -373,7 +373,7 @@ export const SafetyInterlockTab: React.FC<SafetyInterlockTabProps> = ({
                         setSelectedViolationForAlert(null);
                         setAlertSuccessInfo(null);
                       }}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all"
+                      className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                     >
                       Đóng
                     </button>

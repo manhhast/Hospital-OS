@@ -765,129 +765,129 @@ export const ScheduleView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-16 animate-in fade-in duration-200">
+    <div className="space-y-4 w-full pb-14 animate-in fade-in duration-200">
       
       {/* SECTION 1: Header Banner & Sync Toolbar */}
-      <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs print:hidden">
+      <div className="flex flex-col gap-3.5 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs print:hidden">
         <div className="w-full space-y-1">
-          <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-wider mb-1">
+          <div className="flex items-center space-x-2 text-[#1976D2] dark:text-blue-400 font-bold text-xs uppercase tracking-wider mb-0.5">
             <CalendarCheck2 className="w-4 h-4" />
             <span>Phân Công Lịch Làm Việc Tuần & Quản Lý Danh Mục Công Việc</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100">
+          <h2 className="text-lg sm:text-xl font-bold text-[#263445] dark:text-slate-100">
             Lịch Làm Việc Tuần - Khoa Cận Lâm Sàng
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-[#718096]">
             Tùy chỉnh tên công việc theo hàng, kéo thả phân công nhân sự, tự động chuyển danh mục công việc sang tuần sau trừ công việc đã xóa.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
           {pendingSwapRequests.length > 0 && (
             <button
               onClick={() => setShowSwapApprovalDrawer(true)}
-              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center space-x-1.5 animate-pulse"
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 animate-pulse"
             >
-              <ArrowRightLeft className="w-4 h-4" />
+              <ArrowRightLeft className="w-3.5 h-3.5" />
               <span>Duyệt Đổi Ca ({pendingSwapRequests.length})</span>
             </button>
           )}
 
           <button
             onClick={() => handleOpenCreateTaskRowModal()}
-            className="px-3.5 py-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 text-xs font-bold rounded-xl border border-indigo-200 dark:border-indigo-800 transition-all flex items-center space-x-1.5"
+            className="px-3.5 py-1.5 bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 hover:bg-[#1976D2]/15 text-xs font-bold rounded-lg border border-[#1976D2]/25 dark:border-blue-800 transition-all flex items-center space-x-1.5"
           >
-            <ListPlus className="w-4 h-4" />
+            <ListPlus className="w-3.5 h-3.5" />
             <span>Thêm Hàng Công Việc</span>
           </button>
 
           <button
             onClick={() => setIsStaffPopupOpen(!isStaffPopupOpen)}
             title="Bật/Tắt thanh nhân sự kéo thả phía dưới màn hình"
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center space-x-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 ${
               isStaffPopupOpen 
-                ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400' 
-                : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800'
+                ? 'bg-[#1976D2] text-white ring-2 ring-[#1976D2]/30' 
+                : 'bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 hover:bg-[#1976D2]/15 border border-[#1976D2]/25 dark:border-blue-800'
             }`}
           >
-            <Users className="w-4 h-4" />
+            <Users className="w-3.5 h-3.5" />
             <span>Kéo Thả Nhân Sự {isStaffPopupOpen ? '(Đang hiện)' : '(Bấm mở)'}</span>
           </button>
 
           <button
             onClick={handleCopyWeeklyScheduleToNextWeek}
             title="Tự động khởi tạo lịch tuần sau kề thừa danh mục công việc hiện tại (loại bỏ công việc đã xóa)"
-            className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center space-x-1.5"
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5"
           >
-            <Forward className="w-4 h-4" />
+            <Forward className="w-3.5 h-3.5" />
             <span>Tạo Lịch Tuần Sau</span>
           </button>
 
           <button
             onClick={handleExportICS}
             title="Đồng bộ Google Calendar & Outlook (.ics)"
-            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-xs font-semibold rounded-xl transition-all flex items-center space-x-1.5"
+            className="px-3 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 hover:bg-[#EAF4FF] text-xs font-semibold rounded-lg transition-all flex items-center space-x-1.5"
           >
-            <CalendarIcon className="w-4 h-4 text-blue-600" />
+            <CalendarIcon className="w-3.5 h-3.5 text-[#1976D2]" />
             <span>Xuất Calendar</span>
           </button>
 
           <button
             onClick={handleExportExcel}
             title="Xuất file Excel / CSV"
-            className="px-3.5 py-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold rounded-xl border border-emerald-200 dark:border-emerald-800 transition-all flex items-center space-x-1.5"
+            className="px-3 py-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all flex items-center space-x-1.5"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
             <span>Xuất Excel</span>
           </button>
 
           <button
             onClick={handlePrint}
             title="In lịch làm việc"
-            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-xs font-semibold rounded-xl transition-all flex items-center space-x-1.5"
+            className="px-3 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 hover:bg-[#EAF4FF] text-xs font-semibold rounded-lg transition-all flex items-center space-x-1.5"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-3.5 h-3.5" />
             <span>In Lịch</span>
           </button>
         </div>
       </div>
 
       {/* SECTION 4: View Toggles & Multi-Dimensional Filters Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 print:hidden">
+      <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs space-y-3 print:hidden">
         
         {/* Row 1: View Modes & Date Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
           
           {/* View Mode Buttons */}
-          <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <div className="flex items-center space-x-1 bg-[#F4F7FB] dark:bg-slate-800 p-1 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
             <button
               onClick={() => setViewMode('day')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                viewMode === 'day' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                viewMode === 'day' ? 'bg-[#1976D2] text-white' : 'text-[#718096] dark:text-slate-400 hover:text-[#263445]'
               }`}
             >
               Ngày (Day)
             </button>
             <button
               onClick={() => setViewMode('week')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                viewMode === 'week' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                viewMode === 'week' ? 'bg-[#1976D2] text-white' : 'text-[#718096] dark:text-slate-400 hover:text-[#263445]'
               }`}
             >
               Lịch Làm Việc Tuần
             </button>
             <button
               onClick={() => setViewMode('month')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                viewMode === 'month' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                viewMode === 'month' ? 'bg-[#1976D2] text-white' : 'text-[#718096] dark:text-slate-400 hover:text-[#263445]'
               }`}
             >
               Tháng (Month)
             </button>
             <button
               onClick={() => setViewMode('timeline')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                viewMode === 'timeline' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                viewMode === 'timeline' ? 'bg-[#1976D2] text-white' : 'text-[#718096] dark:text-slate-400 hover:text-[#263445]'
               }`}
             >
               Timeline Máy & Phòng
@@ -1003,14 +1003,14 @@ export const ScheduleView: React.FC = () => {
         <div className="space-y-4">
           
           {/* Week Sub-view Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs print:hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs print:hidden">
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Chế độ hiển thị tuần:</span>
-              <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <span className="text-xs font-bold text-[#263445] dark:text-slate-300">Chế độ hiển thị tuần:</span>
+              <div className="flex items-center space-x-1 bg-[#F4F7FB] dark:bg-slate-800 p-1 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
                 <button
                   onClick={() => setWeekSubView('table')}
-                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 ${
-                    weekSubView === 'table' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all flex items-center space-x-1.5 ${
+                    weekSubView === 'table' ? 'bg-[#1976D2] text-white' : 'text-[#718096] dark:text-slate-400 hover:text-[#1976D2]'
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5" />
@@ -1018,8 +1018,8 @@ export const ScheduleView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setWeekSubView('cards')}
-                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 ${
-                    weekSubView === 'cards' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all flex items-center space-x-1.5 ${
+                    weekSubView === 'cards' ? 'bg-[#1976D2] text-white' : 'text-[#718096] dark:text-slate-400 hover:text-[#1976D2]'
                   }`}
                 >
                   <CalendarCheck2 className="w-3.5 h-3.5" />
@@ -1032,7 +1032,7 @@ export const ScheduleView: React.FC = () => {
               <button
                 onClick={handleResetTaskRows}
                 title="Khôi phục danh mục công việc chuẩn ban đầu"
-                className="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center space-x-1"
+                className="px-2.5 py-1.5 text-xs text-[#718096] hover:text-[#263445] dark:hover:text-slate-300 flex items-center space-x-1"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Khôi phục mẫu</span>
@@ -1048,7 +1048,7 @@ export const ScheduleView: React.FC = () => {
             const renderTaskRowTable = (rows: WorkTaskRow[], isDutyTable: boolean) => (
               <div 
                 onClick={() => !isStaffPopupOpen && setIsStaffPopupOpen(true)}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs overflow-hidden"
               >
                 {/* Table Header Banner */}
                 <div className={`p-3.5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
@@ -1576,27 +1576,27 @@ export const ScheduleView: React.FC = () => {
       )}
 
       {/* SECTION 6: Bottom Summary Roster Panels */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5 print:hidden">
         
         {/* Card 1: Hôm nay ai trực / làm việc */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-indigo-200/80 dark:border-indigo-900/60 shadow-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-[#1976D2]/30 dark:border-blue-900/60 shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-[#DFE7F0] dark:border-slate-800">
+            <span className="text-xs font-bold text-[#155A9C] dark:text-blue-400 uppercase tracking-wide">
               Hôm Nay (26/07)
             </span>
-            <span className="text-xs font-extrabold px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 rounded-md">
+            <span className="text-xs font-extrabold px-2 py-0.5 bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 rounded">
               {todayShifts.length} Ca
             </span>
           </div>
           <div className="mt-3 space-y-2 max-h-36 overflow-y-auto pr-1">
             {todayShifts.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">Chưa có ca phân công hôm nay</p>
+              <p className="text-xs text-[#718096] italic">Chưa có ca phân công hôm nay</p>
             ) : (
               todayShifts.map(s => (
-                <div key={s.id} className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800 p-2 rounded-xl">
+                <div key={s.id} className="flex items-center justify-between text-xs bg-[#F4F7FB] dark:bg-slate-800 p-2 rounded-lg">
                   <div className="truncate pr-2">
-                    <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{s.assignedUserName || s.userName}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{s.title || s.shiftName}</p>
+                    <p className="font-bold text-[#263445] dark:text-slate-200 truncate">{s.assignedUserName || s.userName}</p>
+                    <p className="text-[10px] text-[#718096] truncate">{s.title || s.shiftName}</p>
                   </div>
                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded shrink-0 ${getBadgeColor(s.workType)}`}>
                     {s.workType || 'Ca trực'}
@@ -1608,26 +1608,26 @@ export const ScheduleView: React.FC = () => {
         </div>
 
         {/* Card 2: Ngày mai ai trực / làm việc */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-[#DFE7F0] dark:border-slate-800">
+            <span className="text-xs font-bold text-[#263445] dark:text-slate-400 uppercase tracking-wide">
               Ngày Mai (27/07)
             </span>
-            <span className="text-xs font-extrabold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md">
+            <span className="text-xs font-extrabold px-2 py-0.5 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 rounded border border-[#DFE7F0] dark:border-slate-700">
               {tomorrowShifts.length} Ca
             </span>
           </div>
           <div className="mt-3 space-y-2 max-h-36 overflow-y-auto pr-1">
             {tomorrowShifts.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">Chưa phân công ca ngày mai</p>
+              <p className="text-xs text-[#718096] italic">Chưa phân công ca ngày mai</p>
             ) : (
               tomorrowShifts.map(s => (
-                <div key={s.id} className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800 p-2 rounded-xl">
+                <div key={s.id} className="flex items-center justify-between text-xs bg-[#F4F7FB] dark:bg-slate-800 p-2 rounded-lg">
                   <div className="truncate pr-2">
-                    <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{s.assignedUserName || s.userName}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{s.title || s.shiftName}</p>
+                    <p className="font-bold text-[#263445] dark:text-slate-200 truncate">{s.assignedUserName || s.userName}</p>
+                    <p className="text-[10px] text-[#718096] truncate">{s.title || s.shiftName}</p>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono shrink-0">
+                  <span className="text-[10px] text-[#718096] font-mono shrink-0">
                     {s.room || s.roomLocation}
                   </span>
                 </div>
@@ -1637,27 +1637,27 @@ export const ScheduleView: React.FC = () => {
         </div>
 
         {/* Card 3: Thống kê danh mục công việc */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-emerald-200/80 dark:border-emerald-900/60 shadow-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-emerald-200/80 dark:border-emerald-900/60 shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-[#DFE7F0] dark:border-slate-800">
+            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
               Danh Mục Công Việc
             </span>
-            <span className="text-xs font-extrabold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded-md">
+            <span className="text-xs font-extrabold px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded">
               {workTaskRows.length} Hàng
             </span>
           </div>
-          <div className="mt-3 text-xs text-slate-600 dark:text-slate-400 space-y-1">
-            <p>📋 Tổng công việc tuần: <strong className="text-slate-800 dark:text-slate-200">{workTaskRows.length} danh mục</strong></p>
+          <div className="mt-3 text-xs text-[#718096] dark:text-slate-400 space-y-1">
+            <p>📋 Tổng công việc tuần: <strong className="text-[#263445] dark:text-slate-200">{workTaskRows.length} danh mục</strong></p>
             <p>🔄 Kế thừa tuần sau: <strong className="text-emerald-600 dark:text-emerald-400">Tự động duy trì</strong></p>
             <p>🗑️ Đã xóa: <strong className="text-rose-500">Tự loại bỏ tuần sau</strong></p>
           </div>
         </div>
 
         {/* Card 4: Màu Quy Định Legend */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1">
-              <Tag className="w-3.5 h-3.5 text-indigo-500" />
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between pb-2 border-b border-[#DFE7F0] dark:border-slate-800">
+            <span className="text-xs font-bold text-[#263445] dark:text-slate-300 uppercase tracking-wide flex items-center gap-1">
+              <Tag className="w-3.5 h-3.5 text-[#1976D2]" />
               Quy Định Loại Công Việc
             </span>
           </div>
@@ -1674,7 +1674,7 @@ export const ScheduleView: React.FC = () => {
             <span className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
               <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span> Tím: Đào tạo
             </span>
-            <span className="flex items-center gap-1.5 text-slate-500">
+            <span className="flex items-center gap-1.5 text-[#718096]">
               <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Xám: Nghỉ
             </span>
           </div>
@@ -1683,17 +1683,17 @@ export const ScheduleView: React.FC = () => {
 
       {/* MODAL 1: Task Row Customization Modal */}
       {showTaskRowModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#DFE7F0] dark:border-slate-800">
               <div className="flex items-center space-x-2">
-                <ListPlus className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <ListPlus className="w-4 h-4 text-[#1976D2]" />
+                <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">
                   {editingTaskRow ? 'Tùy Chỉnh Tên Hàng Công Việc' : 'Thêm Hàng Công Việc Mới'}
                 </h3>
               </div>
-              <button onClick={() => setShowTaskRowModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
+              <button onClick={() => setShowTaskRowModal(false)} className="text-[#718096] hover:text-[#263445]">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1791,17 +1791,17 @@ export const ScheduleView: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowTaskRowModal(false)}
-                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold text-[#263445] hover:bg-[#F4F7FB]"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md"
+                  className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold"
                 >
                   Lưu Danh Mục Công Việc
                 </button>
@@ -1813,14 +1813,14 @@ export const ScheduleView: React.FC = () => {
 
       {/* MODAL 2: Create / Edit Shift Modal */}
       {showShiftModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#DFE7F0] dark:border-slate-800">
+              <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">
                 {editingShift ? 'Chỉnh Sửa Phân Công Ca Làm Việc' : 'Tạo Phân Công Ca Làm Việc Mới'}
               </h3>
-              <button onClick={() => setShowShiftModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
+              <button onClick={() => setShowShiftModal(false)} className="text-[#718096] hover:text-[#263445]">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1957,17 +1957,17 @@ export const ScheduleView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowShiftModal(false)}
-                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold text-[#263445] hover:bg-[#F4F7FB]"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md"
+                  className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold"
                 >
                   Lưu Phân Công Ca
                 </button>
@@ -1979,40 +1979,40 @@ export const ScheduleView: React.FC = () => {
 
       {/* MODAL 3: Shift Swap Request Modal */}
       {showSwapModal && swapTargetShift && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#DFE7F0] dark:border-slate-800">
               <div className="flex items-center space-x-2">
-                <ArrowRightLeft className="w-5 h-5 text-amber-500" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Yêu Cầu Đổi Ca Trực</h3>
+                <ArrowRightLeft className="w-4 h-4 text-amber-500" />
+                <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">Yêu Cầu Đổi Ca Trực</h3>
               </div>
-              <button onClick={() => setShowSwapModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
+              <button onClick={() => setShowSwapModal(false)} className="text-[#718096] hover:text-[#263445]">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSendSwapRequest} className="space-y-4">
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-900/60 text-xs">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-900/60 text-xs">
                 <p className="font-bold text-amber-900 dark:text-amber-200">
                   {swapTargetShift.title || swapTargetShift.shiftName}
                 </p>
                 <p className="text-amber-700 dark:text-amber-300 text-[11px] mt-0.5">
                   Ngày: {swapTargetShift.date} ({swapTargetShift.startTime || '07:00'} - {swapTargetShift.endTime || '15:00'})
                 </p>
-                <p className="text-slate-500 text-[11px]">
+                <p className="text-[#718096] text-[11px]">
                   Người trực hiện tại: <strong>{swapTargetShift.assignedUserName || swapTargetShift.userName}</strong>
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                   Chọn người tiếp nhận ca trực thay *
                 </label>
                 <select
                   required
                   value={swapTargetUserId}
                   onChange={(e) => setSwapTargetUserId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold outline-none focus:ring-2 focus:ring-amber-500"
                 >
                   <option value="">-- Chọn nhân viên thay thế --</option>
                   {users.filter(u => u.id !== (swapTargetShift.assignedUserId || swapTargetShift.userId)).map(u => (
@@ -2024,27 +2024,27 @@ export const ScheduleView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Lý do xin đổi ca</label>
+                <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">Lý do xin đổi ca</label>
                 <textarea
                   rows={2}
                   value={swapReason}
                   onChange={(e) => setSwapReason(e.target.value)}
                   placeholder="Nhập lý do đổi ca (VD: Đi công tác đột xuất, bận việc gia đình...)"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold resize-none"
+                  className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowSwapModal(false)}
-                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold text-[#263445] hover:bg-[#F4F7FB]"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-md"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold"
                 >
                   Gửi Đổi Ca
                 </button>
@@ -2056,23 +2056,23 @@ export const ScheduleView: React.FC = () => {
 
       {/* DRAWER: Shift Swap Approval Drawer for Trưởng Khoa */}
       {showSwapApprovalDrawer && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-end">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md h-full p-6 border-l border-slate-200 dark:border-slate-800 shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex justify-end">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md h-full p-5 border-l border-[#DFE7F0] dark:border-slate-800 shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between pb-3.5 border-b border-[#DFE7F0] dark:border-slate-800 mb-4">
               <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <ShieldCheck className="w-4 h-4 text-[#1976D2]" />
+                <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">
                   Phê Duyệt Đổi Ca Trực Khoa
                 </h3>
               </div>
-              <button onClick={() => setShowSwapApprovalDrawer(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
+              <button onClick={() => setShowSwapApprovalDrawer(false)} className="text-[#718096] hover:text-[#263445]">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-4">
               {pendingSwapRequests.length === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-8">
+                <p className="text-xs text-[#718096] italic text-center py-8">
                   Không có yêu cầu đổi ca nào đang chờ phê duyệt.
                 </p>
               ) : (
@@ -2081,30 +2081,30 @@ export const ScheduleView: React.FC = () => {
                   if (!req) return null;
 
                   return (
-                    <div key={s.id} className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                    <div key={s.id} className="p-4 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-xl border border-[#DFE7F0] dark:border-slate-700 space-y-2 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-indigo-600 dark:text-indigo-400">{req.shiftTitle}</span>
+                        <span className="font-bold text-[#155A9C] dark:text-blue-400">{req.shiftTitle}</span>
                         <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">Chờ duyệt</span>
                       </div>
 
-                      <p className="text-slate-500 text-[11px]">🗓️ Ngày: {req.shiftDate}</p>
+                      <p className="text-[#718096] text-[11px]">🗓️ Ngày: {req.shiftDate}</p>
 
-                      <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                      <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-[#DFE7F0] dark:border-slate-700 space-y-1">
                         <p>👤 Người xin đổi: <strong>{req.requesterName}</strong></p>
                         <p>➡️ Chuyển sang cho: <strong className="text-emerald-600 dark:text-emerald-400">{req.targetUserName}</strong></p>
-                        <p className="text-[11px] text-slate-500 italic">💬 Lý do: "{req.reason}"</p>
+                        <p className="text-[11px] text-[#718096] italic">💬 Lý do: "{req.reason}"</p>
                       </div>
 
                       <div className="flex items-center justify-end space-x-2 pt-1">
                         <button
                           onClick={() => handleRejectSwap(s.id)}
-                          className="px-3 py-1.5 bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 hover:bg-rose-100 rounded-xl font-bold text-xs"
+                          className="px-3 py-1.5 bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 hover:bg-rose-100 rounded-lg font-bold text-xs"
                         >
                           Từ Chối
                         </button>
                         <button
                           onClick={() => handleApproveSwap(s.id)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-xs"
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs"
                         >
                           Chấp Nhận Đổi Ca
                         </button>
@@ -2134,17 +2134,17 @@ export const ScheduleView: React.FC = () => {
               handleDropToDeleteShift(e);
             }
           }}
-          className={`fixed bottom-4 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 max-w-5xl w-[calc(100%-1.5rem)] sm:w-full p-3.5 rounded-2xl border-2 shadow-2xl transition-all print:hidden backdrop-blur-md animate-in slide-in-from-bottom-5 duration-200 ${
+          className={`fixed bottom-4 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 max-w-5xl w-[calc(100%-1.5rem)] sm:w-full p-3.5 rounded-xl border-2 shadow-2xl transition-all print:hidden backdrop-blur-md animate-in slide-in-from-bottom-5 duration-200 ${
             draggedShift && isTrashOver 
               ? 'bg-rose-100/95 dark:bg-rose-950/95 border-rose-500 ring-4 ring-rose-400' 
               : draggedShift 
               ? 'bg-amber-50/95 dark:bg-amber-950/95 border-amber-400 dark:border-amber-700'
-              : 'bg-white/95 dark:bg-slate-900/95 border-indigo-500/90 dark:border-indigo-600'
+              : 'bg-white/95 dark:bg-slate-900/95 border-[#1976D2] dark:border-blue-600'
           }`}
         >
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pb-2.5 mb-2.5 border-b border-slate-200/80 dark:border-slate-800">
-            <div className="flex flex-wrap items-center gap-2 text-indigo-900 dark:text-indigo-200 text-xs font-extrabold">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pb-2.5 mb-2.5 border-b border-[#DFE7F0] dark:border-slate-800">
+            <div className="flex flex-wrap items-center gap-2 text-[#155A9C] dark:text-blue-200 text-xs font-extrabold">
               {draggedShift ? (
                 <>
                   <Trash2 className="w-4 h-4 text-rose-600 animate-bounce" />
@@ -2154,7 +2154,7 @@ export const ScheduleView: React.FC = () => {
                 <>
                   <Sparkles className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
                   <span className="uppercase tracking-wider">DANH SÁCH NHÂN SỰ KÉO THẢ PHÂN CÔNG</span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-full border border-indigo-200 dark:border-indigo-800 shrink-0">
+                  <span className="text-[11px] font-bold px-2 py-0.5 bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 rounded border border-[#1976D2]/25 dark:border-blue-800 shrink-0">
                     {filteredPopupUsers.length} / {users.length} cán bộ
                   </span>
                 </>
@@ -2163,13 +2163,13 @@ export const ScheduleView: React.FC = () => {
 
             <div className="flex items-center space-x-2 shrink-0">
               {/* Dropdown Menu Chọn Phòng / Bộ Phận */}
-              <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-                <Building2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300 hidden sm:inline">Phòng / Bộ phận:</span>
+              <div className="flex items-center space-x-1.5 bg-[#F4F7FB] dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
+                <Building2 className="w-3.5 h-3.5 text-[#1976D2] dark:text-blue-400 shrink-0" />
+                <span className="text-[11px] font-bold text-[#263445] dark:text-slate-300 hidden sm:inline">Phòng / Bộ phận:</span>
                 <select
                   value={popupFilterRoom}
                   onChange={(e) => setPopupFilterRoom(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer max-w-[240px] truncate"
+                  className="bg-transparent text-xs font-bold text-[#263445] dark:text-slate-200 outline-none cursor-pointer max-w-[240px] truncate"
                   title="Chọn phòng / bộ phận để lọc danh sách nhân sự kéo thả"
                 >
                   <option value="Tất cả">-- Tất cả Phòng / Bộ phận --</option>
@@ -2179,12 +2179,12 @@ export const ScheduleView: React.FC = () => {
                 </select>
               </div>
 
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hidden lg:inline">
+              <span className="text-[11px] font-semibold text-[#718096] dark:text-slate-400 hidden lg:inline">
                 {draggedShift ? '🗑️ Nhả chuột để xóa ca' : '💡 Nhấp giữ & kéo thẻ tên vào các ô trong bảng'}
               </span>
               <button
                 onClick={() => setIsStaffPopupOpen(false)}
-                className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center space-x-1"
+                className="p-1 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-lg bg-[#F4F7FB] dark:bg-slate-800 hover:bg-[#DFE7F0] dark:hover:bg-slate-700 transition-colors flex items-center space-x-1"
                 title="Thu gọn popup danh sách nhân sự"
               >
                 <X className="w-4 h-4" />
@@ -2196,7 +2196,7 @@ export const ScheduleView: React.FC = () => {
           {/* Draggable Staff List */}
           <div className="flex items-center space-x-2.5 overflow-x-auto pb-1.5 pt-1 scrollbar-thin">
             {filteredPopupUsers.length === 0 ? (
-              <p className="text-xs text-slate-400 py-2 italic px-2">
+              <p className="text-xs text-[#718096] py-2 italic px-2">
                 Không tìm thấy nhân sự nào thuộc phòng/bộ phận "{popupFilterRoom}".
               </p>
             ) : (
@@ -2209,17 +2209,17 @@ export const ScheduleView: React.FC = () => {
                     onDragStart={(e) => handleDragStartUser(e, u)}
                     onDragEnd={handleDragEnd}
                     title={`Nhấn giữ & kéo ${u.name} vào ô công việc hoặc ngày lịch để phân công`}
-                    className={`px-3 py-2 bg-slate-50 dark:bg-slate-800/90 border rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 shadow-2xs cursor-grab active:cursor-grabbing hover:border-indigo-500 hover:bg-indigo-50/60 hover:shadow-md transition-all shrink-0 flex items-center space-x-2 select-none ${
-                      isBeingDragged ? 'ring-2 ring-indigo-500 border-indigo-500 scale-95 opacity-50 bg-indigo-100 dark:bg-indigo-950' : 'border-slate-200 dark:border-slate-700'
+                    className={`px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800/90 border rounded-lg text-xs font-semibold text-[#263445] dark:text-slate-200 cursor-grab active:cursor-grabbing hover:border-[#1976D2] hover:bg-[#EAF4FF] transition-all shrink-0 flex items-center space-x-2 select-none ${
+                      isBeingDragged ? 'ring-2 ring-[#1976D2] border-[#1976D2] scale-95 opacity-50 bg-[#EAF4FF] dark:bg-blue-950' : 'border-[#DFE7F0] dark:border-slate-700'
                     }`}
                   >
-                    <GripVertical className="w-3.5 h-3.5 text-indigo-400 shrink-0 opacity-60" />
-                    <div className="w-6 h-6 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0 shadow-xs">
+                    <GripVertical className="w-3.5 h-3.5 text-[#1976D2] shrink-0 opacity-60" />
+                    <div className="w-6 h-6 rounded-full bg-[#1976D2] text-white font-bold flex items-center justify-center text-[10px] shrink-0">
                       {u.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div>
                       <p className="text-xs font-bold leading-tight">{u.name}</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">{u.title || u.role}</p>
+                      <p className="text-[10px] text-[#718096] dark:text-slate-400 leading-tight">{u.title || u.role}</p>
                     </div>
                   </div>
                 );
@@ -2233,7 +2233,7 @@ export const ScheduleView: React.FC = () => {
       {!isStaffPopupOpen && (
         <button
           onClick={() => setIsStaffPopupOpen(true)}
-          className="fixed bottom-5 right-5 z-40 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-full shadow-2xl font-bold text-xs flex items-center space-x-2 transition-all print:hidden border-2 border-white dark:border-slate-800 animate-bounce"
+          className="fixed bottom-5 right-5 z-40 px-4 py-2.5 bg-[#1976D2] hover:bg-[#155A9C] active:scale-95 text-white rounded-full shadow-lg font-bold text-xs flex items-center space-x-2 transition-all print:hidden border-2 border-white dark:border-slate-800"
           title="Mở popup danh sách nhân sự để kéo thả phân công"
         >
           <Users className="w-4 h-4" />

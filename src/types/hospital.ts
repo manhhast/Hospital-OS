@@ -678,12 +678,58 @@ export interface AssistantMemoryItem {
   updatedAt?: string;
 }
 
+export type ScheduledAlertRuleId = 'morning_0700' | 'noon_services_1245' | 'evening_1700';
+export type ScheduledAlertChannel = 'telegram_and_inapp' | 'telegram' | 'inapp';
+
+export interface ScheduledAlertRuleConfig {
+  id: ScheduledAlertRuleId;
+  name: string;
+  description: string;
+  enabled: boolean;
+  timeHHmm: string; // HH:mm in Asia/Ho_Chi_Minh (e.g. "07:00", "12:45", "17:00")
+  channel: ScheduledAlertChannel;
+  equipmentWarningDays?: number;
+  customChatId?: string;
+}
+
+export interface ScheduledAlertHistoryItem {
+  id: string;
+  ruleId: ScheduledAlertRuleId;
+  ruleName: string;
+  targetDateVN: string;
+  triggeredAt: string;
+  triggerMode: 'auto_schedule' | 'manual_test';
+  status: 'success' | 'partial' | 'error' | 'skipped';
+  telegramSent: boolean;
+  inAppSaved: boolean;
+  summary: string;
+  errorMessage?: string;
+  hostLabel?: string;
+}
+
+export interface ScheduledAlertPreviewResult {
+  ruleId: ScheduledAlertRuleId;
+  ruleName: string;
+  targetDateVN: string;
+  generatedAtVN: string;
+  title: string;
+  telegramMarkdown: string;
+  inAppSummary: string;
+  stats: Array<{
+    label: string;
+    value: string;
+    tone?: 'neutral' | 'good' | 'warn' | 'danger';
+  }>;
+  dataSourceNotes: string[];
+}
+
 export interface AppSettings {
   telegramBotToken: string;
   defaultTelegramChatId: string;
   telegramQaEnabled?: boolean;
   aiWebSearchEnabled?: boolean;
   assistantMemories?: AssistantMemoryItem[];
+  scheduledAlertsConfig?: ScheduledAlertRuleConfig[];
   googleDriveFolderId: string;
   // 1. Google Sheet Báo Cáo Số Ca (Case Reports Data)
   reportSheetYear?: number;

@@ -7,6 +7,13 @@ import {
   TelegramBotStatus,
   TelegramExclusivityReport
 } from '../types/aiEcosystem';
+import type {
+  ScheduledAlertChannel,
+  ScheduledAlertHistoryItem,
+  ScheduledAlertPreviewResult,
+  ScheduledAlertRuleConfig,
+  ScheduledAlertRuleId
+} from '../types/hospital';
 import { buildLiveHospitalContext, syncLiveContextToServer } from './aiContextService';
 import { storageService } from './storageService';
 
@@ -311,5 +318,103 @@ export const aiService = {
       throw new Error(json?.error || 'Không thể phân tích bảo trì dự đoán');
     }
     return json.data;
+  },
+
+  /**
+   * Fixed-Time Scheduled Alert System (07:00, 12:45, 17:00 VN Time)
+   */
+  async getScheduledAlertStatus(): Promise<{
+    vnNow: { dateISO: string; timeHHmm: string; dateTimeVN: string };
+    rules: ScheduledAlertRuleConfig[];
+    history: ScheduledAlertHistoryItem[];
+    telegramConfigured: boolean;
+    hasBotToken: boolean;
+    defaultChatId: string;
+  }> {
+    const res = await fetch('/api/alerts/schedule-status');
+    const json = await res.json();
+    if (!res.ok || !json.success || !json.data) {
+      throw new Error(json?.error || 'Không thể tải cấu hình cảnh báo theo giờ cố định');
+    }
+    return json.data;
+  },
+
+  async saveScheduledAlertRules(rules: ScheduledAlertRuleConfig[]): Promise<ScheduledAlertRuleConfig[]> {
+    const liveContext = buildLiveHospitalContext();
+    const res = await fetch('/api/alerts/schedule-rules', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules, liveContext })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json?.error || 'Không thể lưu lịch cảnh báo tự động');
+    }
+    const savedRules = Array.isArray(json.rules) ? (json.rules as ScheduledAlertRuleConfig[]) : rules;
+    const currentSettings = storageService.getSettings();
+    storageService.saveSettings({
+      ...currentSettings,
+      scheduledAlertsConfig: savedRules
+    });
+    return savedRules;
+  },
+
+  async previewScheduledAlert(params: {
+    ruleId: ScheduledAlertRuleId;
+    targetDateVN?: string;
+    equipmentWarningDays?: number;
+    timeHHmmOverride?: string;
+  }): Promise<ScheduledAlertPreviewResult> {
+    const liveContext = buildLiveHospitalContext();
+    const res = await fetch('/api/alerts/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ruleId: params.ruleId,
+        targetDateVN: params.targetDateVN,
+        equipmentWarningDays: params.equipmentWarningDays,
+        timeHHmmOverride: params.timeHHmmOverride,
+        liveContext
+      })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success || !json.data) {
+      throw new Error(json?.error || 'Không thể tạo bản xem trước cảnh báo');
+    }
+    return json.data as ScheduledAlertPreviewResult;
+  },
+
+  async runScheduledAlertNow(params: {
+    ruleId: ScheduledAlertRuleId;
+    targetDateVN?: string;
+    channelOverride?: ScheduledAlertChannel;
+    customChatId?: string;
+  }): Promise<{
+    historyItem: ScheduledAlertHistoryItem;
+    preview: ScheduledAlertPreviewResult;
+  }> {
+    const liveContext = buildLiveHospitalContext();
+    const res = await fetch('/api/alerts/run-now', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ruleId: params.ruleId,
+        targetDateVN: params.targetDateVN,
+        channelOverride: params.channelOverride,
+        customChatId: params.customChatId,
+        liveContext
+      })
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json?.error || 'Không thể gửi cảnh báo ngay');
+    }
+    if (!json.historyItem || !json.preview) {
+      throw new Error(json?.error || 'Phản hồi gửi cảnh báo không đầy đủ');
+    }
+    return {
+      historyItem: json.historyItem as ScheduledAlertHistoryItem,
+      preview: json.preview as ScheduledAlertPreviewResult
+    };
   }
 };

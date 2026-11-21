@@ -371,13 +371,13 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
     taskReminderSummary.overdueCount + taskReminderSummary.dueTodayCount + taskReminderSummary.dueSoon3DaysCount;
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+    <div className="space-y-4 pb-8 animate-in fade-in duration-200">
       {/* Task Deadline & Reminder Escalation Strip */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-2 pr-2 border-r border-slate-200 dark:border-slate-800">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 pr-2.5 border-r border-[#DFE7F0] dark:border-slate-800">
             <BellRing className={`w-4 h-4 ${urgentReminderCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`} />
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+            <span className="text-xs font-bold text-[#263445] dark:text-slate-100 uppercase tracking-wider">
               Theo dõi hạn &amp; Nhắc việc
             </span>
           </div>
@@ -385,10 +385,10 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           <button
             type="button"
             onClick={() => { setDeadlineFilter('ALL'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer tabular-nums ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer tabular-nums border ${
               deadlineFilter === 'ALL'
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-[#155A9C] text-white border-[#155A9C] dark:bg-[#1976D2] dark:border-[#1976D2]'
+                : 'bg-[#F4F7FB] text-[#718096] border-[#DFE7F0] dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-[#EAF4FF] hover:text-[#155A9C]'
             }`}
           >
             Tất cả ({tasks.length})
@@ -397,7 +397,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           <button
             type="button"
             onClick={() => { setDeadlineFilter(deadlineFilter === 'OVERDUE' ? 'ALL' : 'OVERDUE'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
               deadlineFilter === 'OVERDUE'
                 ? 'bg-rose-600 text-white border-rose-600'
                 : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60 hover:bg-rose-100'
@@ -410,7 +410,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           <button
             type="button"
             onClick={() => { setDeadlineFilter(deadlineFilter === 'DUE_TODAY' ? 'ALL' : 'DUE_TODAY'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
               deadlineFilter === 'DUE_TODAY'
                 ? 'bg-amber-600 text-white border-amber-600'
                 : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100'
@@ -423,10 +423,10 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           <button
             type="button"
             onClick={() => { setDeadlineFilter(deadlineFilter === 'DUE_SOON' ? 'ALL' : 'DUE_SOON'); setCurrentPage(1); }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 tabular-nums border ${
               deadlineFilter === 'DUE_SOON'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/60 hover:bg-blue-100'
+                ? 'bg-[#1976D2] text-white border-[#1976D2]'
+                : 'bg-[#EAF4FF] text-[#155A9C] border-[#1976D2]/25 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/60 hover:bg-[#EAF4FF]/80'
             }`}
           >
             <span>Sắp hạn ≤ 3 ngày ({taskReminderSummary.dueTodayCount + taskReminderSummary.dueSoon3DaysCount})</span>
@@ -436,7 +436,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         <button
           type="button"
           onClick={handleBatchRemindUrgentTasks}
-          className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 tabular-nums"
+          className="px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 tabular-nums shadow-2xs"
         >
           <Send className="w-3.5 h-3.5" />
           <span>Nhắc việc quá hạn &amp; sắp hạn ({urgentReminderCount})</span>
@@ -444,47 +444,47 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       </div>
 
       {/* Search, Filter & Actions Bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           {/* View Mode Toggle & Search */}
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center bg-[#F4F7FB] dark:bg-slate-800 p-1 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
               <button
                 onClick={() => setViewMode('table')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-[#1976D2] dark:text-blue-400 shadow-2xs' : 'text-[#718096] hover:text-[#263445]'
                 }`}
               >
-                <LayoutList className="w-4 h-4" />
+                <LayoutList className="w-3.5 h-3.5" />
                 <span>Bảng (Table)</span>
               </button>
               <button
                 onClick={() => setViewMode('kanban')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'kanban' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500'
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  viewMode === 'kanban' ? 'bg-white dark:bg-slate-700 text-[#1976D2] dark:text-blue-400 shadow-2xs' : 'text-[#718096] hover:text-[#263445]'
                 }`}
               >
-                <Kanban className="w-4 h-4" />
+                <Kanban className="w-3.5 h-3.5" />
                 <span>Kanban Board</span>
               </button>
             </div>
 
             {/* Search Input */}
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#718096]" />
               <input
                 type="text"
                 placeholder="Tìm tiêu đề, mã task, người phụ trách..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
               />
             </div>
           </div>
 
           {/* Export & Import Action Buttons */}
           <div className="flex items-center space-x-2 flex-wrap gap-y-2">
-            <label className="cursor-pointer flex items-center space-x-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors">
+            <label className="cursor-pointer flex items-center space-x-1 px-3 py-1.5 bg-[#F4F7FB] hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] hover:text-[#155A9C] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors">
               <Upload className="w-3.5 h-3.5" />
               <span>Import Excel</span>
               <input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="hidden" />
@@ -492,7 +492,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
             <button
               onClick={handleExportExcel}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl text-xs font-semibold transition-colors"
+              className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60 hover:bg-emerald-100 rounded-lg text-xs font-semibold transition-colors"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Xuất Excel</span>
@@ -500,7 +500,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
             <button
               onClick={handleExportPDF}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 hover:bg-rose-100 rounded-xl text-xs font-semibold transition-colors"
+              className="flex items-center space-x-1 px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60 hover:bg-rose-100 rounded-lg text-xs font-semibold transition-colors"
             >
               <FileText className="w-3.5 h-3.5" />
               <span>Xuất PDF</span>
@@ -509,15 +509,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
         </div>
 
         {/* Filter Dropdowns */}
-        <div className="flex items-center space-x-3 overflow-x-auto pb-1 text-xs">
-          <span className="font-semibold text-slate-400 shrink-0 flex items-center">
+        <div className="flex items-center space-x-2.5 overflow-x-auto pb-0.5 text-xs">
+          <span className="font-semibold text-[#718096] shrink-0 flex items-center">
             <Filter className="w-3.5 h-3.5 mr-1" /> Lọc:
           </span>
 
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
+            className="px-2.5 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-200 focus:outline-none focus:border-[#1976D2]"
           >
             <option value="ALL">Tất cả Trạng thái</option>
             <option value="Chờ xử lý">Chờ xử lý</option>
@@ -529,7 +529,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           <select
             value={selectedPriority}
             onChange={(e) => setSelectedPriority(e.target.value)}
-            className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
+            className="px-2.5 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-200 focus:outline-none focus:border-[#1976D2]"
           >
             <option value="ALL">Tất cả Độ ưu tiên</option>
             <option value="Khẩn cấp">Khẩn cấp</option>
@@ -541,7 +541,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
+            className="px-2.5 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-200 focus:outline-none focus:border-[#1976D2]"
           >
             <option value="ALL">Tất cả Loại công việc</option>
             <option value="Xét nghiệm khẩn">Xét nghiệm khẩn</option>
@@ -558,9 +558,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
       {/* Bulk Operations Toolbar */}
       {selectedTaskIds.length > 0 && (
-        <div className="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-2xl p-3 flex items-center justify-between animate-in slide-in-from-top-2">
-          <div className="flex items-center space-x-2 text-xs text-blue-800 dark:text-blue-200 font-semibold">
-            <CheckCircle2 className="w-4 h-4 text-blue-600" />
+        <div className="bg-[#EAF4FF] dark:bg-blue-950/50 border border-[#1976D2]/30 dark:border-blue-800 rounded-xl p-3 flex items-center justify-between animate-in slide-in-from-top-2">
+          <div className="flex items-center space-x-2 text-xs text-[#155A9C] dark:text-blue-200 font-semibold">
+            <CheckCircle2 className="w-4 h-4 text-[#1976D2]" />
             <span>Đã chọn {selectedTaskIds.length} công việc</span>
           </div>
 
@@ -583,33 +583,33 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
       {/* VIEW 1: TABLE VIEW */}
       {viewMode === 'table' && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200">
-              <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 uppercase font-bold text-[11px] border-b border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs text-[#263445] dark:text-slate-200">
+              <thead className="bg-[#F4F7FB] dark:bg-slate-800/80 text-[#263445] dark:text-slate-300 uppercase font-bold text-[11px] border-b border-[#DFE7F0] dark:border-slate-800">
                 <tr>
-                  <th className="p-3.5 w-10">
+                  <th className="py-2.5 px-3 w-10">
                     <input
                       type="checkbox"
                       onChange={handleSelectAll}
                       checked={selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0}
-                      className="rounded-md border-slate-300"
+                      className="rounded border-[#DFE7F0]"
                     />
                   </th>
-                  <th className="p-3.5">Mã & Tiêu đề</th>
-                  <th className="p-3.5">Loại</th>
-                  <th className="p-3.5">Người phụ trách</th>
-                  <th className="p-3.5">Ngày hạn</th>
-                  <th className="p-3.5">Ưu tiên</th>
-                  <th className="p-3.5">Trạng thái</th>
-                  <th className="p-3.5 text-right">Thao tác</th>
+                  <th className="py-2.5 px-3">Mã & Tiêu đề</th>
+                  <th className="py-2.5 px-3">Loại</th>
+                  <th className="py-2.5 px-3">Người phụ trách</th>
+                  <th className="py-2.5 px-3">Ngày hạn</th>
+                  <th className="py-2.5 px-3">Ưu tiên</th>
+                  <th className="py-2.5 px-3">Trạng thái</th>
+                  <th className="py-2.5 px-3 text-right">Thao tác</th>
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-[#DFE7F0]/70 dark:divide-slate-800">
                 {paginatedTasks.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-slate-400">
+                    <td colSpan={8} className="text-center py-12 text-[#718096]">
                       <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                       Không tìm thấy công việc nào phù hợp.
                     </td>
@@ -620,63 +620,63 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     return (
                       <tr 
                         key={task.id} 
-                        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${isSelected ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''}`}
+                        className={`hover:bg-[#EAF4FF]/70 dark:hover:bg-slate-800/50 transition-colors ${isSelected ? 'bg-[#EAF4FF] dark:bg-blue-950/20' : ''}`}
                       >
-                        <td className="p-3.5">
+                        <td className="py-2.5 px-3">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleSelectOne(task.id)}
-                            className="rounded-md border-slate-300"
+                            className="rounded border-[#DFE7F0]"
                           />
                         </td>
-                        <td className="p-3.5 max-w-xs">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-mono text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
+                        <td className="py-2.5 px-3 max-w-xs">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-mono text-[10px] text-[#718096] bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                               {task.id}
                             </span>
                             {task.recurrence !== 'Không' && (
-                              <span className="text-[10px] bg-purple-100 text-purple-700 px-1 rounded-md">
+                              <span className="text-[10px] bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950/60 dark:text-blue-300 px-1.5 py-0.5 rounded font-semibold">
                                 {task.recurrence}
                               </span>
                             )}
                           </div>
                           <h4 
                             onClick={() => setDetailTask(task)}
-                            className="font-semibold text-slate-800 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer line-clamp-1 mt-0.5"
+                            className="font-semibold text-[#263445] dark:text-slate-100 hover:text-[#1976D2] dark:hover:text-blue-400 cursor-pointer line-clamp-1 mt-0.5"
                           >
                             {task.title}
                           </h4>
                         </td>
 
-                        <td className="p-3.5 font-medium">{task.taskType}</td>
+                        <td className="py-2.5 px-3 font-medium text-[#263445] dark:text-slate-200">{task.taskType}</td>
 
-                        <td className="p-3.5">
-                          <div className="font-medium text-slate-800 dark:text-slate-200">{task.assignee}</div>
-                          <div className="text-[10px] text-slate-400">{task.level}</div>
+                        <td className="py-2.5 px-3">
+                          <div className="font-medium text-[#263445] dark:text-slate-200">{task.assignee}</div>
+                          <div className="text-[10px] text-[#718096]">{task.level}</div>
                         </td>
 
-                        <td className="p-3.5 font-medium tabular-nums">
+                        <td className="py-2.5 px-3 font-medium tabular-nums">
                           {(() => {
                             const isDone = task.status === 'Đã hoàn thành' || task.status === 'Hủy';
                             const days = getDaysDiffFromTodayVN(task.dueDate);
                             const rInfo = reminderByTaskId.get(task.id);
                             return (
                               <div className="space-y-0.5">
-                                <span className={!isDone && days !== null && days < 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-800 dark:text-slate-200'}>
+                                <span className={!isDone && days !== null && days < 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-[#263445] dark:text-slate-200'}>
                                   {formatDateVN(task.dueDate)}
                                 </span>
                                 {!isDone && days !== null && days <= 7 && (
                                   <div className={`text-[10px] font-bold ${
                                     days < 0 ? 'text-rose-600 dark:text-rose-400' :
                                     days === 0 ? 'text-amber-600 dark:text-amber-400' :
-                                    'text-blue-600 dark:text-blue-400'
+                                    'text-[#1976D2] dark:text-blue-400'
                                   }`}>
                                     {formatDaysRemainingLabel(days)}
                                   </div>
                                 )}
                                 {rInfo?.lastRemindedAt && (
-                                  <div className="text-[10px] text-slate-400" title={`Đã nhắc ${rInfo.reminderCount} lần`}>
+                                  <div className="text-[10px] text-[#718096]" title={`Đã nhắc ${rInfo.reminderCount} lần`}>
                                     Đã nhắc ({rInfo.reminderCount})
                                   </div>
                                 )}
@@ -685,26 +685,26 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                           })()}
                         </td>
 
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${getPriorityBadge(task.priority)}`}>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${getPriorityBadge(task.priority)}`}>
                             {task.priority}
                           </span>
                         </td>
 
-                        <td className="p-3.5">
+                        <td className="py-2.5 px-3">
                           <button
                             onClick={() => handleToggleComplete(task)}
-                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-transform active:scale-95 ${getStatusBadge(task.status)}`}
+                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-transform active:scale-95 ${getStatusBadge(task.status)}`}
                           >
                             {task.status}
                           </button>
                         </td>
 
-                        <td className="p-3.5 text-right space-x-1 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
                           {task.status !== 'Đã hoàn thành' && task.status !== 'Hủy' && (
                             <button
                               onClick={() => handleSendSingleReminder(task)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              className="p-1.5 text-[#718096] hover:text-[#1976D2] hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
                               title="Gửi nhắc việc qua Telegram / In-App"
                             >
                               <BellRing className="w-4 h-4" />
@@ -712,7 +712,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                           )}
                           <button
                             onClick={() => setDetailTask(task)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1.5 text-[#718096] hover:text-[#1976D2] hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-md transition-colors"
                             title="Xem chi tiết"
                           >
                             <Eye className="w-4 h-4" />
@@ -722,14 +722,14 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                               setEditingTask(task);
                               setFormData(task);
                             }}
-                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1.5 text-[#718096] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-md transition-colors"
                             title="Sửa nhanh"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDuplicate(task)}
-                            className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1.5 text-[#718096] hover:text-[#155A9C] hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-md transition-colors"
                             title="Nhân bản"
                           >
                             <Copy className="w-4 h-4" />
@@ -747,7 +747,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                                 true
                               );
                             }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-1.5 text-[#718096] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-md transition-colors"
                             title="Xóa"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -762,24 +762,24 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
           </div>
 
           {/* Pagination Footer */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+          <div className="py-2.5 px-3.5 bg-[#F4F7FB] dark:bg-slate-800/60 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between text-xs text-[#718096]">
             <span>Hiển thị {paginatedTasks.length} trên tổng số {filteredTasks.length} công việc</span>
 
             <div className="flex items-center space-x-2">
               <button
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700"
+                className="p-1.5 rounded-md border border-[#DFE7F0] dark:border-slate-700 bg-white dark:bg-slate-900 disabled:opacity-40 hover:bg-[#EAF4FF] dark:hover:bg-slate-700"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="font-semibold text-slate-700 dark:text-slate-300">
+              <span className="font-semibold text-[#263445] dark:text-slate-300">
                 Trang {currentPage} / {totalPages}
               </span>
               <button
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700"
+                className="p-1.5 rounded-md border border-[#DFE7F0] dark:border-slate-700 bg-white dark:bg-slate-900 disabled:opacity-40 hover:bg-[#EAF4FF] dark:hover:bg-slate-700"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -790,44 +790,44 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
 
       {/* VIEW 2: NOTION / TRELLO KANBAN BOARD */}
       {viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {(['Chờ xử lý', 'Đang thực hiện', 'Đã hoàn thành', 'Hủy'] as TaskStatus[]).map((colStatus) => {
             const columnTasks = filteredTasks.filter(t => t.status === colStatus);
 
             return (
-              <div key={colStatus} className="bg-slate-100/70 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700">
-                  <span className="font-bold text-xs text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center">
-                    <span className="w-2 h-2 rounded-full mr-2 bg-blue-500"></span>
+              <div key={colStatus} className="bg-[#F4F7FB] dark:bg-slate-800/40 rounded-xl p-3.5 border border-[#DFE7F0] dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between pb-2 border-b border-[#DFE7F0] dark:border-slate-700">
+                  <span className="font-bold text-xs text-[#263445] dark:text-slate-200 uppercase tracking-wider flex items-center">
+                    <span className="w-2 h-2 rounded-full mr-2 bg-[#1976D2]"></span>
                     {colStatus}
                   </span>
-                  <span className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-full">
+                  <span className="px-2 py-0.5 bg-white border border-[#DFE7F0] dark:bg-slate-700 dark:border-slate-600 text-[#263445] dark:text-slate-300 text-xs font-bold rounded-md">
                     {columnTasks.length}
                   </span>
                 </div>
 
-                <div className="space-y-3 min-h-[300px]">
+                <div className="space-y-2.5 min-h-[300px]">
                   {columnTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all space-y-2.5 cursor-pointer"
+                      className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs hover:border-[#1976D2]/60 transition-all space-y-2 cursor-pointer"
                       onClick={() => setDetailTask(task)}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-slate-400">{task.id}</span>
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${getPriorityBadge(task.priority)}`}>
+                        <span className="text-[10px] font-mono text-[#718096]">{task.id}</span>
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${getPriorityBadge(task.priority)}`}>
                           {task.priority}
                         </span>
                       </div>
 
-                      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2">
+                      <h4 className="text-xs font-bold text-[#263445] dark:text-slate-100 line-clamp-2">
                         {task.title}
                       </h4>
 
-                      <p className="text-xs text-slate-500 line-clamp-2">{task.description}</p>
+                      <p className="text-[11px] text-[#718096] line-clamp-2">{task.description}</p>
 
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                        <span className="font-medium text-slate-600 dark:text-slate-300">{task.assignee}</span>
+                      <div className="pt-2 border-t border-[#DFE7F0]/70 dark:border-slate-800 flex items-center justify-between text-[11px] text-[#718096]">
+                        <span className="font-medium text-[#263445] dark:text-slate-300">{task.assignee}</span>
                         <span>{task.dueDate}</span>
                       </div>
                     </div>
@@ -842,9 +842,9 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       {/* CREATE / EDIT TASK MODAL */}
       {(isCreateOpen || editingTask) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-2xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-[#263445] dark:text-slate-100">
                 {editingTask ? 'Chỉnh sửa công việc' : 'Tạo công việc mới'}
               </h3>
               <button 
@@ -852,15 +852,15 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                   setEditingTask(null);
                   onCloseCreateModal();
                 }}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-[#718096] hover:text-[#263445] p-1 rounded-md hover:bg-[#F4F7FB]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitForm} className="space-y-4 text-xs">
+            <form onSubmit={handleSubmitForm} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">
                   Tiêu đề công việc <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -869,17 +869,17 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                   placeholder="Ví dụ: Hội chẩn ca bệnh tim bẩm sinh Khoa Cấp Cứu..."
                   value={formData.title || ''}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                  className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Loại công việc</label>
+                  <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Loại công việc</label>
                   <select
                     value={formData.taskType}
                     onChange={(e) => setFormData({ ...formData, taskType: e.target.value as TaskType })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                    className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                   >
                     <option value="Xét nghiệm khẩn">Xét nghiệm khẩn</option>
                     <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh</option>
@@ -893,7 +893,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                  <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">
                     Ngày hết hạn <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -901,14 +901,14 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                     required
                     value={formData.dueDate || ''}
                     onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                    className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Người phụ trách</label>
+                  <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Người phụ trách</label>
                   <select
                     value={formData.assignee}
                     onChange={(e) => {
@@ -920,7 +920,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                         telegramChatId: selectedUser?.telegramChatId || ''
                       });
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                    className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                   >
                     {users.map(u => (
                       <option key={u.id} value={u.name}>{u.name} ({u.role})</option>
@@ -929,11 +929,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Mức độ ưu tiên</label>
+                  <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Mức độ ưu tiên</label>
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value as TaskPriority })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                    className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                   >
                     <option value="Khẩn cấp">Khẩn cấp</option>
                     <option value="Cao">Cao</option>
@@ -943,13 +943,13 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Trạng thái</label>
+                  <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Trạng thái</label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as TaskStatus })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                    className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                   >
                     <option value="Chờ xử lý">Chờ xử lý</option>
                     <option value="Đang thực hiện">Đang thực hiện</option>
@@ -959,11 +959,11 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Lặp lại định kỳ</label>
+                  <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Lặp lại định kỳ</label>
                   <select
                     value={formData.recurrence}
                     onChange={(e) => setFormData({ ...formData, recurrence: e.target.value as TaskRecurrence })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                    className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                   >
                     <option value="Không">Không lặp lại</option>
                     <option value="Hàng ngày">Hàng ngày</option>
@@ -974,30 +974,30 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Mô tả công việc</label>
+                <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Mô tả công việc</label>
                 <textarea
                   rows={3}
                   placeholder="Nhập thông tin chi tiết ca bệnh, yêu cầu chuẩn bị..."
                   value={formData.description || ''}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                  className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
                 ></textarea>
               </div>
 
-              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => {
                     setEditingTask(null);
                     onCloseCreateModal();
                   }}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                  className="px-4 py-2 text-[#263445] dark:text-slate-300 font-medium hover:bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:hover:bg-slate-800 rounded-lg"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md transition-colors"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-semibold rounded-lg shadow-2xs transition-colors"
                 >
                   {editingTask ? 'Cập nhật' : 'Tạo mới'}
                 </button>
@@ -1010,29 +1010,29 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
       {/* TASK DETAIL DRAWER MODAL */}
       {detailTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4">
-            <div className="flex items-start justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-xl w-full p-5 space-y-4">
+            <div className="flex items-start justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
               <div>
-                <span className="text-xs font-mono text-slate-400">{detailTask.id}</span>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-0.5">{detailTask.title}</h3>
+                <span className="text-xs font-mono text-[#718096]">{detailTask.id}</span>
+                <h3 className="text-base font-bold text-[#263445] dark:text-slate-100 mt-0.5">{detailTask.title}</h3>
               </div>
-              <button onClick={() => setDetailTask(null)} className="text-slate-400 hover:text-slate-600 p-1">
+              <button onClick={() => setDetailTask(null)} className="text-[#718096] hover:text-[#263445] p-1 rounded-md hover:bg-[#F4F7FB]">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 text-xs">
+            <div className="p-3.5 bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-700 rounded-lg space-y-2 text-xs text-[#263445] dark:text-slate-200">
               <p><span className="font-semibold">Mô tả:</span> {detailTask.description || 'Không có mô tả'}</p>
               <p><span className="font-semibold">Người phụ trách:</span> {detailTask.assignee} ({detailTask.assigneeEmail})</p>
               <p><span className="font-semibold">Ngày hạn:</span> {detailTask.dueDate}</p>
               <p><span className="font-semibold">Ghi chú:</span> {detailTask.notes || 'Không có'}</p>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
               {detailTask.status !== 'Đã hoàn thành' && detailTask.status !== 'Hủy' && (
                 <button
                   onClick={() => handleSendSingleReminder(detailTask)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <BellRing className="w-3.5 h-3.5" />
                   <span>Gửi nhắc việc ngay</span>
@@ -1044,13 +1044,13 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
                   setFormData(detailTask);
                   setDetailTask(null);
                 }}
-                className="px-4 py-2 bg-amber-500 text-white font-semibold rounded-xl text-xs hover:bg-amber-600"
+                className="px-4 py-2 bg-amber-500 text-white font-semibold rounded-lg text-xs hover:bg-amber-600"
               >
                 Chỉnh sửa
               </button>
               <button
                 onClick={() => setDetailTask(null)}
-                className="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs"
+                className="px-4 py-2 bg-[#F4F7FB] hover:bg-[#EAF4FF] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 text-[#263445] dark:text-slate-200 font-semibold rounded-lg text-xs"
               >
                 Đóng
               </button>

@@ -129,24 +129,24 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
   const currentMeta = visibleMenuItems.find((item) => item.id === activeTab) || visibleMenuItems[0] || CONFIG_MENU_ITEMS[0];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 w-full pb-8">
       {/* Dedicated System Configuration Menu */}
-      <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 md:p-5 shadow-xs">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 pb-4 border-b border-slate-100 dark:border-slate-800">
+      <section className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 p-4 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 pb-3 border-b border-[#DFE7F0] dark:border-slate-800">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/60 flex items-center justify-center shrink-0">
-              <SlidersHorizontal className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <div className="w-9 h-9 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/60 border border-[#1976D2]/25 dark:border-blue-800/60 flex items-center justify-center shrink-0">
+              <SlidersHorizontal className="w-4 h-4 text-[#1976D2] dark:text-blue-400" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+              <h2 className="text-sm font-bold text-[#263445] dark:text-slate-100 truncate">
                 Menu Cấu Hình &amp; Quản Trị Hệ Thống
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+              <p className="text-xs text-[#718096] dark:text-slate-400 truncate">
                 {currentMeta.label} &middot; {currentMeta.description}
               </p>
             </div>
           </div>
-          <div className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
+          <div className="text-xs font-medium text-[#718096] dark:text-slate-400 tabular-nums shrink-0">
             {actorAccess.shortTierLabel} &middot; {visibleMenuItems.length} phân hệ cấu hình
           </div>
         </div>
@@ -154,7 +154,7 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
         {/* Configuration Navigation Tabs */}
         <nav
           aria-label="Menu cấu hình hệ thống"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-4"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-3"
         >
           {visibleMenuItems.map((item) => {
             const Icon = item.icon;
@@ -165,16 +165,16 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => onSelectTab(item.id)}
-                className={`flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl text-left text-xs font-semibold border transition-colors cursor-pointer ${
+                className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-xs font-semibold border transition-colors cursor-pointer ${
                   isActive
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                    : 'bg-slate-50/70 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-[#1976D2] text-white border-[#1976D2] shadow-xs'
+                    : 'bg-[#F4F7FB] dark:bg-slate-800/50 text-[#263445] dark:text-slate-300 border-[#DFE7F0] dark:border-slate-700/80 hover:bg-[#EAF4FF] dark:hover:bg-slate-800 hover:text-[#155A9C] dark:hover:text-white'
                 }`}
               >
-                <span className="flex items-center gap-2.5 min-w-0">
+                <span className="flex items-center gap-2 min-w-0">
                   <Icon
                     className={`w-4 h-4 shrink-0 ${
-                      isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'
+                      isActive ? 'text-white' : 'text-[#718096] dark:text-slate-400'
                     }`}
                   />
                   <span className="truncate whitespace-nowrap">{item.label}</span>
@@ -184,7 +184,7 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
                     className={`text-[10px] font-bold shrink-0 px-1.5 py-0.5 rounded ${
                       isActive
                         ? 'bg-white/20 text-white'
-                        : 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-100 dark:border-blue-900/40'
+                        : 'bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950/60 dark:text-blue-300 border border-[#1976D2]/20 dark:border-blue-900/40'
                     }`}
                   >
                     {item.badge}

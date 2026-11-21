@@ -361,58 +361,58 @@ export const DiscussionView: React.FC = () => {
     : [];
 
   return (
-    <div className="h-[calc(100vh-100px)] flex bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden select-none">
+    <div className="h-[calc(100vh-100px)] flex bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs overflow-hidden select-none">
       
-      {/* 1. LEFT MS TEAMS MAIN NAVIGATION RAIL */}
-      <div className="w-16 bg-[#2f3142] dark:bg-slate-950 text-slate-300 flex flex-col items-center py-4 space-y-5 border-r border-slate-800 shrink-0">
-        <div className="w-10 h-10 rounded-xl bg-[#464eb8] flex items-center justify-center text-white font-extrabold text-lg shadow-md mb-2">
-          <Activity className="w-6 h-6" />
+      {/* 1. LEFT ENTERPRISE HIS COMMUNICATION NAVIGATION RAIL */}
+      <div className="w-16 bg-[#155A9C] dark:bg-slate-950 text-blue-100 flex flex-col items-center py-4 space-y-4 border-r border-[#155A9C] dark:border-slate-800 shrink-0">
+        <div className="w-10 h-10 rounded-lg bg-[#1976D2] border border-white/20 flex items-center justify-center text-white font-extrabold text-lg mb-1">
+          <Activity className="w-5 h-5" />
         </div>
 
         <button 
           onClick={() => setNavSection('chat')}
-          className={`relative p-2.5 rounded-xl transition-all flex flex-col items-center group ${
-            navSection === 'chat' ? 'bg-[#464eb8] text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          className={`relative p-2 rounded-lg transition-all flex flex-col items-center group w-12 ${
+            navSection === 'chat' ? 'bg-white text-[#155A9C]' : 'text-blue-100/80 hover:text-white hover:bg-white/10'
           }`}
-          title="Trò chuyện & Nhóm (Teams Chat)"
+          title="Trò chuyện & Nhóm (Trao đổi nội bộ)"
         >
-          <MessageSquare className="w-5 h-5" />
-          <span className="text-[9px] font-bold mt-1">Teams</span>
+          <MessageSquare className="w-4 h-4" />
+          <span className="text-[9px] font-bold mt-1">Chat</span>
           {messages.some(m => m.isUnread) && (
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-slate-900"></span>
+            <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-[#155A9C]"></span>
           )}
         </button>
 
         <button 
           onClick={() => setNavSection('announcements')}
-          className={`p-2.5 rounded-xl transition-all flex flex-col items-center group ${
-            navSection === 'announcements' ? 'bg-[#464eb8] text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          className={`p-2 rounded-lg transition-all flex flex-col items-center group w-12 ${
+            navSection === 'announcements' ? 'bg-white text-[#155A9C]' : 'text-blue-100/80 hover:text-white hover:bg-white/10'
           }`}
           title="Thông báo Toàn khoa"
         >
-          <Bell className="w-5 h-5" />
+          <Bell className="w-4 h-4" />
           <span className="text-[9px] font-bold mt-1">Thông báo</span>
         </button>
 
         <button 
           onClick={() => setNavSection('saved')}
-          className={`p-2.5 rounded-xl transition-all flex flex-col items-center group ${
-            navSection === 'saved' ? 'bg-[#464eb8] text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          className={`p-2 rounded-lg transition-all flex flex-col items-center group w-12 ${
+            navSection === 'saved' ? 'bg-white text-[#155A9C]' : 'text-blue-100/80 hover:text-white hover:bg-white/10'
           }`}
           title="Tin nhắn Ghim & Đã lưu"
         >
-          <Star className="w-5 h-5" />
+          <Star className="w-4 h-4" />
           <span className="text-[9px] font-bold mt-1">Đã lưu</span>
         </button>
 
         <button 
           onClick={() => setNavSection('search')}
-          className={`p-2.5 rounded-xl transition-all flex flex-col items-center group ${
-            navSection === 'search' ? 'bg-[#464eb8] text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          className={`p-2 rounded-lg transition-all flex flex-col items-center group w-12 ${
+            navSection === 'search' ? 'bg-white text-[#155A9C]' : 'text-blue-100/80 hover:text-white hover:bg-white/10'
           }`}
           title="Tìm kiếm nâng cao"
         >
-          <Search className="w-5 h-5" />
+          <Search className="w-4 h-4" />
           <span className="text-[9px] font-bold mt-1">Tìm kiếm</span>
         </button>
 
@@ -420,48 +420,48 @@ export const DiscussionView: React.FC = () => {
 
         <button 
           onClick={() => setNavSection('backup')}
-          className={`p-2.5 rounded-xl transition-all flex flex-col items-center group ${
-            navSection === 'backup' ? 'bg-[#464eb8] text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          className={`p-2 rounded-lg transition-all flex flex-col items-center group w-12 ${
+            navSection === 'backup' ? 'bg-white text-[#155A9C]' : 'text-blue-100/80 hover:text-white hover:bg-white/10'
           }`}
           title="Sao lưu & Đồng bộ Sheet"
         >
-          <Archive className="w-5 h-5" />
+          <Archive className="w-4 h-4" />
           <span className="text-[9px] font-bold mt-1">Lưu trữ</span>
         </button>
       </div>
 
       {/* 2. SECONDARY SIDEBAR: CHANNELS & DIRECT MESSAGES */}
-      <div className="w-80 border-r border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col shrink-0">
+      <div className="w-76 border-r border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-900/60 flex flex-col shrink-0">
         
         {/* Header Bar */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="p-3.5 border-b border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center space-x-1.5">
-              <span>Communication Center</span>
+            <h2 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center space-x-1.5">
+              <span>Trung Tâm Trao Đổi</span>
             </h2>
-            <p className="text-[11px] text-slate-500 font-medium">Khoa Cận Lâm Sàng MS Teams</p>
+            <p className="text-[11px] text-[#718096] font-medium">Khoa Cận Lâm Sàng · HIS</p>
           </div>
 
           <button 
             onClick={() => setShowCreateGroupModal(true)}
-            className="p-1.5 bg-[#464eb8] hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all flex items-center space-x-1 shadow-sm"
+            className="px-2.5 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold transition-all flex items-center space-x-1"
             title="Tạo nhóm chat mới"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span className="text-[11px]">Tạo Nhóm</span>
           </button>
         </div>
 
         {/* Filter Input */}
-        <div className="px-3 py-2 border-b border-slate-200/60 dark:border-slate-800/60">
+        <div className="px-3 py-2 border-b border-[#DFE7F0] dark:border-slate-800/60">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#718096]" />
             <input 
               type="text"
               placeholder="Lọc kênh hoặc nhân sự..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#464eb8] text-slate-800 dark:text-slate-100"
+              className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#1976D2]/25 focus:border-[#1976D2] text-[#263445] dark:text-slate-100"
             />
           </div>
         </div>
@@ -471,7 +471,7 @@ export const DiscussionView: React.FC = () => {
           
           {/* Group Channels Section */}
           <div>
-            <div className="px-3 pb-1.5 flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <div className="px-2.5 pb-1.5 flex items-center justify-between text-[10px] font-bold text-[#718096] uppercase tracking-wider">
               <span>Nhóm Trao Đổi Khoa ({channels.length})</span>
             </div>
 
@@ -491,14 +491,14 @@ export const DiscussionView: React.FC = () => {
                         setNavSection('chat');
                         storageService.markMessagesAsRead(ch.id);
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
                         isActive
-                          ? 'bg-[#464eb8] text-white shadow-sm font-bold'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800'
+                          ? 'bg-[#1976D2] text-white font-bold'
+                          : 'text-[#263445] dark:text-slate-300 hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
                       }`}
                     >
-                      <div className="flex items-center space-x-2.5 min-w-0">
-                        <Hash className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-indigo-500'}`} />
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <Hash className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-[#1976D2]'}`} />
                         <span className="truncate">{ch.name}</span>
                       </div>
 
@@ -515,7 +515,7 @@ export const DiscussionView: React.FC = () => {
 
           {/* Direct Messages Section */}
           <div>
-            <div className="px-3 pb-1.5 flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <div className="px-2.5 pb-1.5 flex items-center justify-between text-[10px] font-bold text-[#718096] uppercase tracking-wider">
               <span>Trò Chuyện Cá Nhân ({users.length - 1})</span>
             </div>
 
@@ -537,10 +537,10 @@ export const DiscussionView: React.FC = () => {
                         setNavSection('chat');
                         storageService.markMessagesAsRead(u.id);
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
                         isActive
-                          ? 'bg-[#464eb8] text-white shadow-sm font-bold'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800'
+                          ? 'bg-[#1976D2] text-white font-bold'
+                          : 'text-[#263445] dark:text-slate-300 hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
                       }`}
                     >
                       <div className="flex items-center space-x-2.5 min-w-0">
@@ -550,7 +550,7 @@ export const DiscussionView: React.FC = () => {
                         </div>
                         <div className="truncate text-left">
                           <p className="truncate">{u.name}</p>
-                          <p className={`text-[10px] truncate ${isActive ? 'text-indigo-200' : 'text-slate-400'}`}>
+                          <p className={`text-[10px] truncate ${isActive ? 'text-blue-100' : 'text-[#718096]'}`}>
                             {u.title || u.role}
                           </p>
                         </div>
@@ -578,11 +578,11 @@ export const DiscussionView: React.FC = () => {
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             
             {/* Active Header Bar */}
-            <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+            <div className="px-4 py-3 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900/50 shrink-0">
               <div className="flex items-center space-x-3">
                 {chatType === 'group' ? (
-                  <div className="p-2 bg-indigo-100 dark:bg-indigo-950 text-[#464eb8] dark:text-indigo-300 rounded-xl">
-                    <Hash className="w-5 h-5" />
+                  <div className="p-2 bg-[#EAF4FF] dark:bg-blue-950 text-[#1976D2] dark:text-blue-300 rounded-lg">
+                    <Hash className="w-4 h-4" />
                   </div>
                 ) : (
                   <div className="relative">
@@ -592,15 +592,15 @@ export const DiscussionView: React.FC = () => {
                 )}
 
                 <div>
-                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                  <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center space-x-2">
                     <span>{chatType === 'group' ? activeChannel?.name : activeDmUser?.name}</span>
                     {chatType === 'group' && (
-                      <span className="text-[10px] px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-[#464eb8] dark:text-indigo-300 rounded-full font-bold">
+                      <span className="text-[10px] px-2 py-0.5 bg-[#EAF4FF] dark:bg-blue-950/60 text-[#155A9C] dark:text-blue-300 rounded font-bold">
                         {activeChannel?.members.length || 0} thành viên
                       </span>
                     )}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium truncate max-w-lg">
+                  <p className="text-[11px] text-[#718096] font-medium truncate max-w-lg">
                     {chatType === 'group' ? activeChannel?.description : `${activeDmUser?.title} - ${getUserPresence(activeDmUserId).label}`}
                   </p>
                 </div>
@@ -610,7 +610,7 @@ export const DiscussionView: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button 
                   onClick={() => setShowShareModal(true)}
-                  className="px-2.5 py-1.5 bg-indigo-50 dark:bg-slate-800 hover:bg-indigo-100 text-[#464eb8] dark:text-indigo-300 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 border border-indigo-200/50 dark:border-slate-700"
+                  className="px-2.5 py-1.5 bg-[#EAF4FF] dark:bg-slate-800 hover:bg-[#1976D2]/15 text-[#155A9C] dark:text-blue-300 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 border border-[#1976D2]/25 dark:border-slate-700"
                   title="Chia sẻ Công việc / Tài liệu / Lịch trực"
                 >
                   <Share2 className="w-3.5 h-3.5" />
@@ -620,7 +620,7 @@ export const DiscussionView: React.FC = () => {
                 {chatType === 'group' && (
                   <button 
                     onClick={() => setShowManageMembersModal(true)}
-                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
+                    className="p-2 text-[#718096] hover:text-[#263445] hover:bg-[#F4F7FB] dark:hover:bg-slate-800 rounded-lg transition-all"
                     title="Quản lý thành viên nhóm"
                   >
                     <Users className="w-4 h-4" />
@@ -629,7 +629,7 @@ export const DiscussionView: React.FC = () => {
 
                 <button 
                   onClick={handleExportChatHistory}
-                  className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
+                  className="p-2 text-[#718096] hover:text-[#263445] hover:bg-[#F4F7FB] dark:hover:bg-slate-800 rounded-lg transition-all"
                   title="Tải xuống nhật ký Chat JSON"
                 >
                   <Download className="w-4 h-4" />
@@ -701,10 +701,10 @@ export const DiscussionView: React.FC = () => {
                         </div>
 
                         {/* Content Body Bubble */}
-                        <div className={`relative p-3 rounded-2xl text-xs sm:text-sm leading-relaxed transition-all shadow-2xs ${
+                        <div className={`relative p-3 rounded-xl text-xs sm:text-sm leading-relaxed transition-all ${
                           isMe 
-                            ? 'bg-[#464eb8] text-white rounded-tr-none' 
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-200/80 dark:border-slate-700/80'
+                            ? 'bg-[#1976D2] text-white rounded-tr-none' 
+                            : 'bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-100 rounded-tl-none border border-[#DFE7F0] dark:border-slate-700/80'
                         }`}>
                           
                           {/* Text message */}
@@ -969,20 +969,20 @@ export const DiscussionView: React.FC = () => {
                         setShowStickerPicker(!showStickerPicker);
                         setShowEmojiPicker(false);
                       }}
-                      className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-all text-[#464eb8] font-bold text-xs"
+                      className="p-1.5 hover:bg-[#DFE7F0]/60 dark:hover:bg-slate-800 rounded-lg transition-all text-[#155A9C] font-bold text-xs"
                       title="Nhãn dán Sticker Y Khoa"
                     >
                       Sticker
                     </button>
 
                     {showStickerPicker && (
-                      <div className="absolute bottom-10 left-0 p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl w-64 grid grid-cols-2 gap-2 z-30">
+                      <div className="absolute bottom-10 left-0 p-3 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-xl shadow-lg w-64 grid grid-cols-2 gap-2 z-30">
                         {medicalStickers.map((st, i) => (
                           <button
                             key={i}
                             type="button"
                             onClick={() => handleSendSticker(st.symbol, st.label)}
-                            className={`p-2 rounded-xl text-left flex items-center space-x-2 transition-all hover:scale-102 ${st.color}`}
+                            className={`p-2 rounded-lg text-left flex items-center space-x-2 transition-all hover:scale-102 ${st.color}`}
                           >
                             <span className="text-xl">{st.symbol}</span>
                             <span className="text-[10px] font-bold truncate">{st.label}</span>
@@ -996,7 +996,7 @@ export const DiscussionView: React.FC = () => {
                   <button 
                     type="button" 
                     onClick={() => setShowShareModal(true)}
-                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-all text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center space-x-1"
+                    className="p-1.5 hover:bg-[#DFE7F0]/60 dark:hover:bg-slate-800 rounded-lg transition-all text-[#155A9C] dark:text-blue-400 font-bold text-xs flex items-center space-x-1"
                   >
                     <Share2 className="w-3.5 h-3.5" />
                     <span className="text-[11px]">Chia sẻ thẻ</span>
@@ -1007,14 +1007,14 @@ export const DiscussionView: React.FC = () => {
                     type="button" 
                     onClick={() => setIsUrgent(!isUrgent)}
                     className={`px-2 py-1 rounded-lg text-[10px] font-extrabold transition-all ${
-                      isUrgent ? 'bg-rose-500 text-white shadow-xs animate-pulse' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      isUrgent ? 'bg-rose-500 text-white shadow-xs animate-pulse' : 'bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#718096] dark:text-slate-400'
                     }`}
                   >
                     🚨 Đánh dấu KHẨN
                   </button>
                 </div>
 
-                <span className="text-[10px] text-slate-400">Ấn Enter để gửi, Shift+Enter để xuống dòng</span>
+                <span className="text-[10px] text-[#718096]">Ấn Enter để gửi, Shift+Enter để xuống dòng</span>
               </div>
 
               {/* Text Input Row */}
@@ -1024,13 +1024,13 @@ export const DiscussionView: React.FC = () => {
                   value={inputText}
                   onChange={handleInputChange}
                   placeholder={`Gửi tin nhắn trao đổi trong ${chatType === 'group' ? '#' + activeChannel?.name : '@' + activeDmUser?.name}... (Nhập @ để nhắc tên)`}
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#464eb8] text-slate-800 dark:text-slate-100"
+                  className="flex-1 px-3.5 py-2 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#1976D2]/25 focus:border-[#1976D2] text-[#263445] dark:text-slate-100"
                 />
 
                 <button
                   type="submit"
                   disabled={!inputText.trim() && !attachedFile}
-                  className="px-5 py-2.5 bg-[#464eb8] hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center space-x-1 shrink-0"
+                  className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all flex items-center space-x-1 shrink-0"
                 >
                   <Send className="w-4 h-4" />
                   <span className="hidden sm:inline">Gửi</span>
@@ -1044,24 +1044,24 @@ export const DiscussionView: React.FC = () => {
 
         {/* VIEW MODE 2: DEPARTMENT ANNOUNCEMENTS (THÔNG BÁO) */}
         {navSection === 'announcements' && (
-          <div className="flex-1 flex flex-col h-full overflow-y-auto p-6 space-y-6 custom-scrollbar">
+          <div className="flex-1 flex flex-col h-full overflow-y-auto p-5 space-y-4 custom-scrollbar">
             
             {/* Announcement Banner */}
-            <div className="flex items-center justify-between p-5 rounded-2xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white shadow-md">
+            <div className="flex items-center justify-between p-4 sm:p-5 rounded-xl bg-[#155A9C] text-white">
               <div>
-                <div className="flex items-center space-x-2 text-indigo-300 font-bold text-xs uppercase tracking-wider mb-1">
+                <div className="flex items-center space-x-2 text-blue-200 font-bold text-xs uppercase tracking-wider mb-1">
                   <Bell className="w-4 h-4" />
                   <span>Bảng Thông Báo Nội Bộ Khoa</span>
                 </div>
-                <h2 className="text-xl font-extrabold">Thông Báo & Chỉ Đạo Ban Chủ Nhiệm Khoa</h2>
-                <p className="text-xs text-indigo-200 mt-1 max-w-2xl">
+                <h2 className="text-lg font-bold">Thông Báo & Chỉ Đạo Ban Chủ Nhiệm Khoa</h2>
+                <p className="text-xs text-blue-100 mt-0.5 max-w-2xl">
                   Truyền đạt chỉ thị khẩn cấp, lịch trực, thông báo họp giao ban và quy trình chuyên môn ISO 15189.
                 </p>
               </div>
 
               <button 
                 onClick={() => setShowNewAnnouncementModal(true)}
-                className="px-4 py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center space-x-2 shrink-0"
+                className="px-3.5 py-2 bg-white text-[#155A9C] hover:bg-[#EAF4FF] font-bold text-xs rounded-lg transition-all flex items-center space-x-1.5 shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>Đăng Thông Báo Mới</span>
@@ -1069,15 +1069,15 @@ export const DiscussionView: React.FC = () => {
             </div>
 
             {/* Announcement Category Filter Tabs */}
-            <div className="flex items-center space-x-2 overflow-x-auto pb-2 custom-scrollbar">
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 custom-scrollbar">
               {['Tất cả', 'Thông báo khẩn', 'Lịch họp', 'Đổi lịch trực', 'Công việc', 'Toàn khoa'].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setAnnouncementCategory(cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
                     announcementCategory === cat
-                      ? 'bg-[#464eb8] text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      ? 'bg-[#1976D2] text-white'
+                      : 'bg-[#F4F7FB] dark:bg-slate-800 text-[#718096] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 hover:bg-[#EAF4FF]'
                   }`}
                 >
                   {cat}
@@ -1315,8 +1315,8 @@ export const DiscussionView: React.FC = () => {
             </div>
 
             <div className="pt-2 flex items-center justify-end space-x-2">
-              <button type="button" onClick={() => setShowCreateGroupModal(false)} className="px-3 py-2 text-xs font-bold text-slate-500">Hủy</button>
-              <button type="submit" className="px-4 py-2 bg-[#464eb8] text-white text-xs font-bold rounded-xl shadow-xs">Tạo Nhóm</button>
+              <button type="button" onClick={() => setShowCreateGroupModal(false)} className="px-3 py-2 text-xs font-bold text-[#718096]">Hủy</button>
+              <button type="submit" className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white text-xs font-bold rounded-lg">Tạo Nhóm</button>
             </div>
           </form>
         </div>
@@ -1324,20 +1324,20 @@ export const DiscussionView: React.FC = () => {
 
       {/* MODAL 3: NEW ANNOUNCEMENT */}
       {showNewAnnouncementModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <form onSubmit={handleCreateAnnouncement} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 w-full max-w-lg shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
-              <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">Đăng Thông Báo Nội Bộ Khoa</h3>
-              <button type="button" onClick={() => setShowNewAnnouncementModal(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <form onSubmit={handleCreateAnnouncement} className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 p-5 w-full max-w-lg shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-[#DFE7F0] dark:border-slate-800">
+              <h3 className="font-bold text-sm text-[#263445] dark:text-slate-100">Đăng Thông Báo Nội Bộ Khoa</h3>
+              <button type="button" onClick={() => setShowNewAnnouncementModal(false)} className="text-[#718096] hover:text-[#263445]"><X className="w-4 h-4" /></button>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Danh mục thông báo</label>
+                <label className="font-bold text-[#263445] dark:text-slate-300">Danh mục thông báo</label>
                 <select 
                   value={newAnncCategory} 
                   onChange={(e) => setNewAnncCategory(e.target.value as AnnouncementCategory)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl mt-1 text-xs"
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg mt-1 text-xs"
                 >
                   <option value="Toàn khoa">Toàn khoa</option>
                   <option value="Thông báo khẩn">Thông báo khẩn</option>
@@ -1348,26 +1348,26 @@ export const DiscussionView: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Tiêu đề thông báo *</label>
+                <label className="font-bold text-[#263445] dark:text-slate-300">Tiêu đề thông báo *</label>
                 <input 
                   type="text" 
                   required 
                   placeholder="Nhập tiêu đề thông báo..." 
                   value={newAnncTitle} 
                   onChange={(e) => setNewAnncTitle(e.target.value)} 
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl mt-1 text-xs" 
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg mt-1 text-xs" 
                 />
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Nội dung chi tiết *</label>
+                <label className="font-bold text-[#263445] dark:text-slate-300">Nội dung chi tiết *</label>
                 <textarea 
                   rows={4} 
                   required 
                   placeholder="Nội dung truyền đạt..." 
                   value={newAnncContent} 
                   onChange={(e) => setNewAnncContent(e.target.value)} 
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl mt-1 text-xs" 
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg mt-1 text-xs" 
                 />
               </div>
 
@@ -1382,8 +1382,8 @@ export const DiscussionView: React.FC = () => {
             </div>
 
             <div className="pt-2 flex items-center justify-end space-x-2">
-              <button type="button" onClick={() => setShowNewAnnouncementModal(false)} className="px-3 py-2 text-xs font-bold text-slate-500">Hủy</button>
-              <button type="submit" className="px-4 py-2 bg-[#464eb8] text-white text-xs font-bold rounded-xl shadow-xs">Đăng Thông Báo</button>
+              <button type="button" onClick={() => setShowNewAnnouncementModal(false)} className="px-3 py-2 text-xs font-bold text-[#718096]">Hủy</button>
+              <button type="submit" className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white text-xs font-bold rounded-lg">Đăng Thông Báo</button>
             </div>
           </form>
         </div>
@@ -1391,38 +1391,38 @@ export const DiscussionView: React.FC = () => {
 
       {/* DRAWER: THREAD REPLY DRAWER */}
       {showThreadDrawer && activeThreadMessage && (
-        <div className="w-80 border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col shrink-0">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h3 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">Luồng Thảo Luận Chi Tiết</h3>
-            <button onClick={() => setShowThreadDrawer(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        <div className="w-80 border-l border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-900 flex flex-col shrink-0">
+          <div className="p-3.5 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
+            <h3 className="font-bold text-xs text-[#263445] dark:text-slate-100">Luồng Thảo Luận Chi Tiết</h3>
+            <button onClick={() => setShowThreadDrawer(false)} className="text-[#718096] hover:text-[#263445]"><X className="w-4 h-4" /></button>
           </div>
 
-          <div className="p-3 border-b bg-white dark:bg-slate-800/60 text-xs space-y-1">
-            <span className="font-bold text-slate-900 dark:text-slate-100">{activeThreadMessage.senderName}:</span>
-            <p className="text-slate-600 dark:text-slate-300">{activeThreadMessage.content}</p>
+          <div className="p-3 border-b border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-800/60 text-xs space-y-1">
+            <span className="font-bold text-[#263445] dark:text-slate-100">{activeThreadMessage.senderName}:</span>
+            <p className="text-[#718096] dark:text-slate-300">{activeThreadMessage.content}</p>
           </div>
 
           <div className="flex-1 p-3 overflow-y-auto space-y-2 custom-scrollbar text-xs">
             {activeThreadMessage.replies?.map(r => (
-              <div key={r.id} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border space-y-1">
-                <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+              <div key={r.id} className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 space-y-1">
+                <div className="flex items-center justify-between text-[10px] font-bold text-[#718096]">
                   <span>{r.senderName}</span>
                   <span>{r.timestamp}</span>
                 </div>
-                <p className="text-slate-800 dark:text-slate-200">{r.content}</p>
+                <p className="text-[#263445] dark:text-slate-200">{r.content}</p>
               </div>
             ))}
           </div>
 
-          <form onSubmit={handleAddThreadReply} className="p-3 border-t bg-white dark:bg-slate-800 flex items-center space-x-2">
+          <form onSubmit={handleAddThreadReply} className="p-3 border-t border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-800 flex items-center space-x-2">
             <input 
               type="text" 
               placeholder="Trả lời tin nhắn..." 
               value={threadReplyInput} 
               onChange={(e) => setThreadReplyInput(e.target.value)} 
-              className="flex-1 p-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs" 
+              className="flex-1 p-2 bg-[#F4F7FB] dark:bg-slate-700 border border-[#DFE7F0] dark:border-slate-600 rounded-lg text-xs outline-none focus:border-[#1976D2]" 
             />
-            <button type="submit" className="p-2 bg-[#464eb8] text-white rounded-lg"><Send className="w-3.5 h-3.5" /></button>
+            <button type="submit" className="p-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg"><Send className="w-3.5 h-3.5" /></button>
           </form>
         </div>
       )}

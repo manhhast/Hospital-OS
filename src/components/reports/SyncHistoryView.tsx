@@ -342,19 +342,19 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 p-5 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 p-4 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shrink-0 shadow-xs">
               <History className="w-5 h-5" />
             </div>
             <div>
-              <h2 className={`${compact ? 'text-base' : 'text-lg'} font-extrabold text-slate-900 dark:text-white`}>
+              <h2 className={`${compact ? 'text-base' : 'text-lg'} font-extrabold text-[#263445] dark:text-white`}>
                 Lịch Sử Đồng Bộ &amp; Rà Soát Số Liệu
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+              <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5 leading-relaxed">
                 Ghi nhận tự động khi khởi động (rà soát <strong>3 ngày gần nhất</strong>: tự điền ô trống vào Hệ thống, cảnh báo nếu sai lệch hoặc Sheet thiếu) và toàn bộ lịch sử <strong>Rà soát số liệu</strong> thủ công.
               </p>
             </div>
@@ -365,7 +365,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
               type="button"
               onClick={() => void handleRunThreeDayNow()}
               disabled={isRunningThreeDay}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRunningThreeDay ? 'animate-spin' : ''}`} />
               <span>{isRunningThreeDay ? 'Đang kiểm tra 3 ngày...' : 'Kiểm tra 3 ngày gần nhất'}</span>
@@ -375,7 +375,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenRangeAudit()}
-                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
               >
                 <Search className="w-3.5 h-3.5" />
                 <span>Rà soát nhiều ngày hơn</span>
@@ -385,10 +385,10 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
         </div>
 
         {/* Summary KPI Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-300 dark:border-slate-700">
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
-            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-blue-600" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4 pt-3.5 border-t border-[#DFE7F0] dark:border-slate-700">
+          <div className="p-3 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-700">
+            <div className="text-[11px] font-bold text-[#718096] dark:text-slate-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-[#1976D2]" />
               Tổng lượt kiểm tra
             </div>
             <div className="text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
@@ -453,7 +453,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
       </div>
 
       {/* Filters & Search */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 p-3.5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
           {(
             [
@@ -468,10 +468,10 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
               key={tab.id}
               type="button"
               onClick={() => setFilterStatus(tab.id)}
-              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
                 filterStatus === tab.id
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  ? 'bg-[#1976D2] text-white border-[#1976D2] shadow-2xs'
+                  : 'bg-[#F4F7FB] dark:bg-slate-800 text-[#718096] dark:text-slate-300 border-[#DFE7F0] dark:border-slate-600 hover:bg-[#EAF4FF] hover:text-[#155A9C] dark:hover:bg-slate-700'
               }`}
             >
               {tab.label}
@@ -516,12 +516,12 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
 
       {/* History Entries List */}
       {filteredEntries.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 p-10 text-center space-y-2 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 p-10 text-center space-y-2 shadow-xs">
           <History className="w-9 h-9 text-slate-300 dark:text-slate-600 mx-auto" />
-          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+          <p className="text-sm font-bold text-[#263445] dark:text-slate-200">
             Chưa có bản ghi lịch sử đồng bộ phù hợp
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-[#718096] dark:text-slate-400">
             Mỗi lần khởi động ứng dụng kiểm tra 3 ngày gần nhất hoặc khi bạn dùng nút Rà soát số liệu, kết quả sẽ được lưu tự động tại đây và đồng bộ với Hệ thống.
           </p>
         </div>
@@ -541,7 +541,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
             return (
               <div
                 key={entry.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden"
+                className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs overflow-hidden"
               >
                 {/* Row Summary Header */}
                 <div

@@ -1397,21 +1397,21 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     };
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Controls Header */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-[#EAF4FF] dark:bg-blue-950 text-[#1976D2] dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800 flex items-center justify-center font-bold">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-extrabold text-[#263445] dark:text-slate-100 flex items-center gap-2 flex-wrap">
                 <span>BÁO CÁO SỐ LIỆU THỐNG KÊ HẰNG NGÀY</span>
-                <span className="px-2.5 py-0.5 text-xs font-black bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-700 tabular-nums">
+                <span className="px-2.5 py-0.5 text-xs font-bold bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 rounded-md border border-[#1976D2]/30 dark:border-blue-700 tabular-nums">
                   Ngày {selectedReportDay} - {selectedReportMonth}
                 </span>
               </h3>
-              <p className="text-xs text-slate-500">Tổng hợp BHYT/Nhân dân &middot; Đối chiếu ngày liền trước &amp; TB 30 ngày &middot; Xuất bản tin giao ban 1 chạm</p>
+              <p className="text-xs text-[#718096]">Tổng hợp BHYT/Nhân dân &middot; Đối chiếu ngày liền trước &amp; TB 30 ngày &middot; Xuất bản tin giao ban 1 chạm</p>
             </div>
           </div>
 
@@ -1421,7 +1421,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleOpenDailyEntryModal}
-                  className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 bg-[#EAF4FF] dark:bg-blue-950/60 hover:bg-[#DCEEFF] border border-[#1976D2]/30 dark:border-blue-700 text-[#155A9C] dark:text-blue-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>Nhập / Sửa số liệu ngày {selectedReportDay}</span>
@@ -1429,7 +1429,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyHandover}
-                  className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 bg-[#F4F7FB] dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-[#DFE7F0] dark:border-slate-600 text-[#263445] dark:text-slate-100 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   {copiedHandover ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedHandover ? 'Đã sao chép' : 'Sao chép Giao ban'}</span>
@@ -1437,7 +1437,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleDispatchHandoverNotification}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Gửi Giao Ban</span>
@@ -1446,7 +1446,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             )}
             <button
               onClick={() => setIsPinManagerOpen(true)}
-              className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3 py-1.5 bg-[#EAF4FF] dark:bg-blue-950/60 hover:bg-[#DCEEFF] border border-[#1976D2]/30 dark:border-blue-700 text-[#155A9C] dark:text-blue-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <Pin className="w-3.5 h-3.5 fill-current text-amber-500" />
               <span>Ghim ({pinnedServiceNames.length})</span>
@@ -1500,46 +1500,46 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         />
 
         {/* Daily Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Ca Trong Ngày</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 tabular-nums">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Tổng Ca Trong Ngày</span>
             <div className="flex items-baseline justify-between">
-              <h4 className="text-2xl font-black text-blue-900 dark:text-blue-200">{totalDayAll.toLocaleString()} ca</h4>
-              <span className={`text-xs font-extrabold px-2 py-0.5 rounded-full ${isHolidayLT ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'}`}>
+              <h4 className="text-2xl font-black text-[#155A9C] dark:text-blue-200">{totalDayAll.toLocaleString()} ca</h4>
+              <span className={`text-xs font-extrabold px-2 py-0.5 rounded-md ${isHolidayLT ? 'bg-red-100 text-red-700' : 'bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300'}`}>
                 {isHolidayLT ? 'Lễ Tết (LT)' : `Ngày ${selectedReportDay}`}
               </span>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[#718096]">
               {prevActiveDayNum !== null
                 ? `So ngày ${prevActiveDayNum}: ${diffVsPrevDay >= 0 ? '+' : ''}${diffVsPrevDay} ca (${diffVsPrevPct >= 0 ? '+' : ''}${diffVsPrevPct.toFixed(1)}%)`
                 : 'Toàn bộ lượt thực hiện trong ngày'}
             </p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lượt Bảo Hiểm (BHYT)</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Lượt Bảo Hiểm (BHYT)</span>
             <div className="flex items-baseline justify-between">
-              <h4 className="text-2xl font-black text-indigo-700 dark:text-indigo-400">{totalDayBH.toLocaleString()} ca</h4>
-              <span className="text-xs font-extrabold text-indigo-600">
+              <h4 className="text-2xl font-black text-[#1976D2] dark:text-blue-400">{totalDayBH.toLocaleString()} ca</h4>
+              <span className="text-xs font-extrabold text-[#1976D2]">
                 {totalDayAll > 0 ? ((totalDayBH / totalDayAll) * 100).toFixed(1) : '0'}%
               </span>
             </div>
-            <p className="text-xs text-slate-500">Tỷ lệ bệnh nhân BHYT trong ngày</p>
+            <p className="text-xs text-[#718096]">Tỷ lệ bệnh nhân BHYT trong ngày</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lượt Viện Phí / Nhân Dân</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Lượt Viện Phí / Nhân Dân</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{totalDayND.toLocaleString()} ca</h4>
               <span className="text-xs font-extrabold text-emerald-600">
                 {totalDayAll > 0 ? ((totalDayND / totalDayAll) * 100).toFixed(1) : '0'}%
               </span>
             </div>
-            <p className="text-xs text-slate-500">Tỷ lệ bệnh nhân thu phí trực tiếp</p>
+            <p className="text-xs text-[#718096]">Tỷ lệ bệnh nhân thu phí trực tiếp</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">So Với Trung Bình Ngày</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">So Với Trung Bình Ngày</span>
             <div className="flex items-baseline justify-between">
               <h4 className={`text-2xl font-black ${totalDiffVsAvg >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {totalDiffVsAvg >= 0 ? `+${totalDiffVsAvg.toFixed(1)}` : totalDiffVsAvg.toFixed(1)} ca
@@ -1548,18 +1548,18 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 {totalDiffPct >= 0 ? `+${totalDiffPct.toFixed(1)}%` : `${totalDiffPct.toFixed(1)}%`}
               </span>
             </div>
-            <p className="text-xs text-slate-500">TB tháng: {overallMonthAvgPerDay.toFixed(1)} ca/ngày</p>
+            <p className="text-xs text-[#718096]">TB tháng: {overallMonthAvgPerDay.toFixed(1)} ca/ngày</p>
           </div>
         </div>
 
         {/* Cơ Cấu Theo Bộ Phận Trong Ngày (Single-Elevation Executive Summary Strip) */}
         {allCatDaily.length > 0 && (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#DFE7F0] dark:border-slate-800">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#263445] dark:text-slate-200">
                 Cơ Cấu Thực Hiện Theo Bộ Phận &mdash; Ngày {selectedReportDay}/{getMonthNumber(selectedReportMonth)}
               </h4>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+              <span className="text-[11px] text-[#718096] dark:text-slate-400 tabular-nums">
                 {allCatDaily.length} bộ phận có phát sinh ca &middot; Tỷ lệ BH/ND: {totalDayAll > 0 ? Math.round((totalDayBH / totalDayAll) * 100) : 0}% / {totalDayAll > 0 ? Math.round((totalDayND / totalDayAll) * 100) : 0}%
               </span>
             </div>
@@ -1567,15 +1567,15 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               {allCatDaily.map((c) => {
                 const share = totalDayAll > 0 ? (c.total / totalDayAll) * 100 : 0;
                 return (
-                  <div key={c.category} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
-                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 truncate" title={c.category}>
+                  <div key={c.category} className="p-3 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-700">
+                    <div className="text-[11px] font-bold text-[#718096] dark:text-slate-300 truncate" title={c.category}>
                       {c.category}
                     </div>
                     <div className="flex items-baseline justify-between mt-1">
-                      <span className="text-base font-black text-slate-900 dark:text-white">{c.total.toLocaleString()}</span>
-                      <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">{share.toFixed(1)}%</span>
+                      <span className="text-base font-black text-[#263445] dark:text-white">{c.total.toLocaleString()}</span>
+                      <span className="text-[11px] font-bold text-[#1976D2] dark:text-blue-400">{share.toFixed(1)}%</span>
                     </div>
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    <div className="text-[10px] text-[#718096] dark:text-slate-400 mt-0.5">
                       BH {c.bh} &middot; ND {c.nd}
                     </div>
                   </div>
@@ -1586,28 +1586,28 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         )}
 
         {/* Detailed Daily Table with Fast Pinning & Visual Triage Filter Toolbar */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden space-y-0">
-          <div className="bg-slate-100/80 dark:bg-slate-800/90 px-5 py-4 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs overflow-hidden space-y-0">
+          <div className="bg-[#F4F7FB] dark:bg-slate-800/90 px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-700 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div>
-              <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
+              <h4 className="text-sm font-extrabold text-[#263445] dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
                 <span>CHI TIẾT CÁC KỸ THUẬT THỰC HIỆN TRONG NGÀY {selectedReportDay} - {selectedReportMonth.toUpperCase()}</span>
               </h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">
                 Bấm vào biểu tượng ngôi sao để Ghim chỉ số • Bấm vào nhãn trạng thái để xem Phân tích Bối cảnh Y tế &amp; Độ lệch chuẩn
               </p>
             </div>
 
             {/* Quick Triage Filter Group */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
+              <span className="text-xs font-bold text-[#718096] dark:text-slate-400 mr-1 flex items-center gap-1">
                 <Filter className="w-3.5 h-3.5" /> Lọc nhanh:
               </span>
               <button
                 onClick={() => setDailyTriageFilter('ALL')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
                   dailyTriageFilter === 'ALL'
-                    ? 'bg-indigo-600 text-white shadow-2xs'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-[#1976D2] text-white shadow-2xs'
+                    : 'bg-white dark:bg-slate-900 text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
                 }`}
               >
                 Tất cả ({itemStats.length})
@@ -1665,9 +1665,9 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               <tbody>
                 {catGrouped.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-400/80 dark:border-slate-600 text-sm">
-                      <td colSpan={5} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
-                        📌 {group.category} <span className="font-semibold text-xs text-indigo-700 dark:text-indigo-300 ml-1">({group.items.length} kỹ thuật)</span>
+                    <tr className="bg-[#EAF4FF] dark:bg-slate-800/95 font-black text-[#155A9C] dark:text-blue-200 border-y border-[#DFE7F0] dark:border-slate-600 text-sm">
+                      <td colSpan={5} className="px-3 py-2.5 uppercase tracking-wide border-r border-[#DFE7F0] dark:border-slate-600">
+                        📌 {group.category} <span className="font-semibold text-xs text-[#1976D2] dark:text-blue-300 ml-1">({group.items.length} kỹ thuật)</span>
                       </td>
                       <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
                         {group.catBH.toLocaleString()}
@@ -1821,9 +1821,9 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         {/* Chart: Top Performed Services on this Selected Day */}
         {topServices.length > 0 && (
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-3">
-            <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-indigo-600" /> TOP KỸ THUẬT THỰC HIỆN NHIỀU NHẤT TRONG NGÀY {selectedReportDay}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-3">
+            <h4 className="text-sm font-extrabold text-[#263445] dark:text-slate-100 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-[#1976D2]" /> TOP KỸ THUẬT THỰC HIỆN NHIỀU NHẤT TRONG NGÀY {selectedReportDay}
             </h4>
             <div className="h-60 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -1833,7 +1833,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                   <YAxis dataKey="name" type="category" fontSize={11} stroke="#64748b" width={180} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="bhVal" name="Ca Bảo Hiểm (BH)" fill="#4f46e5" radius={[0, 4, 4, 0]} stackId="a" />
+                  <Bar dataKey="bhVal" name="Ca Bảo Hiểm (BH)" fill="#1976D2" radius={[0, 4, 4, 0]} stackId="a" />
                   <Bar dataKey="ndVal" name="Ca Nhân Dân (ND)" fill="#10b981" radius={[0, 4, 4, 0]} stackId="a" />
                 </BarChart>
               </ResponsiveContainer>
@@ -1973,72 +1973,72 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     }).filter(g => g.items.length > 0);
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Controls Header */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-[#EAF4FF] dark:bg-blue-950 text-[#1976D2] dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800 flex items-center justify-center font-bold">
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <h3 className="text-base font-extrabold text-[#263445] dark:text-slate-100 flex items-center gap-2">
                 BÁO CÁO CÔNG TÁC TUẦN
-                <span className="px-2.5 py-0.5 text-xs font-black bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 rounded-full border border-indigo-300 dark:border-indigo-700">
+                <span className="px-2.5 py-0.5 text-xs font-bold bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 rounded-md border border-[#1976D2]/30 dark:border-blue-700">
                   Tuần {selectedReportWeek} ({currWeekInfo.dateRangeLabel}) - Năm {selectedYear}
                 </span>
               </h3>
-              <p className="text-xs text-slate-500">Tổng hợp lượt ca theo tuần trong năm (Từ Tuần 1 đến Tuần 52)</p>
+              <p className="text-xs text-[#718096]">Tổng hợp lượt ca theo tuần trong năm (Từ Tuần 1 đến Tuần 52)</p>
             </div>
           </div>
         </div>
 
         {/* Weekly Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Ca Cả Tuần</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Tổng Ca Cả Tuần</span>
             <div className="flex items-baseline justify-between">
-              <h4 className="text-2xl font-black text-indigo-900 dark:text-indigo-200">{totalWeekAll.toLocaleString()} ca</h4>
-              <span className="text-xs font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{currWeekInfo.name}</span>
+              <h4 className="text-2xl font-black text-[#155A9C] dark:text-blue-200">{totalWeekAll.toLocaleString()} ca</h4>
+              <span className="text-xs font-extrabold text-[#1976D2] bg-[#EAF4FF] px-2 py-0.5 rounded-md">{currWeekInfo.name}</span>
             </div>
-            <p className="text-xs text-slate-500">Tổng số lượt thực hiện trong 7 ngày</p>
+            <p className="text-xs text-[#718096]">Tổng số lượt thực hiện trong 7 ngày</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Trung Bình / Ngày Tuần</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Trung Bình / Ngày Tuần</span>
             <div className="flex items-baseline justify-between">
-              <h4 className="text-2xl font-black text-blue-700 dark:text-blue-400">{overallWeekAvgPerDay.toFixed(1)} ca/ngày</h4>
-              <span className="text-xs font-bold text-slate-400">{weekActiveDays} ngày</span>
+              <h4 className="text-2xl font-black text-[#1976D2] dark:text-blue-400">{overallWeekAvgPerDay.toFixed(1)} ca/ngày</h4>
+              <span className="text-xs font-bold text-[#718096]">{weekActiveDays} ngày</span>
             </div>
-            <p className="text-xs text-slate-500">Công suất trung bình mỗi ngày trong tuần</p>
+            <p className="text-xs text-[#718096]">Công suất trung bình mỗi ngày trong tuần</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tỷ Lệ BHYT Tuần</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Tỷ Lệ BHYT Tuần</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{totalWeekBH.toLocaleString()} ca</h4>
               <span className="text-xs font-extrabold text-emerald-600">
                 {totalWeekAll > 0 ? ((totalWeekBH / totalWeekAll) * 100).toFixed(1) : '0'}%
               </span>
             </div>
-            <p className="text-xs text-slate-500">So với {totalWeekND.toLocaleString()} ca Nhân dân</p>
+            <p className="text-xs text-[#718096]">So với {totalWeekND.toLocaleString()} ca Nhân dân</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">So Với Tuần Trước</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">So Với Tuần Trước</span>
             <div className="flex items-baseline justify-between">
               <h4 className={`text-2xl font-black ${overallWeekGrowthPct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {prevWeekTotal > 0 ? `${overallWeekGrowthPct >= 0 ? '+' : ''}${overallWeekGrowthPct.toFixed(1)}%` : 'N/A'}
               </h4>
-              <span className="text-xs font-bold text-slate-400">vs Tuần {selectedReportWeek - 1 > 0 ? selectedReportWeek - 1 : 'trước'}</span>
+              <span className="text-xs font-bold text-[#718096]">vs Tuần {selectedReportWeek - 1 > 0 ? selectedReportWeek - 1 : 'trước'}</span>
             </div>
-            <p className="text-xs text-slate-500">Chênh lệch so với tuần liền trước</p>
+            <p className="text-xs text-[#718096]">Chênh lệch so với tuần liền trước</p>
           </div>
         </div>
 
         {/* Daily Breakdown Chart for selected week */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-3">
-          <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-indigo-600" /> DIỄN BIẾN SỐ CA THEO TỪNG NGÀY TRONG {currWeekInfo.name.toUpperCase()}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-3">
+          <h4 className="text-sm font-extrabold text-[#263445] dark:text-slate-100 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-[#1976D2]" /> DIỄN BIẾN SỐ CA THEO TỪNG NGÀY TRONG {currWeekInfo.name.toUpperCase()}
           </h4>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -2048,7 +2048,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <YAxis fontSize={11} stroke="#64748b" />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="bh" name="Ca Bảo Hiểm (BH)" fill="#4f46e5" radius={[4, 4, 0, 0]} stackId="a" />
+                <Bar dataKey="bh" name="Ca Bảo Hiểm (BH)" fill="#1976D2" radius={[4, 4, 0, 0]} stackId="a" />
                 <Bar dataKey="nd" name="Ca Nhân Dân (ND)" fill="#10b981" radius={[4, 4, 0, 0]} stackId="a" />
               </BarChart>
             </ResponsiveContainer>
@@ -2056,9 +2056,9 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         </div>
 
         {/* Detailed Weekly Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden">
-          <div className="bg-slate-100/80 dark:bg-slate-800/90 px-5 py-4 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex items-center justify-between">
-            <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs overflow-hidden">
+          <div className="bg-[#F4F7FB] dark:bg-slate-800/90 px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between">
+            <h4 className="text-sm font-extrabold text-[#263445] dark:text-slate-100 uppercase tracking-wide">
               BẢNG TỔNG HỢP SỐ CA CÔNG TÁC {currWeekInfo.name.toUpperCase()}
             </h4>
           </div>
@@ -2066,22 +2066,22 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-slate-400 dark:border-slate-500">
-                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-slate-300 dark:border-slate-600">STT</th>
-                  <th className="px-2.5 py-2.5 w-[92px] border-r border-slate-300 dark:border-slate-600">Bộ<br />Phận</th>
-                  <th className="px-3 py-2.5 min-w-[180px] border-r border-slate-300 dark:border-slate-600">Kỹ Thuật /<br />Dịch Vụ</th>
-                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-600">BH<br />Tuần</th>
-                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-slate-300 dark:border-slate-600">ND<br />Tuần</th>
-                  <th className="px-2.5 py-2.5 w-[80px] text-right bg-indigo-100/80 dark:bg-indigo-950 text-indigo-950 dark:text-indigo-100 border-r border-indigo-300 dark:border-indigo-700">Tổng<br />Tuần</th>
-                  <th className="px-2.5 py-2.5 w-[80px] text-right border-r border-slate-300 dark:border-slate-600">TB/Ngày<br />Tuần</th>
+                <tr className="bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-100 text-[13px] font-extrabold leading-tight border-b-2 border-[#DFE7F0] dark:border-slate-500">
+                  <th className="px-1.5 py-2.5 w-11 text-center border-r border-[#DFE7F0] dark:border-slate-600">STT</th>
+                  <th className="px-2.5 py-2.5 w-[92px] border-r border-[#DFE7F0] dark:border-slate-600">Bộ<br />Phận</th>
+                  <th className="px-3 py-2.5 min-w-[180px] border-r border-[#DFE7F0] dark:border-slate-600">Kỹ Thuật /<br />Dịch Vụ</th>
+                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-[#DFE7F0] dark:border-slate-600">BH<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[76px] text-right border-r border-[#DFE7F0] dark:border-slate-600">ND<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[80px] text-right bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-100 border-r border-[#1976D2]/30 dark:border-blue-700">Tổng<br />Tuần</th>
+                  <th className="px-2.5 py-2.5 w-[80px] text-right border-r border-[#DFE7F0] dark:border-slate-600">TB/Ngày<br />Tuần</th>
                   <th className="px-2.5 py-2.5 w-[86px] text-right">So Tuần<br />Trước</th>
                 </tr>
               </thead>
               <tbody>
                 {catGroupedWeek.map((group) => (
                   <React.Fragment key={group.category}>
-                    <tr className="bg-indigo-50/90 dark:bg-slate-800/95 font-black text-indigo-950 dark:text-indigo-200 border-y border-slate-400/80 dark:border-slate-600 text-sm">
-                      <td colSpan={3} className="px-3 py-2.5 uppercase tracking-wide border-r border-slate-300 dark:border-slate-600">
+                    <tr className="bg-[#EAF4FF] dark:bg-slate-800/95 font-black text-[#155A9C] dark:text-blue-200 border-y border-[#DFE7F0] dark:border-slate-600 text-sm">
+                      <td colSpan={3} className="px-3 py-2.5 uppercase tracking-wide border-r border-[#DFE7F0] dark:border-slate-600">
                         📌 {group.category}
                       </td>
                       <td className="px-2.5 py-2.5 text-right font-extrabold tabular-nums text-[15px] border-r border-slate-300 dark:border-slate-600">
@@ -2292,21 +2292,21 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     }).filter(g => g.items.length > 0);
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Controls Header */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-[#EAF4FF] dark:bg-blue-950 text-[#1976D2] dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800 flex items-center justify-center font-bold">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <h3 className="text-base font-extrabold text-[#263445] dark:text-slate-100 flex items-center gap-2">
                 BÁO CÁO NĂM CÔNG TÁC CHẨN ĐOÁN HÌNH ẢNH {selectedYear}
-                <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-black bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 rounded-full border border-purple-300 dark:border-purple-700">
+                <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 rounded-md border border-[#1976D2]/30 dark:border-blue-700">
                   Chuẩn hóa 12 tháng
                 </span>
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#718096]">
                 Tích hợp dữ liệu thực tế ({actualMonths.join(', ')}) & Dự báo kế hoạch các tháng chưa có dữ liệu
               </p>
             </div>
@@ -2323,22 +2323,22 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 })
               }
               disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-200 rounded-xl text-xs font-bold border border-amber-300 dark:border-amber-700 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 text-amber-800 dark:text-amber-200 rounded-lg text-xs font-bold border border-amber-300 dark:border-amber-700 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
             >
               <Search className="w-3.5 h-3.5" />
               <span>Rà soát số liệu ({selectedYear})</span>
             </button>
 
-            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold">
+            <div className="flex items-center p-1 bg-[#F4F7FB] dark:bg-slate-800 rounded-lg border border-[#DFE7F0] dark:border-slate-600 text-xs font-bold">
               <button
                 onClick={() => setAnnualViewMode('full')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${annualViewMode === 'full' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${annualViewMode === 'full' ? 'bg-[#1976D2] text-white shadow-2xs' : 'text-[#718096] dark:text-slate-400 hover:text-[#263445]'}`}
               >
                 Cả Năm (Thực Tế + Dự Báo)
               </button>
               <button
                 onClick={() => setAnnualViewMode('actual_only')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${annualViewMode === 'actual_only' ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${annualViewMode === 'actual_only' ? 'bg-[#1976D2] text-white shadow-2xs' : 'text-[#718096] dark:text-slate-400 hover:text-[#263445]'}`}
               >
                 Chỉ {actualMonths.length} Tháng Thực Tế ({actualLabelRange})
               </button>
@@ -2347,56 +2347,56 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         </div>
 
         {/* Annual KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Lượt Ca Thực Tế ({actualLabelRange})</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Tổng Lượt Ca Thực Tế ({actualLabelRange})</span>
             <div className="flex items-baseline justify-between">
-              <h4 className="text-2xl font-black text-blue-900 dark:text-blue-200">{grandActualTotal.toLocaleString()} ca</h4>
-              <span className="text-xs font-extrabold text-blue-700 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-full">{actualMonths.length} Tháng Có Dữ Liệu</span>
+              <h4 className="text-2xl font-black text-[#155A9C] dark:text-blue-200">{grandActualTotal.toLocaleString()} ca</h4>
+              <span className="text-xs font-extrabold text-[#1976D2] bg-[#EAF4FF] dark:bg-blue-950 px-2 py-0.5 rounded-md">{actualMonths.length} Tháng Có Dữ Liệu</span>
             </div>
-            <p className="text-xs text-slate-500">Số ca thực tế trích xuất từ Google Sheet</p>
+            <p className="text-xs text-[#718096]">Số ca thực tế trích xuất từ Google Sheet</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Hợp Cả Năm {selectedYear}</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Tổng Hợp Cả Năm {selectedYear}</span>
             <div className="flex items-baseline justify-between">
-              <h4 className="text-2xl font-black text-purple-900 dark:text-purple-200">{grandFullYearTotal.toLocaleString()} ca</h4>
-              <span className="text-xs font-extrabold text-purple-700 bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded-full">12 Tháng Kế Hoạch</span>
+              <h4 className="text-2xl font-black text-[#155A9C] dark:text-blue-200">{grandFullYearTotal.toLocaleString()} ca</h4>
+              <span className="text-xs font-extrabold text-[#1976D2] bg-[#EAF4FF] dark:bg-blue-950 px-2 py-0.5 rounded-md">12 Tháng Kế Hoạch</span>
             </div>
-            <p className="text-xs text-slate-500">Gồm {actualMonths.length} tháng thực tế & {12 - actualMonths.length} tháng dự báo</p>
+            <p className="text-xs text-[#718096]">Gồm {actualMonths.length} tháng thực tế & {12 - actualMonths.length} tháng dự báo</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tháng Cao Điểm Nhất (Thực Tế)</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Tháng Cao Điểm Nhất (Thực Tế)</span>
             <div className="flex items-baseline justify-between">
               <h4 className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{peakActualMonth}</h4>
-              <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">{peakActualVal.toLocaleString()} ca</span>
+              <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md">{peakActualVal.toLocaleString()} ca</span>
             </div>
-            <p className="text-xs text-slate-500">Tháng có khối lượng công việc lớn nhất</p>
+            <p className="text-xs text-[#718096]">Tháng có khối lượng công việc lớn nhất</p>
           </div>
 
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-1">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Công Suất TB / Tháng Thực Tế</span>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1">
+            <span className="text-xs font-bold text-[#718096] uppercase tracking-wider">Công Suất TB / Tháng Thực Tế</span>
             <div className="flex items-baseline justify-between">
-              <h4 className="text-2xl font-black text-indigo-700 dark:text-indigo-400">{Math.round(actualMonthlyAverage).toLocaleString()} ca/tháng</h4>
+              <h4 className="text-2xl font-black text-[#1976D2] dark:text-blue-400">{Math.round(actualMonthlyAverage).toLocaleString()} ca/tháng</h4>
             </div>
-            <p className="text-xs text-slate-500">Mức công suất trung bình thực hiện</p>
+            <p className="text-xs text-[#718096]">Mức công suất trung bình thực hiện</p>
           </div>
         </div>
 
         {/* Annual Month-by-Month Trend Chart */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-3">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-purple-600" /> BIỂU ĐỒ DIỄN BIẾN SỐ CA 12 THÁNG TRONG NĂM {selectedYear}
+            <h4 className="text-sm font-extrabold text-[#263445] dark:text-slate-100 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-[#1976D2]" /> BIỂU ĐỒ DIỄN BIẾN SỐ CA 12 THÁNG TRONG NĂM {selectedYear}
             </h4>
             <div className="flex items-center gap-4 text-xs font-bold">
-              <span className="flex items-center gap-1 text-blue-700 dark:text-blue-300">
-                <span className="w-3 h-3 bg-blue-600 rounded-xs"></span> Số liệu Thực tế ({actualLabelRange})
+              <span className="flex items-center gap-1 text-[#155A9C] dark:text-blue-300">
+                <span className="w-3 h-3 bg-[#1976D2] rounded-xs"></span> Số liệu Thực tế ({actualLabelRange})
               </span>
               {actualMonths.length < 12 && (
-                <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                  <span className="w-3 h-3 bg-purple-400 rounded-xs opacity-60"></span> Dự báo kế hoạch (Các tháng còn lại)
+                <span className="flex items-center gap-1 text-[#718096] dark:text-slate-400">
+                  <span className="w-3 h-3 bg-sky-400 rounded-xs opacity-70"></span> Dự báo kế hoạch (Các tháng còn lại)
                 </span>
               )}
             </div>
@@ -2413,20 +2413,20 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     name === 'ThucTe' ? 'Số ca Thực tế' : name === 'DuBao' ? 'Số ca Dự báo' : 'Tổng ca'
                   ]}
                 />
-                <Bar dataKey="ThucTe" name="Thực tế" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="DuBao" name="Dự báo" fill="#a855f7" radius={[4, 4, 0, 0]} opacity={0.65} />
+                <Bar dataKey="ThucTe" name="Thực tế" fill="#1976D2" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="DuBao" name="Dự báo" fill="#38bdf8" radius={[4, 4, 0, 0]} opacity={0.65} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Annual Matrix Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden">
-          <div className="bg-slate-100/80 dark:bg-slate-800/90 px-5 py-4 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex items-center justify-between">
-            <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs overflow-hidden">
+          <div className="bg-[#F4F7FB] dark:bg-slate-800/90 px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between">
+            <h4 className="text-sm font-extrabold text-[#263445] dark:text-slate-100 uppercase tracking-wide">
               MA TRẬN SỐ LIỆU TỔNG HỢP CÔNG TÁC {annualViewMode === 'full' ? `12 THÁNG NĂM ${selectedYear}` : `${actualMonths.length} THÁNG THỰC TẾ (${actualLabelRange})`}
             </h4>
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+            <span className="text-xs font-bold text-[#718096] dark:text-slate-300">
               Tổng số kỹ thuật: {masterServices.length} dịch vụ
             </span>
           </div>
@@ -3599,14 +3599,14 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
   });
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="space-y-4 w-full pb-8">
       {/* Banner & Tab Switcher */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-xs font-extrabold tracking-wider uppercase mb-1">
+          <div className="flex items-center gap-2 text-[#1976D2] dark:text-blue-400 text-[11px] font-bold tracking-wider uppercase mb-1">
             <BarChart3 className="w-4 h-4" /> BÁO CÁO &amp; THỐNG KÊ KHOA CẬN LÂM SÀNG
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-lg sm:text-xl font-bold text-[#263445] dark:text-slate-100">
             {activeTab === 'google_sheet'
               ? 'Báo Cáo Giao Ban & Số Ca Chụp / Xét Nghiệm (Google Sheet)'
               : activeTab === 'sync_history'
@@ -3615,42 +3615,42 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           </h1>
 
           {/* 3 Tab Switcher Buttons in a Single Horizontal Row Below Title */}
-          <div className="mt-3">
-            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex flex-wrap sm:flex-nowrap items-center border border-slate-300 dark:border-slate-600 gap-1">
+          <div className="mt-2.5">
+            <div className="bg-[#F4F7FB] dark:bg-slate-800 p-1 rounded-lg inline-flex flex-wrap sm:flex-nowrap items-center border border-[#DFE7F0] dark:border-slate-600 gap-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('google_sheet')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   activeTab === 'google_sheet'
-                    ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs border border-slate-300/80 dark:border-slate-500'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-[#1976D2] text-white shadow-xs'
+                    : 'text-[#718096] dark:text-slate-400 hover:text-[#263445] dark:hover:text-slate-200'
                 }`}
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                <FileSpreadsheet className={`w-4 h-4 shrink-0 ${activeTab === 'google_sheet' ? 'text-white' : 'text-emerald-600'}`} />
                 <span>Báo Cáo Số Ca (Google Sheet)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('dashboard')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   activeTab === 'dashboard'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs border border-slate-300/80 dark:border-slate-500'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-[#1976D2] text-white shadow-xs'
+                    : 'text-[#718096] dark:text-slate-400 hover:text-[#263445] dark:hover:text-slate-200'
                 }`}
               >
-                <BarChart3 className="w-4 h-4 text-indigo-600 shrink-0" />
+                <BarChart3 className={`w-4 h-4 shrink-0 ${activeTab === 'dashboard' ? 'text-white' : 'text-[#1976D2]'}`} />
                 <span>Biểu Đồ &amp; KPI</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('sync_history')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   activeTab === 'sync_history'
-                    ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-xs border border-slate-300/80 dark:border-slate-500'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-[#1976D2] text-white shadow-xs'
+                    : 'text-[#718096] dark:text-slate-400 hover:text-[#263445] dark:hover:text-slate-200'
                 }`}
               >
-                <History className="w-4 h-4 text-amber-600 shrink-0" />
+                <History className={`w-4 h-4 shrink-0 ${activeTab === 'sync_history' ? 'text-white' : 'text-amber-600'}`} />
                 <span>Lịch Sử Đồng Bộ</span>
               </button>
             </div>
@@ -3658,8 +3658,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         </div>
 
         {/* Multi-line Description Block on the Right */}
-        <div className="lg:w-80 xl:w-96 shrink-0 lg:border-l-[1.5px] lg:border-slate-300 dark:lg:border-slate-700 lg:pl-5">
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+        <div className="lg:w-80 xl:w-96 shrink-0 lg:border-l lg:border-[#DFE7F0] dark:lg:border-slate-700 lg:pl-5">
+          <p className="text-xs sm:text-sm text-[#718096] dark:text-slate-400 leading-relaxed">
             Theo dõi chi tiết lượt khám, Siêu âm, Nội soi, X-quang, Điện tim &amp; LHN, Xét nghiệm theo từng ngày &amp; bảo hiểm / nhân dân.
           </p>
         </div>
@@ -3691,7 +3691,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         return (
         <div className="space-y-4">
           {/* UNIFIED CONTROL HUB: SOURCE & SYNC + TIME SCOPE & EXPORT + FILTER & SEARCH */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden divide-y-[1.5px] divide-slate-300 dark:divide-slate-700">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs overflow-hidden divide-y divide-[#DFE7F0] dark:divide-slate-700">
             {/* Band 1: Data Source Status & Sync Actions */}
             <div className="p-4 bg-emerald-50/35 dark:bg-emerald-950/15 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -3790,14 +3790,14 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2.5">
                 {/* Left: Time Granularity + Numeric Year + Annual Scope */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-300 dark:border-slate-600">
+                  <div className="inline-flex items-center gap-0.5 bg-[#F4F7FB] dark:bg-slate-800/90 p-1 rounded-lg border border-[#DFE7F0] dark:border-slate-600">
                     <button
                       type="button"
                       onClick={() => setSheetTab('Báo cáo ngày')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                         sheetTab === 'Báo cáo ngày'
-                          ? 'bg-blue-600 text-white shadow-2xs'
-                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                          ? 'bg-[#1976D2] text-white shadow-2xs'
+                          : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                       }`}
                     >
                       <Calendar className="w-3.5 h-3.5 shrink-0" />
@@ -3807,10 +3807,10 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSheetTab('Báo cáo tuần')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                         sheetTab === 'Báo cáo tuần'
-                          ? 'bg-indigo-600 text-white shadow-2xs'
-                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                          ? 'bg-[#1976D2] text-white shadow-2xs'
+                          : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                       }`}
                     >
                       <Layers className="w-3.5 h-3.5 shrink-0" />
@@ -3820,10 +3820,10 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSheetTab(selectedReportMonth || 'Tháng 2')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                         sheetTab.startsWith('Tháng')
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                          ? 'bg-[#1976D2] text-white shadow-2xs'
+                          : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                       }`}
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
@@ -3833,10 +3833,10 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSheetTab('Báo cáo năm')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                         sheetTab === 'Báo cáo năm'
-                          ? 'bg-purple-600 text-white shadow-2xs'
-                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                          ? 'bg-[#1976D2] text-white shadow-2xs'
+                          : 'text-[#718096] dark:text-slate-300 hover:text-[#263445] dark:hover:text-white'
                       }`}
                     >
                       <BarChart3 className="w-3.5 h-3.5 shrink-0" />
@@ -3964,7 +3964,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                   <button
                     type="button"
                     onClick={handleExportWord}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-bold text-xs transition-all shadow-2xs cursor-pointer active:scale-95 whitespace-nowrap"
                     title="Xuất báo cáo Word (.doc) chuyên nghiệp theo khoảng thời gian đang chọn"
                   >
                     <FileText className="w-3.5 h-3.5 shrink-0" />
@@ -4207,15 +4207,15 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           {sheetTab === 'Báo cáo năm' && renderAnnualReport()}
 
           {sheetTab.startsWith('Tháng') && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs overflow-hidden">
               {/* Sheet Title Bar Header */}
-            <div className="bg-slate-100/80 dark:bg-slate-800/80 px-5 py-3 border-b-[1.5px] border-slate-300 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="bg-[#F4F7FB] dark:bg-slate-800/80 px-5 py-3 border-b border-[#DFE7F0] dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h2 className="text-base font-extrabold text-slate-900 dark:text-slate-100 tracking-wide uppercase">
+                <h2 className="text-sm font-extrabold text-[#263445] dark:text-slate-100 tracking-wide uppercase">
                   BÁO CÁO GIAO BAN KHOA CẬN LÂM SÀNG
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
-                  Thời gian: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{sheetTab} - Năm {selectedYear}</span> &middot; Bấm trực tiếp vào ô số liệu để chỉnh sửa thủ công (được khóa bảo vệ khỏi ghi đè khi đồng bộ Sheet)
+                <p className="text-xs text-[#718096] dark:text-slate-400 font-semibold mt-0.5">
+                  Thời gian: <span className="text-[#1976D2] dark:text-blue-400 font-bold">{sheetTab} - Năm {selectedYear}</span> &middot; Bấm trực tiếp vào ô số liệu để chỉnh sửa thủ công (được khóa bảo vệ khỏi ghi đè khi đồng bộ Sheet)
                 </p>
               </div>
 
@@ -4564,57 +4564,57 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
       {/* TAB 2: OVERVIEW DASHBOARD & CHARTS */}
       {activeTab === 'dashboard' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Overview KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tỷ Lệ Hoàn Thành Task</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Tỷ Lệ Hoàn Thành Task</p>
               <div className="flex items-baseline justify-between">
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">97.5%</h3>
+                <h3 className="text-2xl font-bold text-[#263445] dark:text-slate-100">97.5%</h3>
                 <span className="text-xs font-bold text-emerald-600 flex items-center">
                   +3.0% <TrendingUp className="w-3.5 h-3.5 ml-0.5" />
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">40/41 công việc hoàn thành đúng hạn</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">40/41 công việc hoàn thành đúng hạn</p>
             </div>
 
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tổng Ca Trực Đêm Tháng</p>
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Tổng Ca Trực Đêm Tháng</p>
               <div className="flex items-baseline justify-between">
-                <h3 className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">22 Ca</h3>
-                <span className="text-xs text-slate-500 dark:text-slate-400">100% Phủ kín</span>
+                <h3 className="text-2xl font-bold text-[#1976D2] dark:text-blue-400">22 Ca</h3>
+                <span className="text-xs text-[#718096] dark:text-slate-400">100% Phủ kín</span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Phân bổ đều cho 5 nhân sự</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">Phân bổ đều cho 5 nhân sự</p>
             </div>
 
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tổng Lượt Chụp / Xét Nghiệm</p>
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Tổng Lượt Chụp / Xét Nghiệm</p>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{calculateGrandTotal().toLocaleString()} Ca</h3>
                 <span className="text-xs font-bold text-emerald-600 flex items-center">+12% vs T2</span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Đồng bộ từ Google Sheets Báo cáo giao ban</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">Đồng bộ từ Google Sheets Báo cáo giao ban</p>
             </div>
 
-            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-2">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Chi Phí Bảo Trì & Sửa Chữa</p>
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Chi Phí Bảo Trì & Sửa Chữa</p>
               <div className="flex items-baseline justify-between">
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">14.0 Triệu</h3>
-                <span className="text-xs text-slate-500 dark:text-slate-400">Trong ngân sách</span>
+                <h3 className="text-2xl font-bold text-[#263445] dark:text-slate-100">14.0 Triệu</h3>
+                <span className="text-xs text-[#718096] dark:text-slate-400">Trong ngân sách</span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">1 lần sửa chữa cảm biến CT</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">1 lần sửa chữa cảm biến CT</p>
             </div>
           </div>
 
           {/* Charts Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Chart 1: Task Completion Rate */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-600" /> Tiến Độ Hoàn Thành Công Việc Theo Tuần
+                <h3 className="font-bold text-[#263445] dark:text-slate-100 text-sm flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[#1976D2]" /> Tiến Độ Hoàn Thành Công Việc Theo Tuần
                 </h3>
-                <span className="text-xs font-semibold text-slate-500">% Đúng hạn</span>
+                <span className="text-xs font-semibold text-[#718096]">% Đúng hạn</span>
               </div>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -4623,19 +4623,19 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     <XAxis dataKey="week" stroke="#64748b" fontSize={11} />
                     <YAxis stroke="#64748b" fontSize={11} domain={[70, 100]} />
                     <Tooltip />
-                    <Area type="monotone" dataKey="rate" stroke="#4f46e5" fill="#e0e7ff" strokeWidth={2} name="Tỷ lệ hoàn thành (%)" />
+                    <Area type="monotone" dataKey="rate" stroke="#1976D2" fill="#EAF4FF" strokeWidth={2} name="Tỷ lệ hoàn thành (%)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Chart 2: Staff Shift Distribution */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
-                  <Users className="w-4 h-4 text-indigo-600" /> Thống Kê Ca Trực Theo Nhân Viên
+                <h3 className="font-bold text-[#263445] dark:text-slate-100 text-sm flex items-center gap-2">
+                  <Users className="w-4 h-4 text-[#1976D2]" /> Thống Kê Ca Trực Theo Nhân Viên
                 </h3>
-                <span className="text-xs font-semibold text-slate-500">Số ca / Tháng</span>
+                <span className="text-xs font-semibold text-[#718096]">Số ca / Tháng</span>
               </div>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -4645,7 +4645,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                     <YAxis stroke="#64748b" fontSize={11} />
                     <Tooltip />
                     <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <Bar dataKey="shifts" fill="#4f46e5" radius={[4, 4, 0, 0]} name="Tổng ca trực" />
+                    <Bar dataKey="shifts" fill="#1976D2" radius={[4, 4, 0, 0]} name="Tổng ca trực" />
                     <Bar dataKey="nightShifts" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Ca trực đêm" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -4653,12 +4653,12 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             </div>
 
             {/* Chart 3: Equipment Usage Frequency derived from Google Sheet */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
+                <h3 className="font-bold text-[#263445] dark:text-slate-100 text-sm flex items-center gap-2">
                   <Activity className="w-4 h-4 text-emerald-600" /> Tần Suất Ca Chụp & Xét Nghiệm Theo Bộ Phận
                 </h3>
-                <span className="text-xs font-semibold text-slate-500">Số lượt</span>
+                <span className="text-xs font-semibold text-[#718096]">Số lượt</span>
               </div>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -4674,12 +4674,12 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
             </div>
 
             {/* Chart 4: Maintenance Costs History */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border-[1.5px] border-slate-300 dark:border-slate-700 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-2">
+                <h3 className="font-bold text-[#263445] dark:text-slate-100 text-sm flex items-center gap-2">
                   <Wrench className="w-4 h-4 text-amber-600" /> Biến Động Chi Phí Bảo Trì & Sửa Chữa (Triệu VNĐ)
                 </h3>
-                <span className="text-xs font-semibold text-slate-500">Theo tháng</span>
+                <span className="text-xs font-semibold text-[#718096]">Theo tháng</span>
               </div>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">

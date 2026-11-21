@@ -152,23 +152,23 @@ export const RoomModal: React.FC<RoomModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50">
+        <div className="px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-[#F4F7FB] dark:bg-slate-800/50">
           <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
+            <div className="p-2 rounded-lg bg-[#EAF4FF] dark:bg-blue-950 text-[#1976D2] dark:text-blue-400 border border-[#1976D2]/20 dark:border-blue-800">
               <Building2 className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                <h2 className="text-base font-bold text-[#263445] dark:text-white">
                   {isEdit ? 'Chỉnh Sửa / Đổi Tên Phòng' : 'Thêm Phòng Trực Thuộc Mới'}
                 </h2>
-                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800">
                   Cấp 2
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-[#718096] dark:text-slate-400">
                 {isEdit ? 'Hệ thống sẽ tự động đồng bộ tên phòng mới đến nhân sự và thiết bị liên quan' : 'Tạo mới đơn vị Phòng (Cấp 2) trực thuộc một Bộ phận (Cấp 1)'}
               </p>
             </div>
@@ -176,22 +176,22 @@ export const RoomModal: React.FC<RoomModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Form Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto custom-scrollbar flex-1">
           {errorMsg && (
-            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold text-rose-700 dark:text-rose-300">
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-300">
               {errorMsg}
             </div>
           )}
 
           {isEdit && initialRoom && initialRoom.name !== name && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-start space-x-2 text-xs text-amber-800 dark:text-amber-300">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg flex items-start space-x-2 text-xs text-amber-800 dark:text-amber-300">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <span>
                 <strong>Lưu ý đồng bộ:</strong> Đổi tên phòng từ <em>"{initialRoom.name}"</em> sang <em>"{name}"</em> sẽ tự động cập nhật lại vị trí công tác cho toàn bộ nhân sự và vị trí đặt máy móc thuộc phòng này!
@@ -202,7 +202,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Room Code */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Mã Phòng <span className="text-rose-500">*</span>
               </label>
               <input
@@ -211,19 +211,19 @@ export const RoomModal: React.FC<RoomModalProps> = ({
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 placeholder="VD: P-101-CT, P-LAB-01..."
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none"
               />
             </div>
 
             {/* Parent Department Section (Level 1) */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Thuộc Bộ Phận (Cấp 1) <span className="text-rose-500">*</span>
               </label>
               <select
                 value={departmentSection}
                 onChange={e => setDepartmentSection(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none"
               >
                 {departmentSection && !deptNames.includes(departmentSection) && (
                   <option value={departmentSection}>{departmentSection}</option>
@@ -242,7 +242,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
 
           {/* Full Room Name */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
               Tên Đầy Đủ Phòng (Cấp 2) <span className="text-rose-500">*</span>
             </label>
             <input
@@ -251,14 +251,14 @@ export const RoomModal: React.FC<RoomModalProps> = ({
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="VD: Phòng Chụp Cắt Lớp Vi Tính Somatom Go.Top 128 Dải"
-              className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none font-semibold"
+              className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none font-semibold"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Floor / Location */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Vị Trí Tòa Nhà & Tầng
               </label>
               <input
@@ -266,19 +266,19 @@ export const RoomModal: React.FC<RoomModalProps> = ({
                 value={floor}
                 onChange={e => setFloor(e.target.value)}
                 placeholder="VD: Tầng 1 - Khu Cận Lâm Sàng"
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none"
               />
             </div>
 
             {/* Status */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Trạng Thái Hoạt Động
               </label>
               <select
                 value={status}
                 onChange={e => setStatus(e.target.value as any)}
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none"
               >
                 <option value="Đang hoạt động">🟢 Đang hoạt động</option>
                 <option value="Bảo trì">🟠 Bảo trì / Hiệu chuẩn</option>
@@ -292,7 +292,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Manager In Charge - Searchable Combobox & Nullable */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Trưởng Phòng / Bác Sĩ Phụ Trách
               </label>
               <SearchableCombobox
@@ -307,7 +307,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
 
             {/* Deputy / Lead Tech - Searchable Combobox & Nullable */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Kỹ Thuật Viên Trưởng / Phó Phụ Trách
               </label>
               <SearchableCombobox
@@ -324,7 +324,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Primary Equipment - Searchable Combobox from Equipment Catalog & Nullable */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Tên Hệ Thống / Máy Móc Chính
               </label>
               <SearchableCombobox
@@ -339,7 +339,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
 
             {/* Max Daily Capacity */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Công Suất Thiết Kế Tối Đa (Ca/Ngày)
               </label>
               <input
@@ -348,14 +348,14 @@ export const RoomModal: React.FC<RoomModalProps> = ({
                 max={2000}
                 value={maxCapacityCasesPerDay}
                 onChange={e => setMaxCapacityCasesPerDay(Number(e.target.value))}
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none"
               />
             </div>
           </div>
 
           {/* Description & Specialties */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
               Mô Tả Chức Năng, Phạm Vi Chuyên Môn & Ghi Chú
             </label>
             <textarea
@@ -363,22 +363,22 @@ export const RoomModal: React.FC<RoomModalProps> = ({
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="Ghi chú quy trình kỹ thuật, tiếp nhận bệnh nhân, nội quy sử dụng phòng..."
-              className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+              className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none resize-none"
             />
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-3">
+          <div className="pt-4 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-end space-x-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-[#718096] dark:text-slate-300 hover:bg-[#F4F7FB] dark:hover:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg transition-colors"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 rounded-xl transition-all shadow-md shadow-blue-600/20"
+              className="px-5 py-2 text-xs font-bold text-white bg-[#1976D2] hover:bg-[#155A9C] rounded-lg transition-all shadow-xs"
             >
               {isEdit ? 'Lưu Thay Đổi' : 'Tạo Phòng Mới'}
             </button>

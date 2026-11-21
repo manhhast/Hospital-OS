@@ -329,48 +329,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-200 max-w-4xl">
-      <form onSubmit={handleSave} className="space-y-6">
+    <div className="space-y-4 pb-8 animate-in fade-in duration-200 w-full">
+      <form onSubmit={handleSave} className="space-y-4">
         {/* THEME SELECTOR CARD */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <Palette className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mr-2" /> 
-              Chủ Đề Giao Diện & Trải Nghiệm Visual UI
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+              <Palette className="w-4 h-4 text-[#1976D2] dark:text-blue-400 mr-2" /> 
+              Chủ Đề Giao Diện &amp; Trải Nghiệm Visual UI
             </h3>
-            <span className="text-[11px] font-extrabold px-2.5 py-0.5 bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 rounded-full border border-indigo-300/60">
+            <span className="text-[11px] font-bold px-2.5 py-0.5 bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 rounded-md border border-[#1976D2]/25">
               Đồng bộ hệ thống
             </span>
           </div>
 
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-[#718096] dark:text-slate-400">
             Tùy chỉnh phong cách giao diện hiển thị cho toàn bộ ứng dụng Bệnh viện. Hỗ trợ tự động chuyển đổi theo hệ điều hành.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
             {/* Light Card */}
             <button
               type="button"
               onClick={() => onChangeThemeMode?.('light')}
-              className={`p-4 rounded-xl border-2 text-left transition-all flex flex-col justify-between ${
+              className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
                 themeMode === 'light'
-                  ? 'border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40'
+                  ? 'border-[#1976D2] bg-[#EAF4FF]/60 dark:bg-blue-950/20 ring-1 ring-[#1976D2]/30'
+                  : 'border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2]/50 dark:hover:border-slate-700 bg-[#F4F7FB] dark:bg-slate-800/40'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="p-2 rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">
-                  <Sun className="w-5 h-5" />
+                  <Sun className="w-4 h-4" />
                 </div>
                 {themeMode === 'light' && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-600 text-white rounded-md">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-[#1976D2] text-white rounded">
                     Đang chọn
                   </span>
                 )}
               </div>
-              <div className="mt-3">
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-200">Giao diện Sáng</div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Tone nền sáng rạng rỡ, thích hợp ban ngày & phòng khám nhiều ánh sáng</p>
+              <div className="mt-2.5">
+                <div className="text-xs font-bold text-[#263445] dark:text-slate-200">Giao diện Sáng</div>
+                <p className="text-[11px] text-[#718096] dark:text-slate-400 mt-0.5">Tone nền sáng chuẩn HIS, thích hợp ban ngày &amp; phòng khám nhiều ánh sáng</p>
               </div>
             </button>
 
@@ -378,25 +378,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <button
               type="button"
               onClick={() => onChangeThemeMode?.('dark')}
-              className={`p-4 rounded-xl border-2 text-left transition-all flex flex-col justify-between ${
+              className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
                 themeMode === 'dark'
-                  ? 'border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40'
+                  ? 'border-[#1976D2] bg-[#EAF4FF]/60 dark:bg-blue-950/20 ring-1 ring-[#1976D2]/30'
+                  : 'border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2]/50 dark:hover:border-slate-700 bg-[#F4F7FB] dark:bg-slate-800/40'
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className="p-2 rounded-lg bg-slate-900 text-indigo-400 dark:bg-slate-950 dark:text-indigo-400 border border-slate-700">
-                  <Moon className="w-5 h-5" />
+                <div className="p-2 rounded-lg bg-slate-900 text-blue-400 dark:bg-slate-950 dark:text-blue-400 border border-slate-700">
+                  <Moon className="w-4 h-4" />
                 </div>
                 {themeMode === 'dark' && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-600 text-white rounded-md">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-[#1976D2] text-white rounded">
                     Đang chọn
                   </span>
                 )}
               </div>
-              <div className="mt-3">
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-200">Giao diện Tối</div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Dịu mắt, bảo vệ thị lực ca trực đêm & phòng chẩn đoán hình ảnh tối</p>
+              <div className="mt-2.5">
+                <div className="text-xs font-bold text-[#263445] dark:text-slate-200">Giao diện Tối</div>
+                <p className="text-[11px] text-[#718096] dark:text-slate-400 mt-0.5">Dịu mắt, bảo vệ thị lực ca trực đêm &amp; phòng chẩn đoán hình ảnh tối</p>
               </div>
             </button>
 
@@ -404,25 +404,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <button
               type="button"
               onClick={() => onChangeThemeMode?.('system')}
-              className={`p-4 rounded-xl border-2 text-left transition-all flex flex-col justify-between ${
+              className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
                 themeMode === 'system'
-                  ? 'border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40'
+                  ? 'border-[#1976D2] bg-[#EAF4FF]/60 dark:bg-blue-950/20 ring-1 ring-[#1976D2]/30'
+                  : 'border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2]/50 dark:hover:border-slate-700 bg-[#F4F7FB] dark:bg-slate-800/40'
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className="p-2 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
-                  <Monitor className="w-5 h-5" />
+                <div className="p-2 rounded-lg bg-[#EAF4FF] text-[#1976D2] dark:bg-blue-950 dark:text-blue-400">
+                  <Monitor className="w-4 h-4" />
                 </div>
                 {themeMode === 'system' && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-600 text-white rounded-md">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-[#1976D2] text-white rounded">
                     Đang chọn
                   </span>
                 )}
               </div>
-              <div className="mt-3">
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-200">Theo Hệ Thống</div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Tự động đồng bộ với chế độ Sáng/Tối của hệ điều hành thiết bị</p>
+              <div className="mt-2.5">
+                <div className="text-xs font-bold text-[#263445] dark:text-slate-200">Theo Hệ Thống</div>
+                <p className="text-[11px] text-[#718096] dark:text-slate-400 mt-0.5">Tự động đồng bộ với chế độ Sáng/Tối của hệ điều hành thiết bị</p>
               </div>
             </button>
           </div>
@@ -438,10 +438,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           const isSyncedLive = pgState.status === 'synced' && !isSyncingOrPending;
 
           return (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-emerald-200/80 dark:border-emerald-900/50 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                  <Database className="w-5 h-5 text-emerald-600 mr-2 shrink-0" />
+            <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-emerald-900/50 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+                  <Database className="w-4 h-4 text-emerald-600 mr-2 shrink-0" />
                   Đồng Bộ Live PostgreSQL (Tự Động Hai Chiều)
                 </h3>
                 <span
@@ -586,13 +586,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         })()}
 
         {/* SHEET 1: GOOGLE SHEET BÁO CÁO SỐ CA */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-emerald-200/80 dark:border-emerald-900/50 shadow-xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <FileSpreadsheet className="w-5 h-5 text-emerald-600 mr-2 shrink-0" /> 
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-emerald-900/50 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 mr-2 shrink-0" /> 
               1. Google Sheets Báo Cáo &amp; Thống Kê Số Ca
             </h3>
-            <span className="text-[11px] font-extrabold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-full border border-emerald-300/60 tabular-nums">
+            <span className="text-[11px] font-bold px-2.5 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 rounded-md border border-emerald-200 tabular-nums">
               Lấy dữ liệu số ca · Năm {selectedSheetYear}
             </span>
           </div>
@@ -726,24 +726,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* SHEET 2: GOOGLE SHEET LƯU ID TỆP TẢI LÊN & CHỈ MỤC HỆ THỐNG */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-blue-200/80 dark:border-blue-900/50 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <Database className="w-5 h-5 text-blue-600 mr-2" /> 
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-blue-900/50 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+              <Database className="w-4 h-4 text-[#1976D2] mr-2" /> 
               2. Google Sheets Cơ Sở Dữ Liệu Lưu ID Tệp Tải Lên
             </h3>
-            <span className="text-[11px] font-extrabold px-2.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded-full border border-blue-300/60">
-              Lưu chỉ mục tệp & Hồ sơ
+            <span className="text-[11px] font-bold px-2.5 py-0.5 bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 rounded-md border border-[#1976D2]/25">
+              Lưu chỉ mục tệp &amp; Hồ sơ
             </span>
           </div>
 
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Trang tính Google Sheets này hoạt động như một <strong className="text-slate-700 dark:text-slate-200">Cơ sở dữ liệu Chỉ mục (File Index Database)</strong> để lưu trữ ID tệp PDF/Docx tải lên Google Drive, danh mục tài liệu SOP, liên kết chia sẻ và dữ liệu sao lưu của hệ thống.
+          <p className="text-xs text-[#718096] dark:text-slate-400">
+            Trang tính Google Sheets này hoạt động như một <strong className="text-[#263445] dark:text-slate-200">Cơ sở dữ liệu Chỉ mục (File Index Database)</strong> để lưu trữ ID tệp PDF/Docx tải lên Google Drive, danh mục tài liệu SOP, liên kết chia sẻ và dữ liệu sao lưu của hệ thống.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">
                 Google Sheet Database ID (Lưu chỉ mục ID tệp tải lên):
               </label>
               <input
@@ -754,35 +754,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   const cleanId = extractIdFromUrlOrText(val);
                   setSettings({ ...settings, googleSheetId: cleanId });
                 }}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-blue-700 dark:text-blue-400 font-bold"
+                className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-mono text-[#155A9C] dark:text-blue-400 font-bold"
                 placeholder="Ví dụ: 1Spreadsheet_DB_CLS_WorkHub_Key"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Mã ID hoặc URL trang tính lưu bảng chỉ mục tệp (tự động lọc lấy ID sạch).</p>
+              <p className="text-[11px] text-[#718096] mt-1">Mã ID hoặc URL trang tính lưu bảng chỉ mục tệp (tự động lọc lấy ID sạch).</p>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Tên Bảng Tính / CSDL Tệp Mặc Định:</label>
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Tên Bảng Tính / CSDL Tệp Mặc Định:</label>
               <input
                 type="text"
                 value={settings.googleSheetName || 'CLS_WorkHub_FileIndex_Database'}
                 onChange={(e) => setSettings({ ...settings, googleSheetName: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono"
+                className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-mono"
               />
-              <p className="text-[11px] text-slate-400 mt-1">Tên tab/trang tính lưu thông tin tệp.</p>
+              <p className="text-[11px] text-[#718096] mt-1">Tên tab/trang tính lưu thông tin tệp.</p>
             </div>
           </div>
         </div>
 
         {/* Google Drive & Quick Link to Dedicated Telegram Bot Config */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <Key className="w-5 h-5 text-blue-600 mr-2" /> 3. Kết nối Google Drive &amp; Bot Telegram
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+            <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+              <Key className="w-4 h-4 text-[#1976D2] mr-2" /> 3. Kết nối Google Drive &amp; Bot Telegram
             </h3>
           </div>
 
           <div className="text-xs space-y-4">
-            <div className="p-4 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="p-4 rounded-xl bg-[#EAF4FF]/60 dark:bg-blue-950/30 border border-[#1976D2]/20 dark:border-blue-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-bold text-slate-800 dark:text-slate-100 flex flex-wrap items-center gap-2">
                   <span>Tài khoản Google Drive (Tải lên &amp; Xóa tài liệu)</span>
@@ -891,7 +891,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Cấu hình Bot Token, dò Chat ID tự động và xem hướng dẫn tạo Bot Telegram riêng cho ứng dụng tại tab chuyên biệt.
+                    Cấu hình Bot Token, dò Chat ID tự động và chỉnh sửa giờ báo tự động cố định (07:00 · 12:45 · 17:00) tại tab chuyên biệt.
                   </p>
                 </div>
               </div>
@@ -900,7 +900,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigateConfigTab('telegram')}
-                  className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition-colors shrink-0 cursor-pointer"
+                  className="px-3.5 py-2 rounded-lg bg-[#1976D2] hover:bg-[#155A9C] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition-colors shrink-0 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Mở Cài Đặt Telegram Bot</span>
@@ -911,29 +911,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* Performance & Execution */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-            <Database className="w-5 h-5 text-emerald-600 mr-2" /> Tối ưu Hiệu năng & CacheService / LockService
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
+          <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+            <Database className="w-4 h-4 text-emerald-600 mr-2" /> Tối ưu Hiệu năng &amp; CacheService / LockService
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Cache TTL (Phút)</label>
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Cache TTL (Phút)</label>
               <input
                 type="number"
                 value={settings.cacheTtlMinutes}
                 onChange={(e) => setSettings({ ...settings, cacheTtlMinutes: parseInt(e.target.value) || 10 })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Lock Timeout (Mili giây)</label>
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Lock Timeout (Mili giây)</label>
               <input
                 type="number"
                 value={settings.lockTimeoutMs}
                 onChange={(e) => setSettings({ ...settings, lockTimeoutMs: parseInt(e.target.value) || 30000 })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg"
               />
             </div>
 
@@ -943,35 +943,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   type="checkbox"
                   checked={settings.debugMode}
                   onChange={(e) => setSettings({ ...settings, debugMode: e.target.checked })}
-                  className="rounded-md border-slate-300"
+                  className="rounded border-[#DFE7F0] text-[#1976D2] focus:ring-[#1976D2]"
                 />
-                <span className="font-bold text-slate-700 dark:text-slate-200">Bật Chế độ Debug Mode</span>
+                <span className="font-bold text-[#263445] dark:text-slate-200">Bật Chế độ Debug Mode</span>
               </label>
             </div>
           </div>
         </div>
 
         {/* PRODUCTION READINESS & DATA CLEANUP CARD */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border-2 border-emerald-500/30 dark:border-emerald-600/40 shadow-sm space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-emerald-600/40 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#DFE7F0] dark:border-slate-800 pb-3.5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                <Building2 className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shrink-0">
+                <Building2 className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center gap-2">
                   <span>Trạng Thái Vận Hành Bệnh Viện Thực Tế</span>
                   {isCleanProduction ? (
-                    <span className="px-2 py-0.5 text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-full inline-flex items-center gap-1">
+                    <span className="px-2 py-0.5 text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-md inline-flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Sẵn sàng thực tế (Clean State)
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded-full inline-flex items-center gap-1">
+                    <span className="px-2 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded-md inline-flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3 text-amber-600" /> Đang chứa dữ liệu mẫu
                     </span>
                   )}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">
                   Quản lý dọn sạch dữ liệu dùng thử để chuyển giao cho Khoa Cận Lâm Sàng vận hành chính thức
                 </p>
               </div>
@@ -981,17 +981,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleLoadSampleData}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors inline-flex items-center gap-1.5"
+                className="px-3 py-1.5 text-xs font-semibold text-[#263445] dark:text-slate-300 bg-[#F4F7FB] dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 border border-[#DFE7F0] dark:border-slate-700 rounded-lg transition-colors inline-flex items-center gap-1.5 cursor-pointer"
                 title="Nạp lại bộ dữ liệu mẫu để thử nghiệm tính năng hoặc đào tạo nhân sự"
               >
-                <PlayCircle className="w-3.5 h-3.5 text-blue-600" />
+                <PlayCircle className="w-3.5 h-3.5 text-[#1976D2]" />
                 <span>Nạp dữ liệu mẫu</span>
               </button>
 
               <button
                 type="button"
                 onClick={handlePurgeTrialData}
-                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5"
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
                 title="Xóa toàn bộ dữ liệu dùng thử"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -1002,49 +1002,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* Quick Metrics of current database state */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                <UserCheck className="w-3.5 h-3.5 text-blue-600" /> Tài khoản nhân sự
+            <div className="p-3 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-800">
+              <div className="text-[11px] text-[#718096] dark:text-slate-400 font-medium flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-[#1976D2]" /> Tài khoản nhân sự
               </div>
-              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {usersCount} <span className="text-xs font-normal text-slate-400">người</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                <Stethoscope className="w-3.5 h-3.5 text-indigo-600" /> Máy móc & Thiết bị
-              </div>
-              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {equipmentCount} <span className="text-xs font-normal text-slate-400">thiết bị</span>
+              <div className="text-lg font-bold text-[#263445] dark:text-slate-100 mt-1 tabular-nums">
+                {usersCount} <span className="text-xs font-normal text-[#718096]">người</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5 text-amber-600" /> Nhiệm vụ & Công việc
+            <div className="p-3 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-800">
+              <div className="text-[11px] text-[#718096] dark:text-slate-400 font-medium flex items-center gap-1">
+                <Stethoscope className="w-3.5 h-3.5 text-[#1976D2]" /> Máy móc &amp; Thiết bị
               </div>
-              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {tasksCount} <span className="text-xs font-normal text-slate-400">công việc</span>
+              <div className="text-lg font-bold text-[#263445] dark:text-slate-100 mt-1 tabular-nums">
+                {equipmentCount} <span className="text-xs font-normal text-[#718096]">thiết bị</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                <Folder className="w-3.5 h-3.5 text-emerald-600" /> Văn bản & Chứng chỉ
+            <div className="p-3 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-800">
+              <div className="text-[11px] text-[#718096] dark:text-slate-400 font-medium flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-amber-600" /> Nhiệm vụ &amp; Công việc
               </div>
-              <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">
-                {docsCount} <span className="text-xs font-normal text-slate-400">tài liệu</span>
+              <div className="text-lg font-bold text-[#263445] dark:text-slate-100 mt-1 tabular-nums">
+                {tasksCount} <span className="text-xs font-normal text-[#718096]">công việc</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-800">
+              <div className="text-[11px] text-[#718096] dark:text-slate-400 font-medium flex items-center gap-1">
+                <Folder className="w-3.5 h-3.5 text-emerald-600" /> Văn bản &amp; Chứng chỉ
+              </div>
+              <div className="text-lg font-bold text-[#263445] dark:text-slate-100 mt-1 tabular-nums">
+                {docsCount} <span className="text-xs font-normal text-[#718096]">tài liệu</span>
               </div>
             </div>
           </div>
 
           {/* Quick Start Checklist for Production */}
-          <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+          <div className="p-3.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-900/40 text-xs text-[#263445] dark:text-slate-300 space-y-2">
             <div className="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
-              <span>📋</span> Các bước khởi tạo dữ liệu thực tế cho Bệnh viện:
+              <span>Các bước khởi tạo dữ liệu thực tế cho Bệnh viện:</span>
             </div>
-            <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400 text-[11.5px] leading-relaxed">
+            <ul className="list-disc pl-5 space-y-1 text-[#718096] dark:text-slate-400 text-[11.5px] leading-relaxed">
               <li>
                 <strong>Tài khoản Quản trị:</strong> Đăng nhập bằng email <code className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 font-mono text-emerald-900 dark:text-emerald-200">admin@hospital.vn</code> (mật khẩu: <code className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 font-mono text-emerald-900 dark:text-emerald-200">admin</code>). Bạn có thể đổi mật khẩu bất kỳ lúc nào qua menu tài khoản ở góc trên.
               </li>
@@ -1052,10 +1052,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <strong>Nhân sự khoa:</strong> Vào mục <em>Quản lý Nhân sự</em> để thêm danh sách Bác sĩ, Kỹ thuật viên thật của khoa.
               </li>
               <li>
-                <strong>Thiết bị cận lâm sàng:</strong> Vào mục <em>Thiết bị & Máy móc</em> để thêm máy hoặc dùng tính năng <em>Nhập từ file Excel</em> để nạp danh mục máy toàn viện nhanh chóng.
+                <strong>Thiết bị cận lâm sàng:</strong> Vào mục <em>Thiết bị &amp; Máy móc</em> để thêm máy hoặc dùng tính năng <em>Nhập từ file Excel</em> để nạp danh mục máy toàn viện nhanh chóng.
               </li>
               <li>
-                <strong>Phân ca trực:</strong> Vào mục <em>Lịch trực & Phân công</em> để tạo lịch ca trực và phân bổ phòng máy tuần mới.
+                <strong>Phân ca trực:</strong> Vào mục <em>Lịch trực &amp; Phân công</em> để tạo lịch ca trực và phân bổ phòng máy tuần mới.
               </li>
               <li>
                 <strong>Báo cáo số ca:</strong> Dán đường dẫn Google Sheet thật của bệnh viện vào ô bên trên để liên kết số liệu trực tiếp.
@@ -1065,11 +1065,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* Save & Reset Buttons */}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between pt-1">
           <button
             type="button"
             onClick={handleResetDatabase}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 hover:bg-rose-100 rounded-xl text-xs font-semibold transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/50 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Làm sạch về Chế độ Thực tế</span>
@@ -1077,7 +1077,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <button
             type="submit"
-            className="flex items-center space-x-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs shadow-md transition-colors"
+            className="flex items-center space-x-2 px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-semibold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>Lưu cấu hình hệ thống</span>

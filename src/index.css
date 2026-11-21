@@ -3,34 +3,55 @@
 
 @layer base {
   :root {
-    /* Healthcare Light Theme: Clinical, sterile, high-legibility, anti-glare */
-    --color-bg-primary: #f8fafc;        /* Slate 50 - Sạch sẽ, chống mỏi mắt */
-    --color-bg-card: #ffffff;           /* Trắng Blouse tinh tế */
-    --color-bg-subtle: #f1f5f9;         /* Slate 100 - Khối phụ & bảng dữ liệu */
-    --color-text-primary: #0f172a;      /* Slate 900 - Độ tương phản WCAG AAA */
-    --color-text-secondary: #334155;    /* Slate 700 */
-    --color-text-muted: #64748b;        /* Slate 500 */
-    --color-border: #e2e8f0;            /* Slate 200 - Đường hairline sắc nét */
-    --color-accent-blue: #0284c7;       /* Medical Blue / Sky 600 */
-    --color-accent-teal: #0d9488;       /* Clinical Teal 600 */
+    /* Enterprise HIS Design System Palette (Blue & White Clinical Standard) */
+    --his-primary: #1976D2;
+    --his-primary-dark: #155A9C;
+    --his-primary-light: #EAF4FF;
+    --his-white: #FFFFFF;
+    --his-bg: #F4F7FB;
+    --his-text-primary: #263445;
+    --his-text-secondary: #718096;
+    --his-border: #DFE7F0;
+
+    /* Semantic CSS Vars */
+    --color-bg-primary: #F4F7FB;
+    --color-bg-card: #FFFFFF;
+    --color-bg-subtle: #EAF4FF;
+    --color-text-primary: #263445;
+    --color-text-secondary: #475569;
+    --color-text-muted: #718096;
+    --color-border: #DFE7F0;
+    --color-accent-blue: #1976D2;
+    --color-accent-teal: #0D9488;
+    --font-sans: 'Plus Jakarta Sans', 'Inter', Arial, -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
   .dark {
-    /* Healthcare Dark Theme: Diagnostic Room / PACS / Night-Shift Standard */
-    --color-bg-primary: #0b0f19;        /* Deep Obsidian Navy - Giảm chói tối đa khi đọc phim */
-    --color-bg-card: #111827;           /* Gray 900 / Lab Slate panel */
-    --color-bg-subtle: #1e293b;         /* Slate 800 - Khối phân tách */
-    --color-text-primary: #f8fafc;      /* Slate 50 - Sáng dịu, không tán xạ */
-    --color-text-secondary: #cbd5e1;    /* Slate 300 */
-    --color-text-muted: #94a3b8;        /* Slate 400 */
-    --color-border: #1e293b;            /* Slate 800 */
-    --color-accent-blue: #38bdf8;       /* Luminous Medical Sky */
-    --color-accent-teal: #2dd4bf;       /* Luminous Teal */
+    /* High-Legibility Night-Shift Mode preserving toggle support */
+    --his-primary: #38BDF8;
+    --his-primary-dark: #0284C7;
+    --his-primary-light: rgba(56, 189, 248, 0.16);
+    --his-white: #162033;
+    --his-bg: #0F172A;
+    --his-text-primary: #F8FAFC;
+    --his-text-secondary: #CBD5E1;
+    --his-border: #334155;
+
+    --color-bg-primary: #0F172A;
+    --color-bg-card: #162033;
+    --color-bg-subtle: #1E293B;
+    --color-text-primary: #F8FAFC;
+    --color-text-secondary: #E2E8F0;
+    --color-text-muted: #CBD5E1;
+    --color-border: #334155;
+    --color-accent-blue: #38BDF8;
+    --color-accent-teal: #2DD4BF;
   }
 
   html {
     color-scheme: light;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
 
   html.dark {
@@ -40,13 +61,110 @@
   body {
     background-color: var(--color-bg-primary);
     color: var(--color-text-primary);
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  code, pre, .font-mono {
+    font-family: var(--font-mono);
+  }
 }
 
-/* Custom Scrollbar Styles for Light & Dark Themes */
+@layer components {
+  .his-panel {
+    background-color: #FFFFFF;
+    border: 1px solid #DFE7F0;
+    border-radius: 0.625rem;
+    box-shadow: 0 1px 2px rgba(21, 90, 156, 0.04);
+  }
+  .dark .his-panel {
+    background-color: #162033;
+    border-color: #334155;
+  }
+
+  .his-btn-primary {
+    background-color: #1976D2;
+    color: #FFFFFF;
+    border: 1px solid #155A9C;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .his-btn-primary:hover:not(:disabled) {
+    background-color: #155A9C;
+  }
+
+  .his-btn-secondary {
+    background-color: #FFFFFF;
+    color: #263445;
+    border: 1px solid #DFE7F0;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .his-btn-secondary:hover:not(:disabled) {
+    background-color: #EAF4FF;
+    border-color: #1976D2;
+    color: #155A9C;
+  }
+  .dark .his-btn-secondary {
+    background-color: #1E293B;
+    color: #F8FAFC;
+    border-color: #334155;
+  }
+
+  .his-input {
+    background-color: #FFFFFF;
+    color: #263445;
+    border: 1px solid #DFE7F0;
+    border-radius: 0.5rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .his-input:focus {
+    outline: none;
+    border-color: #1976D2;
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.16);
+  }
+  .dark .his-input {
+    background-color: #1E293B;
+    color: #F8FAFC;
+    border-color: #334155;
+  }
+
+  .his-table-head {
+    background-color: #F4F7FB;
+    color: #263445;
+    border-bottom: 1px solid #DFE7F0;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+  }
+  .dark .his-table-head {
+    background-color: #1E293B;
+    color: #CBD5E1;
+    border-bottom-color: #334155;
+  }
+
+  .his-table-row {
+    border-bottom: 1px solid #DFE7F0;
+    transition: background-color 0.12s ease;
+  }
+  .his-table-row:hover {
+    background-color: #EAF4FF;
+  }
+  .dark .his-table-row {
+    border-bottom-color: #1E293B;
+  }
+  .dark .his-table-row:hover {
+    background-color: rgba(30, 41, 59, 0.65);
+  }
+}
+
+/* Custom Scrollbar Styles for HIS Light & Dark Themes */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -57,16 +175,16 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(113, 128, 150, 0.35);
   border-radius: 9999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.7);
+  background: rgba(25, 118, 210, 0.55);
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.6);
+  background: rgba(51, 65, 85, 0.65);
 }
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {

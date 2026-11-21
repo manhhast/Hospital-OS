@@ -284,6 +284,15 @@ class TelegramAssistantManager {
     };
   }
 
+  public getDeliveryConfig() {
+    return {
+      botToken: this.botToken,
+      defaultChatId: this.defaultChatId,
+      enabled: this.enabled,
+      hostLabel: this.instanceHost,
+    };
+  }
+
   private async telegramApiCall(token: string, method: string, body?: any, signal?: AbortSignal) {
     const url = `https://api.telegram.org/bot${token}/${method}`;
     const res = await fetch(url, {

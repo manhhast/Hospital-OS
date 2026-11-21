@@ -108,69 +108,69 @@ export const MeetingManagementView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 w-full pb-8">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-sm font-semibold mb-1">
+          <div className="flex items-center gap-2 text-[#1976D2] dark:text-blue-400 text-xs font-bold uppercase tracking-wider mb-1">
             <Users className="w-4 h-4" /> QUẢN LÝ CUỘC HỌP & GIAO VIỆC SAU HỌP
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Lịch Họp Giao Ban, Lập Biên Bản & Giao Nhiệm Vụ</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <h1 className="text-lg sm:text-xl font-bold text-[#263445] dark:text-white">Lịch Họp Giao Ban, Lập Biên Bản & Giao Nhiệm Vụ</h1>
+          <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">
             Theo dõi các buổi giao ban tuần, hội chẩn ca bệnh khó, ghi biên bản cuộc họp và tự động chuyển kết luận thành Task cho nhân viên.
           </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-semibold text-sm transition-all shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold text-xs transition-all shrink-0"
         >
           <Plus className="w-4 h-4" /> Lên Lịch Họp Mới
         </button>
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Side: Meetings List (4 cols) */}
-        <div className="lg:col-span-5 space-y-3">
-          <h3 className="font-bold text-slate-900 dark:text-slate-200 text-sm px-1">Danh Sách Cuộc Họp khoa</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left Side: Meetings List (5 cols) */}
+        <div className="lg:col-span-5 space-y-2.5">
+          <h3 className="font-bold text-[#263445] dark:text-slate-200 text-xs uppercase tracking-wider px-1">Danh Sách Cuộc Họp Khoa</h3>
           {meetings.map(m => (
             <div
               key={m.id}
               onClick={() => setSelectedMeeting(m)}
-              className={`p-4 rounded-xl border transition-all cursor-pointer ${
+              className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
                 selectedMeeting?.id === m.id
-                  ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-500 shadow-sm'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                  ? 'bg-[#EAF4FF] dark:bg-blue-950/40 border-[#1976D2] ring-1 ring-[#1976D2]/20'
+                  : 'bg-white dark:bg-slate-900 border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2]/40 dark:hover:border-slate-700'
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded uppercase">
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#155A9C] dark:text-slate-300 rounded uppercase">
                   {m.category}
                 </span>
-                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                   m.status === 'Đã hoàn thành' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
                 }`}>
                   {m.status}
                 </span>
               </div>
-              <h4 className="font-bold text-slate-900 dark:text-white text-sm mt-2">{m.title}</h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">{m.date} ({m.time}) • {m.location}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Chủ trì: <strong className="text-slate-700 dark:text-slate-300">{m.chairperson}</strong></p>
+              <h4 className="font-bold text-[#263445] dark:text-white text-sm mt-2">{m.title}</h4>
+              <p className="text-xs text-[#718096] dark:text-slate-400 mt-1 font-medium">{m.date} ({m.time}) • {m.location}</p>
+              <p className="text-xs text-[#718096] dark:text-slate-500 mt-1">Chủ trì: <strong className="text-[#263445] dark:text-slate-300">{m.chairperson}</strong></p>
             </div>
           ))}
         </div>
 
         {/* Right Side: Meeting Detail, Minutes & Action Task Converter (7 cols) */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs p-5 space-y-5">
           {selectedMeeting ? (
             <>
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-4 space-y-2">
+              <div className="border-b border-[#DFE7F0] dark:border-slate-800 pb-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{selectedMeeting.category}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Chủ trì: <strong className="text-slate-800 dark:text-slate-200">{selectedMeeting.chairperson}</strong></span>
+                  <span className="text-xs font-bold text-[#1976D2] dark:text-blue-400 uppercase tracking-wider">{selectedMeeting.category}</span>
+                  <span className="text-xs text-[#718096] dark:text-slate-400">Chủ trì: <strong className="text-[#263445] dark:text-slate-200">{selectedMeeting.chairperson}</strong></span>
                 </div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white">{selectedMeeting.title}</h2>
-                <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                <h2 className="text-lg font-bold text-[#263445] dark:text-white">{selectedMeeting.title}</h2>
+                <div className="flex flex-wrap gap-4 text-xs text-[#263445] dark:text-slate-300 bg-[#F4F7FB] dark:bg-slate-800/50 p-3 rounded-lg border border-[#DFE7F0] dark:border-slate-800">
                   <span>📅 Ngày: <strong>{selectedMeeting.date}</strong></span>
                   <span>⏰ Giờ: <strong>{selectedMeeting.time}</strong></span>
                   <span>📍 Địa điểm: <strong>{selectedMeeting.location}</strong></span>
@@ -178,18 +178,18 @@ export const MeetingManagementView: React.FC = () => {
               </div>
 
               {/* Agenda */}
-              <div className="space-y-1">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400 dark:text-slate-500">Nội dung cuộc họp (Agenda):</h4>
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line border border-slate-100 dark:border-slate-800">
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-[#718096] dark:text-slate-500">Nội dung cuộc họp (Agenda):</h4>
+                <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/40 rounded-lg text-xs text-[#263445] dark:text-slate-300 whitespace-pre-line border border-[#DFE7F0] dark:border-slate-800">
                   {selectedMeeting.agenda}
                 </div>
               </div>
 
               {/* Meeting Minutes & Conclusions Section */}
-              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="space-y-3 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Biên Bản Cuộc Họp & Giao Việc
+                  <h3 className="font-bold text-[#263445] dark:text-white text-sm flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-[#1976D2] dark:text-blue-400" /> Biên Bản Cuộc Họp & Giao Việc
                   </h3>
                   {!selectedMeeting.minutes && (
                     <button
@@ -198,7 +198,7 @@ export const MeetingManagementView: React.FC = () => {
                         setActionList([]);
                         setShowMinutesModal(true);
                       }}
-                      className="px-3 py-1.5 bg-indigo-600 dark:bg-indigo-500 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-all"
+                      className="px-3 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold transition-all"
                     >
                       + Lập Biên Bản Họp
                     </button>
@@ -206,19 +206,19 @@ export const MeetingManagementView: React.FC = () => {
                 </div>
 
                 {selectedMeeting.minutes ? (
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="p-4 bg-[#F4F7FB] dark:bg-slate-800/50 rounded-xl border border-[#DFE7F0] dark:border-slate-800 space-y-4">
                     <div>
-                      <h4 className="font-bold text-xs uppercase text-indigo-700 dark:text-indigo-400 mb-1">Thảo luận chính:</h4>
-                      <ul className="list-disc list-inside text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                      <h4 className="font-bold text-xs uppercase text-[#155A9C] dark:text-blue-400 mb-1">Thảo luận chính:</h4>
+                      <ul className="list-disc list-inside text-xs text-[#263445] dark:text-slate-300 space-y-1">
                         {selectedMeeting.minutes.keyDiscussions.map((disc, idx) => (
                           <li key={idx}>{disc}</li>
                         ))}
                       </ul>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
-                      <h4 className="font-bold text-xs uppercase text-indigo-700 dark:text-indigo-400 mb-1">Kết luận chỉ đạo của Chủ trì:</h4>
-                      <ul className="list-disc list-inside text-xs text-slate-800 dark:text-slate-200 font-medium space-y-1">
+                    <div className="pt-3 border-t border-[#DFE7F0] dark:border-slate-700/60">
+                      <h4 className="font-bold text-xs uppercase text-[#155A9C] dark:text-blue-400 mb-1">Kết luận chỉ đạo của Chủ trì:</h4>
+                      <ul className="list-disc list-inside text-xs text-[#263445] dark:text-slate-200 font-medium space-y-1">
                         {selectedMeeting.minutes.conclusions.map((conc, idx) => (
                           <li key={idx}>{conc}</li>
                         ))}
@@ -226,25 +226,25 @@ export const MeetingManagementView: React.FC = () => {
                     </div>
 
                     {/* Action Items -> Task Converter Box */}
-                    <div className="pt-3 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2">
-                      <h4 className="font-bold text-xs uppercase text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                        <ListTodo className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Nhiệm vụ giao cho nhân sự sau họp:
+                    <div className="pt-3 border-t border-[#DFE7F0] dark:border-slate-700/60 space-y-2">
+                      <h4 className="font-bold text-xs uppercase text-[#263445] dark:text-slate-300 flex items-center gap-1">
+                        <ListTodo className="w-3.5 h-3.5 text-[#1976D2] dark:text-blue-400" /> Nhiệm vụ giao cho nhân sự sau họp:
                       </h4>
                       <div className="space-y-2">
                         {selectedMeeting.minutes.actionItems.map(action => (
-                          <div key={action.id} className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                          <div key={action.id} className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-[#DFE7F0] dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                             <div>
-                              <p className="font-bold text-slate-900 dark:text-white">{action.taskTitle}</p>
-                              <p className="text-slate-500 dark:text-slate-400 text-[11px]">Người phụ trách: <strong className="text-slate-800 dark:text-slate-200">{action.assigneeName}</strong> • Hạn hoàn thành: {action.dueDate}</p>
+                              <p className="font-bold text-[#263445] dark:text-white">{action.taskTitle}</p>
+                              <p className="text-[#718096] dark:text-slate-400 text-[11px]">Người phụ trách: <strong className="text-[#263445] dark:text-slate-200">{action.assigneeName}</strong> • Hạn hoàn thành: {action.dueDate}</p>
                             </div>
                             {action.status === 'Đã giao thành task' ? (
-                              <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-full font-semibold text-[11px] border border-emerald-200 dark:border-emerald-800/60 self-start sm:self-auto">
+                              <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded font-semibold text-[11px] border border-emerald-200 dark:border-emerald-800/60 self-start sm:self-auto">
                                 ✓ Đã chuyển thành Task
                               </span>
                             ) : (
                               <button
                                 onClick={() => handleConvertToTask(selectedMeeting, action)}
-                                className="px-3 py-1.5 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg font-semibold text-xs transition-all flex items-center gap-1 self-start sm:self-auto shadow-sm"
+                                className="px-3 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold text-xs transition-all flex items-center gap-1 self-start sm:self-auto"
                               >
                                 🚀 Giao Thành Task
                               </button>
@@ -255,59 +255,59 @@ export const MeetingManagementView: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-6 text-center bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Chưa có biên bản cuộc họp. Bấm nút bên trên để ghi nhận biên bản và giao việc.</p>
+                  <div className="p-6 text-center bg-[#F4F7FB] dark:bg-slate-800/30 rounded-xl border border-dashed border-[#DFE7F0] dark:border-slate-700">
+                    <p className="text-xs text-[#718096] dark:text-slate-400">Chưa có biên bản cuộc họp. Bấm nút bên trên để ghi nhận biên bản và giao việc.</p>
                   </div>
                 )}
               </div>
             </>
           ) : (
-            <div className="p-12 text-center text-slate-400 dark:text-slate-500">Chọn cuộc họp để xem thông tin chi tiết.</div>
+            <div className="p-12 text-center text-[#718096] dark:text-slate-500">Chọn cuộc họp để xem thông tin chi tiết.</div>
           )}
         </div>
       </div>
 
       {/* Minutes Modal */}
       {showMinutesModal && selectedMeeting && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl border border-slate-200 dark:border-slate-800">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">📝 Lập Biên Bản Cuộc Họp & Giao Nhiệm Vụ</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Cuộc họp: <strong className="text-slate-800 dark:text-slate-200">{selectedMeeting.title}</strong></p>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl max-w-lg w-full p-5 space-y-4 shadow-xl border border-[#DFE7F0] dark:border-slate-800">
+            <h3 className="text-base font-bold text-[#263445] dark:text-white">📝 Lập Biên Bản Cuộc Họp & Giao Nhiệm Vụ</h3>
+            <p className="text-xs text-[#718096] dark:text-slate-400">Cuộc họp: <strong className="text-[#263445] dark:text-slate-200">{selectedMeeting.title}</strong></p>
 
             <form onSubmit={handleSaveMinutes} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nội dung thảo luận chính (mỗi dòng 1 ý):</label>
+                <label className="block font-semibold text-[#263445] dark:text-slate-300 mb-1">Nội dung thảo luận chính (mỗi dòng 1 ý):</label>
                 <textarea
                   rows={2}
                   required
                   placeholder="KTV báo cáo tình trạng máy MSCT..."
                   value={discussionInput}
                   onChange={e => setDiscussionInput(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-[#1976D2]/30 focus:border-[#1976D2]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kết luận chỉ đạo của Chủ trì (mỗi dòng 1 ý):</label>
+                <label className="block font-semibold text-[#263445] dark:text-slate-300 mb-1">Kết luận chỉ đạo của Chủ trì (mỗi dòng 1 ý):</label>
                 <textarea
                   rows={2}
                   required
                   placeholder="Thống nhất xin gia hạn giấy phép an toàn bức xạ..."
                   value={conclusionsInput}
                   onChange={e => setConclusionsInput(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-[#1976D2]/30 focus:border-[#1976D2]"
                 />
               </div>
 
               {/* Action Item Creator Inside Modal */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                <label className="block font-bold text-slate-800 dark:text-slate-200">Giao việc cho nhân sự sau họp:</label>
+              <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-700 space-y-2">
+                <label className="block font-bold text-[#263445] dark:text-slate-200">Giao việc cho nhân sự sau họp:</label>
                 <input
                   type="text"
                   placeholder="Tên công việc..."
                   value={actionTitle}
                   onChange={e => setActionTitle(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg outline-none"
+                  className="w-full p-2 bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:border-[#1976D2]"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <input
@@ -315,12 +315,12 @@ export const MeetingManagementView: React.FC = () => {
                     placeholder="Người phụ trách..."
                     value={actionAssignee}
                     onChange={e => setActionAssignee(e.target.value)}
-                    className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg outline-none"
+                    className="p-2 bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-100 rounded-lg outline-none focus:border-[#1976D2]"
                   />
                   <button
                     type="button"
                     onClick={handleAddActionItem}
-                    className="p-2 bg-slate-900 dark:bg-slate-800 text-white rounded-lg font-semibold hover:bg-slate-800 dark:hover:bg-slate-700 transition-all"
+                    className="p-2 bg-[#155A9C] dark:bg-slate-800 text-white rounded-lg font-semibold hover:bg-[#1976D2] dark:hover:bg-slate-700 transition-all"
                   >
                     + Thêm Nhiệm Vụ
                   </button>
@@ -329,7 +329,7 @@ export const MeetingManagementView: React.FC = () => {
                 {actionList.length > 0 && (
                   <div className="pt-2 space-y-1">
                     {actionList.map((a, i) => (
-                      <div key={i} className="text-[11px] bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700 font-medium text-slate-800 dark:text-slate-200">
+                      <div key={i} className="text-[11px] bg-white dark:bg-slate-900 p-2 rounded border border-[#DFE7F0] dark:border-slate-700 font-medium text-[#263445] dark:text-slate-200">
                         • {a.taskTitle} (Giao: {a.assigneeName})
                       </div>
                     ))}
@@ -337,17 +337,17 @@ export const MeetingManagementView: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowMinutesModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  className="px-4 py-2 bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold hover:bg-[#DFE7F0]/60 dark:hover:bg-slate-700 transition-all"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-xl font-semibold hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all shadow-sm"
+                  className="px-4 py-2 bg-[#1976D2] text-white rounded-lg font-semibold hover:bg-[#155A9C] transition-all"
                 >
                   Lưu Biên Bản Họp
                 </button>

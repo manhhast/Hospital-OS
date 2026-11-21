@@ -327,30 +327,30 @@ export const RoomManagementView: React.FC = () => {
         }}
         className={`group p-3 rounded-xl border transition-all cursor-pointer ${
           isSelected
-            ? 'bg-blue-50/90 dark:bg-blue-950/50 border-blue-500 shadow-sm ring-1 ring-blue-500/30'
-            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700'
+            ? 'bg-[#EAF4FF] dark:bg-blue-950/50 border-[#1976D2] shadow-2xs ring-1 ring-[#1976D2]/25'
+            : 'bg-white dark:bg-slate-900 border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2]/50 dark:hover:border-blue-700'
         }`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded uppercase tracking-wider">
+              <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 rounded uppercase tracking-wider">
                 Cấp 2
               </span>
-              <span className="text-[10px] font-extrabold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-mono">
+              <span className="text-[10px] font-extrabold px-1.5 py-0.5 bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 text-[#263445] dark:text-slate-300 rounded font-mono">
                 {room.code}
               </span>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                   room.status === 'Đang hoạt động'
-                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
-                    : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                    ? 'bg-emerald-50 border border-emerald-200 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-amber-50 border border-amber-200 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
                 }`}
               >
                 {room.status}
               </span>
             </div>
-            <h4 className="font-bold text-slate-900 dark:text-white text-xs mt-1.5 leading-snug">
+            <h4 className="font-bold text-[#263445] dark:text-white text-xs mt-1.5 leading-snug">
               {room.name}
             </h4>
           </div>
@@ -370,7 +370,7 @@ export const RoomManagementView: React.FC = () => {
                     setIsRoomModalOpen(true);
                   }}
                   title="Đổi tên / Sửa phòng"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
+                  className="p-1.5 rounded-md text-[#718096] hover:text-[#1976D2] dark:hover:text-blue-400 hover:bg-[#EAF4FF] dark:hover:bg-blue-950/60 transition-colors"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
@@ -380,7 +380,7 @@ export const RoomManagementView: React.FC = () => {
                   type="button"
                   onClick={() => setDeleteModalRoom(room)}
                   title="Xóa phòng"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                  className="p-1.5 rounded-md text-[#718096] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -389,16 +389,16 @@ export const RoomManagementView: React.FC = () => {
           )}
         </div>
 
-        <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="mt-2 pt-2 border-t border-[#DFE7F0]/70 dark:border-slate-800 flex items-center justify-between text-[11px] text-[#718096] dark:text-slate-400">
           <div className="flex items-center space-x-2.5">
             <span className="flex items-center gap-1">
-              <Users className="w-3 h-3 text-blue-500" /> {roomStaffCount} NS
+              <Users className="w-3 h-3 text-[#1976D2]" /> {roomStaffCount} NS
             </span>
             <span className="flex items-center gap-1">
-              <Wrench className="w-3 h-3 text-indigo-500" /> {roomEqCount} Máy
+              <Wrench className="w-3 h-3 text-[#155A9C]" /> {roomEqCount} Máy
             </span>
           </div>
-          <span className="font-semibold text-slate-700 dark:text-slate-300">
+          <span className="font-semibold text-[#263445] dark:text-slate-300 tabular-nums">
             {room.currentDayCases}/{room.maxCapacityCasesPerDay} ca
           </span>
         </div>
@@ -407,28 +407,28 @@ export const RoomManagementView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 w-full">
       {/* Top Banner */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-[#1976D2] dark:text-blue-400 text-xs font-bold uppercase tracking-wider">
             <FolderTree className="w-4 h-4" /> Cơ Cấu Phân Cấp: Bộ Phận (Cấp 1) → Phòng Trực Thuộc (Cấp 2)
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+          <h1 className="text-lg md:text-xl font-bold text-[#263445] dark:text-white">
             Quản Lý Bộ Phận, Phòng Chuyên Môn & Nguồn Lực
           </h1>
-          <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-[#718096] dark:text-slate-400">
             Tổ chức khoa theo 2 cấp rõ ràng: <strong>Bộ phận (Cấp 1)</strong> quản lý danh sách các <strong>Phòng trực thuộc (Cấp 2)</strong>, điều phối nhân sự và thiết bị y tế theo từng phòng.
           </p>
-          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-            <span className="font-bold text-indigo-600 dark:text-indigo-400">{actorAccess.shortTierLabel}</span>
-            <span className="text-slate-400">•</span>
+          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[11px] font-semibold text-[#263445] dark:text-slate-300">
+            <span className="font-bold text-[#155A9C] dark:text-blue-400">{actorAccess.shortTierLabel}</span>
+            <span className="text-[#718096]">•</span>
             <span>Phạm vi quản lý: {actorAccess.scopeLabel}</span>
           </div>
         </div>
 
         {(canManageDepartments || canCreateAnyRoom) && (
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {canManageDepartments && (
               <button
                 type="button"
@@ -436,7 +436,7 @@ export const RoomManagementView: React.FC = () => {
                   setEditingDept(null);
                   setIsDeptModalOpen(true);
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-indigo-600/20"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#155A9C] hover:bg-[#1976D2] text-white rounded-lg font-bold text-xs transition-colors shadow-2xs"
               >
                 <Plus className="w-4 h-4" /> Thêm Bộ Phận (Cấp 1)
               </button>
@@ -445,7 +445,7 @@ export const RoomManagementView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => openAddRoomForDept()}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-600/20"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-bold text-xs transition-colors shadow-2xs"
               >
                 <Plus className="w-4 h-4" /> Thêm Phòng (Cấp 2)
               </button>
@@ -455,51 +455,51 @@ export const RoomManagementView: React.FC = () => {
       </div>
 
       {/* KPI Overview Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
-          <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 flex items-center space-x-3 shadow-2xs">
+          <div className="p-2.5 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/60 text-[#155A9C] dark:text-blue-400">
             <Layers className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Bộ phận (Cấp 1)</p>
-            <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {totalDepartments} <span className="text-xs text-slate-400 font-normal">bộ phận</span>
+            <p className="text-xs text-[#718096] dark:text-slate-400 font-medium">Bộ phận (Cấp 1)</p>
+            <h3 className="text-lg font-extrabold text-[#263445] dark:text-white tabular-nums">
+              {totalDepartments} <span className="text-xs text-[#718096] font-normal">bộ phận</span>
             </h3>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
-          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 flex items-center space-x-3 shadow-2xs">
+          <div className="p-2.5 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/60 text-[#1976D2] dark:text-blue-400">
             <Building2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Phòng trực thuộc (Cấp 2)</p>
-            <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
+            <p className="text-xs text-[#718096] dark:text-slate-400 font-medium">Phòng trực thuộc (Cấp 2)</p>
+            <h3 className="text-lg font-extrabold text-[#263445] dark:text-white tabular-nums">
               {totalRooms}{' '}
-              <span className="text-xs text-emerald-500 font-bold font-mono">({activeRooms} hoạt động)</span>
+              <span className="text-xs text-emerald-600 font-bold font-mono">({activeRooms} hoạt động)</span>
             </h3>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
-          <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 flex items-center space-x-3 shadow-2xs">
+          <div className="p-2.5 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/60 text-[#1976D2] dark:text-blue-400">
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Nhân sự toàn Khoa</p>
-            <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {activeStaffList.length} <span className="text-xs text-slate-400 font-normal">hồ sơ</span>
+            <p className="text-xs text-[#718096] dark:text-slate-400 font-medium">Nhân sự toàn Khoa</p>
+            <h3 className="text-lg font-extrabold text-[#263445] dark:text-white tabular-nums">
+              {activeStaffList.length} <span className="text-xs text-[#718096] font-normal">hồ sơ</span>
             </h3>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center space-x-3.5 shadow-sm">
-          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 flex items-center space-x-3 shadow-2xs">
+          <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
             <Activity className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Tổng ca bệnh hôm nay</p>
-            <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
+            <p className="text-xs text-[#718096] dark:text-slate-400 font-medium">Tổng ca bệnh hôm nay</p>
+            <h3 className="text-lg font-extrabold text-[#263445] dark:text-white tabular-nums">
               {totalCasesToday}{' '}
               <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">({avgUtilization}%)</span>
             </h3>
@@ -508,20 +508,20 @@ export const RoomManagementView: React.FC = () => {
       </div>
 
       {/* Main Split Interface */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: 2-Level Hierarchy Tree (5 cols) */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="lg:col-span-5 space-y-3.5">
           {/* Tree Header & Search */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+          <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
-                <FolderTree className="w-4 h-4 text-indigo-500" />
+              <h3 className="font-bold text-[#263445] dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <FolderTree className="w-4 h-4 text-[#1976D2]" />
                 Cây Cơ Cấu Bộ Phận & Phòng
               </h3>
               <button
                 type="button"
                 onClick={handleToggleExpandAll}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 transition-colors"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#718096] dark:text-slate-300 hover:text-[#1976D2] dark:hover:text-blue-400 px-2.5 py-1 rounded-lg bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 transition-colors"
               >
                 <ChevronsUpDown className="w-3 h-3" />
                 {allExpanded ? 'Thu gọn' : 'Mở rộng tất cả'}
@@ -529,13 +529,13 @@ export const RoomManagementView: React.FC = () => {
             </div>
 
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#718096]" />
               <input
                 type="text"
                 placeholder="Tìm tên bộ phận, mã phòng, tên phòng..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-9 pr-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-white rounded-lg text-xs outline-none focus:border-[#1976D2]"
               />
             </div>
           </div>
@@ -543,7 +543,7 @@ export const RoomManagementView: React.FC = () => {
           {/* Hierarchical List */}
           <div className="space-y-3 max-h-[calc(100vh-340px)] overflow-y-auto custom-scrollbar pr-1">
             {filteredDepartmentGroups.length === 0 && filteredOrphanRooms.length === 0 ? (
-              <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs text-slate-400 space-y-2">
+              <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 text-xs text-[#718096] space-y-2">
                 <p>Không tìm thấy Bộ phận hoặc Phòng phù hợp.</p>
                 {canManageDepartments && departments.length === 0 && (
                   <button
@@ -552,7 +552,7 @@ export const RoomManagementView: React.FC = () => {
                       setEditingDept(null);
                       setIsDeptModalOpen(true);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-bold"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-bold"
                   >
                     <Plus className="w-3.5 h-3.5" /> Tạo Bộ Phận Đầu Tiên
                   </button>
@@ -567,10 +567,10 @@ export const RoomManagementView: React.FC = () => {
                   return (
                     <div
                       key={dept.id}
-                      className={`rounded-2xl border transition-all overflow-hidden ${
+                      className={`rounded-xl border transition-all overflow-hidden ${
                         isDeptSelected
-                          ? 'bg-indigo-50/40 dark:bg-indigo-950/30 border-indigo-400 dark:border-indigo-700 shadow-sm'
-                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm'
+                          ? 'bg-[#EAF4FF]/50 dark:bg-blue-950/30 border-[#1976D2] dark:border-blue-700 shadow-2xs'
+                          : 'bg-white dark:bg-slate-900 border-[#DFE7F0] dark:border-slate-800 shadow-2xs'
                       }`}
                     >
                       {/* LEVEL 1 HEADER: Bộ Phận */}
@@ -579,7 +579,7 @@ export const RoomManagementView: React.FC = () => {
                           setSelectedDepartment(dept);
                           setExpandedDeptIds(prev => ({ ...prev, [dept.id]: true }));
                         }}
-                        className="p-3.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                        className="p-3.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-[#F4F7FB] dark:hover:bg-slate-800/50 transition-colors"
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <button
@@ -588,7 +588,7 @@ export const RoomManagementView: React.FC = () => {
                               e.stopPropagation();
                               toggleDeptExpand(dept.id);
                             }}
-                            className="p-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 shrink-0"
+                            className="p-1 rounded-md hover:bg-[#EAF4FF] dark:hover:bg-slate-700 text-[#718096] dark:text-slate-400 shrink-0"
                             title={isExpanded ? 'Thu gọn danh sách phòng' : 'Mở rộng danh sách phòng'}
                           >
                             {isExpanded ? (
@@ -600,17 +600,17 @@ export const RoomManagementView: React.FC = () => {
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded uppercase tracking-wider border border-indigo-200/70 dark:border-indigo-800">
+                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 rounded uppercase tracking-wider border border-[#1976D2]/25 dark:border-blue-800">
                                 Cấp 1
                               </span>
-                              <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                              <span className="text-[10px] font-mono font-bold text-[#718096] dark:text-slate-400">
                                 {dept.code}
                               </span>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 text-[#263445] dark:text-slate-300">
                                 {totalRoomsInDept} phòng
                               </span>
                             </div>
-                            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm mt-1 truncate">
+                            <h3 className="font-bold text-[#263445] dark:text-white text-sm mt-1 truncate">
                               {dept.name}
                             </h3>
                           </div>
@@ -628,7 +628,7 @@ export const RoomManagementView: React.FC = () => {
                                 type="button"
                                 onClick={() => openAddRoomForDept(dept.name)}
                                 title={`Thêm phòng (Cấp 2) vào bộ phận ${dept.name}`}
-                                className="p-1.5 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors"
+                                className="p-1.5 rounded-md text-[#1976D2] dark:text-blue-400 hover:bg-[#EAF4FF] dark:hover:bg-blue-950/60 transition-colors"
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -642,7 +642,7 @@ export const RoomManagementView: React.FC = () => {
                                     setIsDeptModalOpen(true);
                                   }}
                                   title="Đổi tên / Sửa bộ phận"
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors"
+                                  className="p-1.5 rounded-md text-[#718096] hover:text-[#1976D2] dark:hover:text-blue-400 hover:bg-[#EAF4FF] dark:hover:bg-blue-950/60 transition-colors"
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </button>
@@ -650,7 +650,7 @@ export const RoomManagementView: React.FC = () => {
                                   type="button"
                                   onClick={() => openDeleteDeptModal(dept)}
                                   title="Xóa bộ phận"
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                                  className="p-1.5 rounded-md text-[#718096] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -662,18 +662,18 @@ export const RoomManagementView: React.FC = () => {
 
                       {/* LEVEL 2 CHILDREN: Phòng thuộc Bộ Phận */}
                       {isExpanded && (
-                        <div className="px-3 pb-3 pt-1 bg-slate-50/70 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800/80">
-                          <div className="ml-3 pl-3 border-l-2 border-indigo-200 dark:border-indigo-800/70 space-y-2 pt-2">
+                        <div className="px-3 pb-3 pt-1 bg-[#F4F7FB]/70 dark:bg-slate-950/40 border-t border-[#DFE7F0]/80 dark:border-slate-800/80">
+                          <div className="ml-3 pl-3 border-l-2 border-[#1976D2]/30 dark:border-blue-800/70 space-y-2 pt-2">
                             {deptRooms.length === 0 ? (
-                              <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 text-center space-y-1.5">
-                                <p className="text-[11px] text-slate-400">
+                              <div className="p-3 rounded-lg border border-dashed border-[#DFE7F0] dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 text-center space-y-1.5">
+                                <p className="text-[11px] text-[#718096]">
                                   Chưa có phòng trực thuộc trong bộ phận này
                                 </p>
                                 {canManageRoomTarget(actorAccess, 'create_room', { departmentName: dept.name }, rooms) && (
                                   <button
                                     type="button"
                                     onClick={() => openAddRoomForDept(dept.name)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-lg transition-colors"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-[#1976D2] dark:text-blue-400 hover:bg-[#EAF4FF] dark:hover:bg-blue-950/60 rounded-md transition-colors"
                                   >
                                     <Plus className="w-3 h-3" /> Thêm phòng vào bộ phận
                                   </button>
@@ -691,7 +691,7 @@ export const RoomManagementView: React.FC = () => {
 
                 {/* Orphaned Rooms Fallback Group (if any room doesn't belong to a named Level 1 dept) */}
                 {filteredOrphanRooms.length > 0 && (
-                  <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
                     <div
                       onClick={() => toggleDeptExpand('__UNASSIGNED__')}
                       className="p-3.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-amber-50/50 dark:hover:bg-amber-950/20"
@@ -707,11 +707,11 @@ export const RoomManagementView: React.FC = () => {
                             <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 rounded uppercase">
                               Chưa phân bộ phận
                             </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 text-[#263445] dark:text-slate-300">
                               {filteredOrphanRooms.length} phòng
                             </span>
                           </div>
-                          <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs mt-1">
+                          <h3 className="font-bold text-[#263445] dark:text-slate-200 text-xs mt-1">
                             Các phòng chưa gắn Bộ phận (Cấp 1)
                           </h3>
                         </div>
@@ -719,7 +719,7 @@ export const RoomManagementView: React.FC = () => {
                     </div>
 
                     {(normalizedSearch || expandedDeptIds['__UNASSIGNED__']) && (
-                      <div className="px-3 pb-3 pt-1 bg-slate-50/70 dark:bg-slate-950/40 border-t border-amber-100 dark:border-amber-900/40">
+                      <div className="px-3 pb-3 pt-1 bg-[#F4F7FB]/70 dark:bg-slate-950/40 border-t border-amber-100 dark:border-amber-900/40">
                         <div className="ml-3 pl-3 border-l-2 border-amber-200 dark:border-amber-800 space-y-2 pt-2">
                           {filteredOrphanRooms.map(room => renderRoomTreeItem(room))}
                         </div>
@@ -736,21 +736,21 @@ export const RoomManagementView: React.FC = () => {
         <div className="lg:col-span-7 space-y-4">
           {selectedDepartment ? (
             /* LEVEL 1 DEPARTMENT WORKSPACE */
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
-              <div className="border-b border-slate-200 dark:border-slate-800 pb-5 flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs p-4 md:p-5 space-y-4">
+              <div className="border-b border-[#DFE7F0] dark:border-slate-800 pb-4 flex flex-col md:flex-row md:items-start justify-between gap-3">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2.5 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded text-xs font-extrabold uppercase">
+                    <span className="px-2.5 py-0.5 bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 rounded text-xs font-extrabold uppercase">
                       Cấp 1 • Bộ Phận
                     </span>
-                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-xs font-mono font-bold">
+                    <span className="px-2 py-0.5 bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 text-[#263445] dark:text-slate-300 rounded text-xs font-mono font-bold">
                       {selectedDepartment.code}
                     </span>
                   </div>
-                  <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white">
+                  <h2 className="text-lg md:text-xl font-bold text-[#263445] dark:text-white">
                     {selectedDepartment.name}
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-[#718096] dark:text-slate-400">
                     {(() => {
                       const activeDeptMgr = filterActiveStaffDisplayName(
                         selectedDepartment.managerName,
@@ -759,7 +759,7 @@ export const RoomManagementView: React.FC = () => {
                       return activeDeptMgr ? (
                         <>
                           Phụ trách bộ phận:{' '}
-                          <strong className="text-slate-800 dark:text-slate-200">{activeDeptMgr}</strong>
+                          <strong className="text-[#263445] dark:text-slate-200">{activeDeptMgr}</strong>
                         </>
                       ) : (
                         'Chưa chỉ định người phụ trách bộ phận'
@@ -775,7 +775,7 @@ export const RoomManagementView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => openAddRoomForDept(selectedDepartment.name)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-colors shadow-2xs"
                       >
                         <Plus className="w-3.5 h-3.5" /> Thêm Phòng (Cấp 2)
                       </button>
@@ -788,14 +788,14 @@ export const RoomManagementView: React.FC = () => {
                             setEditingDept(selectedDepartment);
                             setIsDeptModalOpen(true);
                           }}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-bold transition-colors"
                         >
-                          <Edit3 className="w-3.5 h-3.5 text-indigo-500" /> Đổi Tên / Sửa
+                          <Edit3 className="w-3.5 h-3.5 text-[#1976D2]" /> Đổi Tên / Sửa
                         </button>
                         <button
                           type="button"
                           onClick={() => openDeleteDeptModal(selectedDepartment)}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-200 dark:border-rose-800/60 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" /> Xóa Bộ Phận
                         </button>
@@ -806,8 +806,8 @@ export const RoomManagementView: React.FC = () => {
               </div>
 
               {selectedDepartment.description && (
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
-                  <span className="font-bold text-slate-900 dark:text-white block mb-1">Chức năng chuyên môn:</span>
+                <div className="p-3.5 bg-[#F4F7FB] dark:bg-slate-800/40 rounded-lg border border-[#DFE7F0] dark:border-slate-800 text-xs text-[#263445] dark:text-slate-300">
+                  <span className="font-bold text-[#263445] dark:text-white block mb-1">Chức năng chuyên môn:</span>
                   {selectedDepartment.description}
                 </div>
               )}
@@ -818,25 +818,25 @@ export const RoomManagementView: React.FC = () => {
                 const deptStaffCount = activeStaffList.filter(s => s.departmentSection === selectedDepartment.name).length;
 
                 return (
-                  <div className="space-y-4">
+                  <div className="space-y-3.5">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-blue-600" />
+                      <h3 className="font-bold text-[#263445] dark:text-white text-sm flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-[#1976D2]" />
                         Danh Sách Phòng Trực Thuộc (Cấp 2) — {deptRooms.length} phòng • {deptStaffCount} nhân sự
                       </h3>
                     </div>
 
                     {deptRooms.length === 0 ? (
-                      <div className="p-10 text-center bg-slate-50/70 dark:bg-slate-800/30 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                      <div className="p-8 text-center bg-[#F4F7FB] dark:bg-slate-800/30 rounded-xl border border-dashed border-[#DFE7F0] dark:border-slate-800 space-y-3">
                         <Building2 className="w-8 h-8 text-slate-300 mx-auto" />
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <p className="text-xs text-[#718096] dark:text-slate-400">
                           Bộ phận <strong>"{selectedDepartment.name}"</strong> hiện chưa có phòng trực thuộc nào.
                         </p>
                         {canManageRoomTarget(actorAccess, 'create_room', { departmentName: selectedDepartment.name }, rooms) && (
                           <button
                             type="button"
                             onClick={() => openAddRoomForDept(selectedDepartment.name)}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-colors shadow-2xs"
                           >
                             <Plus className="w-4 h-4" /> Tạo Phòng Đầu Tiên Cho Bộ Phận Này
                           </button>
@@ -857,7 +857,7 @@ export const RoomManagementView: React.FC = () => {
                                 setSelectedDepartment(null);
                                 setSelectedRoom(room);
                               }}
-                              className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-400 dark:hover:border-blue-600 transition-all cursor-pointer space-y-2.5 shadow-2xs"
+                              className="p-3.5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#1976D2] dark:hover:border-blue-600 transition-all cursor-pointer space-y-2 shadow-2xs"
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div>
@@ -926,30 +926,30 @@ export const RoomManagementView: React.FC = () => {
             </div>
           ) : selectedRoom ? (
             /* LEVEL 2 ROOM WORKSPACE */
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs p-4 md:p-5 space-y-4">
               {/* Room Detailed Header */}
-              <div className="border-b border-slate-200 dark:border-slate-800 pb-5 flex flex-col md:flex-row md:items-start justify-between gap-4">
+              <div className="border-b border-[#DFE7F0] dark:border-slate-800 pb-4 flex flex-col md:flex-row md:items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded text-[10px] font-extrabold uppercase">
+                    <span className="px-2 py-0.5 bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 rounded text-[10px] font-extrabold uppercase">
                       Cấp 2 • Phòng
                     </span>
-                    <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-xs font-bold font-mono uppercase">
+                    <span className="px-2.5 py-0.5 bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 text-[#263445] dark:text-slate-300 rounded text-xs font-bold font-mono uppercase">
                       {selectedRoom.code}
                     </span>
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="text-xs font-semibold text-[#718096] dark:text-slate-400">
                       Thuộc Bộ phận (Cấp 1):{' '}
-                      <strong className="text-indigo-600 dark:text-indigo-400">
+                      <strong className="text-[#155A9C] dark:text-blue-400">
                         {selectedRoom.departmentSection}
                       </strong>
                     </span>
                   </div>
-                  <h2 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white">
+                  <h2 className="text-lg md:text-xl font-bold text-[#263445] dark:text-white">
                     {selectedRoom.name}
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  <p className="text-xs text-[#718096] dark:text-slate-400 font-medium">
                     Vị trí: {selectedRoom.floor} • Trưởng phòng:{' '}
-                    <strong className="text-slate-800 dark:text-slate-200">
+                    <strong className="text-[#263445] dark:text-slate-200">
                       {filterActiveStaffDisplayName(selectedRoom.managerInCharge, inactiveStaffMatchers.names) || 'Chưa chỉ định'}
                     </strong>
                     {filterActiveStaffDisplayName(selectedRoom.deputyManager, inactiveStaffMatchers.names) && (
@@ -964,7 +964,7 @@ export const RoomManagementView: React.FC = () => {
                     {selectedRoom.primaryEquipment && selectedRoom.primaryEquipment !== 'Chưa gán máy chính' && (
                       <span>
                         {' '}
-                        • Máy chính: <strong className="text-blue-600 dark:text-blue-400">{selectedRoom.primaryEquipment}</strong>
+                        • Máy chính: <strong className="text-[#1976D2] dark:text-blue-400">{selectedRoom.primaryEquipment}</strong>
                       </span>
                     )}
                   </p>
@@ -982,10 +982,10 @@ export const RoomManagementView: React.FC = () => {
                           setDefaultRoomDeptSection(selectedRoom.departmentSection);
                           setIsRoomModalOpen(true);
                         }}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-bold transition-colors"
                         title="Chỉnh sửa hoặc đổi tên phòng"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-blue-500" /> Đổi Tên / Sửa
+                        <Edit3 className="w-3.5 h-3.5 text-[#1976D2]" /> Đổi Tên / Sửa
                       </button>
                     )}
 
@@ -993,7 +993,7 @@ export const RoomManagementView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setDeleteModalRoom(selectedRoom)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold transition-all"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 border border-rose-200 dark:border-rose-800/60 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold transition-colors"
                         title="Xóa phòng này"
                       >
                         <Trash2 className="w-3.5 h-3.5" /> Xóa Phòng
@@ -1004,13 +1004,13 @@ export const RoomManagementView: React.FC = () => {
               </div>
 
               {/* Navigation Sub-Tabs */}
-              <div className="flex items-center space-x-1 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto">
+              <div className="flex items-center space-x-1 border-b border-[#DFE7F0] dark:border-slate-800 pb-2 overflow-x-auto">
                 <button
                   onClick={() => setActiveSubTab('overview')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                     activeSubTab === 'overview'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      ? 'bg-[#1976D2] text-white shadow-2xs'
+                      : 'text-[#718096] dark:text-slate-400 hover:bg-[#EAF4FF] hover:text-[#155A9C] dark:hover:bg-slate-800'
                   }`}
                 >
                   <Building2 className="w-4 h-4" /> Tổng Quan & Công Suất
@@ -1018,10 +1018,10 @@ export const RoomManagementView: React.FC = () => {
 
                 <button
                   onClick={() => setActiveSubTab('staff')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                     activeSubTab === 'staff'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      ? 'bg-[#1976D2] text-white shadow-2xs'
+                      : 'text-[#718096] dark:text-slate-400 hover:bg-[#EAF4FF] hover:text-[#155A9C] dark:hover:bg-slate-800'
                   }`}
                 >
                   <Users className="w-4 h-4" /> Nhân Sự Trực Thuộc ({selectedRoomStaff.length})
@@ -1029,10 +1029,10 @@ export const RoomManagementView: React.FC = () => {
 
                 <button
                   onClick={() => setActiveSubTab('equipment')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                     activeSubTab === 'equipment'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      ? 'bg-[#1976D2] text-white shadow-2xs'
+                      : 'text-[#718096] dark:text-slate-400 hover:bg-[#EAF4FF] hover:text-[#155A9C] dark:hover:bg-slate-800'
                   }`}
                 >
                   <Wrench className="w-4 h-4" /> Thiết Bị & Máy Móc ({selectedRoomEquipment.length})
@@ -1041,60 +1041,60 @@ export const RoomManagementView: React.FC = () => {
 
               {/* SUB-TAB 1: Overview & Capacity */}
               {activeSubTab === 'overview' && (
-                <div className="space-y-6 animate-fade-in">
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="space-y-4 animate-fade-in">
+                  <div className="bg-[#F4F7FB] dark:bg-slate-800/50 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                        <h4 className="font-bold text-[#263445] dark:text-white text-sm">
                           Tải Công Suất Vận Hành Trong Ngày
                         </h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <p className="text-xs text-[#718096] dark:text-slate-400">
                           Hệ số sử dụng máy móc & kíp trực theo công suất thiết kế
                         </p>
                       </div>
                       <div className="text-right">
-                        <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400">
+                        <span className="text-xl font-extrabold text-[#1976D2] dark:text-blue-400 tabular-nums">
                           {selectedRoom.currentDayCases} / {selectedRoom.maxCapacityCasesPerDay} ca
                         </span>
-                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-1">
+                        <span className="text-xs font-bold text-[#718096] dark:text-slate-400 ml-1">
                           ({selectedRoom.utilizationRate}%)
                         </span>
                       </div>
                     </div>
 
-                    <div className="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div className="w-full h-2.5 bg-white border border-[#DFE7F0] dark:border-slate-700 dark:bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           selectedRoom.utilizationRate > 85
                             ? 'bg-amber-500'
                             : selectedRoom.utilizationRate > 100
                             ? 'bg-rose-500'
-                            : 'bg-blue-600 dark:bg-blue-500'
+                            : 'bg-[#1976D2] dark:bg-blue-500'
                         }`}
                         style={{ width: `${Math.min(selectedRoom.utilizationRate, 100)}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                      <h5 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5 text-blue-600">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div className="p-3.5 bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl space-y-2">
+                      <h5 className="font-bold text-[#1976D2] text-xs uppercase tracking-wider flex items-center gap-1.5">
                         <Users className="w-4 h-4" /> Cơ Cấu Nhân Sự ({selectedRoomStaff.length})
                       </h5>
                       {selectedRoomStaff.length === 0 ? (
-                        <p className="text-xs text-slate-400">Chưa có nhân viên nào phân công tại phòng này.</p>
+                        <p className="text-xs text-[#718096]">Chưa có nhân viên nào phân công tại phòng này.</p>
                       ) : (
                         <div className="space-y-1.5 pt-1">
                           {selectedRoomStaff.slice(0, 4).map((s, idx) => (
                             <div key={`${s.userId}-${idx}`} className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-800 dark:text-slate-200">{s.fullName}</span>
-                              <span className="text-[11px] text-slate-500">{s.title || 'Nhân viên'}</span>
+                              <span className="font-semibold text-[#263445] dark:text-slate-200">{s.fullName}</span>
+                              <span className="text-[11px] text-[#718096]">{s.title || 'Nhân viên'}</span>
                             </div>
                           ))}
                           {selectedRoomStaff.length > 4 && (
                             <button
                               onClick={() => setActiveSubTab('staff')}
-                              className="text-xs text-blue-600 font-bold hover:underline"
+                              className="text-xs text-[#1976D2] font-bold hover:underline"
                             >
                               + Xem thêm {selectedRoomStaff.length - 4} nhân sự khác
                             </button>
@@ -1103,20 +1103,20 @@ export const RoomManagementView: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                      <h5 className="font-bold text-slate-900 dark:text-white text-xs uppercase tracking-wider flex items-center gap-1.5 text-indigo-600">
+                    <div className="p-3.5 bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl space-y-2">
+                      <h5 className="font-bold text-[#155A9C] text-xs uppercase tracking-wider flex items-center gap-1.5">
                         <Wrench className="w-4 h-4" /> Hệ Thống Máy Móc ({selectedRoomEquipment.length})
                       </h5>
                       {selectedRoomEquipment.length === 0 ? (
-                        <p className="text-xs text-slate-400">Chưa có máy móc nào gán cho phòng này.</p>
+                        <p className="text-xs text-[#718096]">Chưa có máy móc nào gán cho phòng này.</p>
                       ) : (
                         <div className="space-y-1.5 pt-1">
                           {selectedRoomEquipment.slice(0, 4).map((eq, idx) => (
                             <div key={`${eq.id}-${idx}`} className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
+                              <span className="font-semibold text-[#263445] dark:text-slate-200 truncate max-w-[200px]">
                                 {eq.name}
                               </span>
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 dark:border-emerald-800 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
                                 {eq.status}
                               </span>
                             </div>
@@ -1127,8 +1127,8 @@ export const RoomManagementView: React.FC = () => {
                   </div>
 
                   {selectedRoom.description && (
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-1">
-                      <h6 className="font-bold text-slate-900 dark:text-white">Mô tả & Quy trình chuyên môn:</h6>
+                    <div className="p-3.5 bg-[#F4F7FB] dark:bg-slate-800/30 rounded-xl border border-[#DFE7F0] dark:border-slate-800 text-xs text-[#263445] dark:text-slate-300 space-y-1">
+                      <h6 className="font-bold text-[#263445] dark:text-white">Mô tả & Quy trình chuyên môn:</h6>
                       <p>{selectedRoom.description}</p>
                     </div>
                   )}
@@ -1163,7 +1163,7 @@ export const RoomManagementView: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 text-sm">
+            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 text-[#718096] text-sm">
               Vui lòng chọn một Bộ phận (Cấp 1) hoặc Phòng trực thuộc (Cấp 2) ở cây danh sách bên trái để xem chi tiết.
             </div>
           )}
@@ -1201,16 +1201,16 @@ export const RoomManagementView: React.FC = () => {
       {/* MODAL 3: Safe Level 1 Department Deletion */}
       {deleteModalDept && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden p-5 space-y-4">
             <div className="flex items-center space-x-3 text-rose-600 dark:text-rose-400">
-              <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950">
+              <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-950">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                <h3 className="font-bold text-[#263445] dark:text-white text-base">
                   Xác Nhận Xóa Bộ Phận (Cấp 1)
                 </h3>
-                <p className="text-xs text-slate-500">Thao tác sẽ gỡ bộ phận khỏi cơ cấu phân cấp</p>
+                <p className="text-xs text-[#718096]">Thao tác sẽ gỡ bộ phận khỏi cơ cấu phân cấp</p>
               </div>
             </div>
 
@@ -1221,8 +1221,8 @@ export const RoomManagementView: React.FC = () => {
 
               return (
                 <div className="space-y-3">
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Bạn đang chuẩn bị xóa Bộ phận <strong>"{deleteModalDept.name}"</strong> ({deleteModalDept.code}).
+                  <p className="text-xs text-[#718096] dark:text-slate-300">
+                    Bạn đang chuẩn bị xóa Bộ phận <strong className="text-[#263445] dark:text-white">"{deleteModalDept.name}"</strong> ({deleteModalDept.code}).
                     {childRoomsCount > 0 && (
                       <span>
                         {' '}
@@ -1233,8 +1233,8 @@ export const RoomManagementView: React.FC = () => {
                   </p>
 
                   {childRoomsCount > 0 && (
-                    <div className="space-y-2.5 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
-                      <label className="block font-bold text-slate-700 dark:text-slate-200">
+                    <div className="space-y-2.5 p-3.5 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/60 border border-[#DFE7F0] dark:border-slate-700 text-xs">
+                      <label className="block font-bold text-[#263445] dark:text-slate-200">
                         Xử lý các Phòng (Cấp 2) trực thuộc:
                       </label>
 
@@ -1248,14 +1248,14 @@ export const RoomManagementView: React.FC = () => {
                             className="mt-0.5"
                           />
                           <div className="flex-1 space-y-1.5">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            <span className="font-semibold text-[#263445] dark:text-slate-200">
                               Chuyển sang Bộ phận khác:
                             </span>
                             {deptDeleteMode === 'transfer' && (
                               <select
                                 value={deptTransferTarget}
                                 onChange={e => setDeptTransferTarget(e.target.value)}
-                                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white outline-none"
+                                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white outline-none"
                               >
                                 {otherDepts.map(d => (
                                   <option key={d.id} value={d.name}>
@@ -1275,7 +1275,7 @@ export const RoomManagementView: React.FC = () => {
                           checked={deptDeleteMode === 'unassign'}
                           onChange={() => setDeptDeleteMode('unassign')}
                         />
-                        <span className="text-slate-700 dark:text-slate-300">
+                        <span className="text-[#263445] dark:text-slate-300">
                           Giữ lại phòng ở nhóm "Chưa phân bộ phận"
                         </span>
                       </label>
@@ -1295,18 +1295,18 @@ export const RoomManagementView: React.FC = () => {
               );
             })()}
 
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-2">
+            <div className="pt-3 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-end space-x-2">
               <button
                 type="button"
                 onClick={() => setDeleteModalDept(null)}
-                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                className="px-3.5 py-2 text-xs font-medium text-[#263445] dark:text-slate-300 hover:bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:hover:bg-slate-800 rounded-lg"
               >
                 Hủy bỏ
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteDepartment}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-all shadow-md shadow-rose-600/20"
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-2xs"
               >
                 Xóa Bộ Phận
               </button>
@@ -1318,32 +1318,32 @@ export const RoomManagementView: React.FC = () => {
       {/* MODAL 4: Safe Level 2 Room Deletion with Transfer Option */}
       {deleteModalRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden p-5 space-y-4">
             <div className="flex items-center space-x-3 text-rose-600 dark:text-rose-400">
-              <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950">
+              <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-950">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                <h3 className="font-bold text-[#263445] dark:text-white text-base">
                   Xác Nhận Xóa Phòng (Cấp 2)
                 </h3>
-                <p className="text-xs text-slate-500">Thao tác này sẽ xóa vĩnh viễn cấu hình phòng</p>
+                <p className="text-xs text-[#718096]">Thao tác này sẽ xóa vĩnh viễn cấu hình phòng</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              Bạn đang chuẩn bị xóa phòng <strong>"{deleteModalRoom.name}"</strong> ({deleteModalRoom.code}) thuộc Bộ phận{' '}
+            <p className="text-xs text-[#718096] dark:text-slate-300">
+              Bạn đang chuẩn bị xóa phòng <strong className="text-[#263445] dark:text-white">"{deleteModalRoom.name}"</strong> ({deleteModalRoom.code}) thuộc Bộ phận{' '}
               <strong>{deleteModalRoom.departmentSection}</strong>.
             </p>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Điều chuyển nhân sự và máy móc hiện tại sang phòng:
               </label>
               <select
                 value={transferTargetRoom}
                 onChange={e => setTransferTargetRoom(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
+                className="w-full px-3 py-2 text-xs bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white outline-none focus:border-rose-500"
               >
                 <option value="">-- Chuyển về trạng thái Chưa phân phòng --</option>
                 {rooms
@@ -1356,18 +1356,18 @@ export const RoomManagementView: React.FC = () => {
               </select>
             </div>
 
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-2">
+            <div className="pt-3 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-end space-x-2">
               <button
                 type="button"
                 onClick={() => setDeleteModalRoom(null)}
-                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                className="px-3.5 py-2 text-xs font-medium text-[#263445] dark:text-slate-300 hover:bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:hover:bg-slate-800 rounded-lg"
               >
                 Hủy bỏ
               </button>
               <button
                 type="button"
                 onClick={handleDeleteRoom}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-all shadow-md shadow-rose-600/20"
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-2xs"
               >
                 Xóa Phòng Ngay
               </button>

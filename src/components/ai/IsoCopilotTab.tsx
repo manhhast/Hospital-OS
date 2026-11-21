@@ -98,31 +98,31 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                AI ISO 15189 & SOP Copilot (RAG)
+              <h2 className="text-base font-bold text-[#263445] dark:text-slate-100">
+                Trợ Lý ISO 15189 &amp; Quy Trình SOP
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded-full border border-emerald-300 dark:border-emerald-800">
-                Tra Cứu Quy Trình & ISO Chuẩn Xác
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                · Tra cứu chuẩn xác theo hồ sơ khoa
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-[#718096] dark:text-slate-400">
               Trợ lý RAG tra cứu tức thì tài liệu SOP nội bộ, tiêu chuẩn ISO 15189:2022 và xử lý sự cố khẩn cấp
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
-            <ShieldCheck className="w-4 h-4 text-emerald-500" />
+          <span className="text-xs font-bold text-[#718096] flex items-center gap-1">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
             100% Khớp Hồ Sơ Khoa
           </span>
         </div>
@@ -130,7 +130,7 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
 
       {/* Quick Prompt Pills */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <span className="text-xs font-bold text-slate-500 shrink-0 flex items-center gap-1">
+        <span className="text-xs font-bold text-[#718096] shrink-0 flex items-center gap-1">
           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
           Gợi ý tra cứu nhanh:
         </span>
@@ -138,7 +138,7 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
           <button
             key={idx}
             onClick={() => handleSend(q.query)}
-            className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-800 transition shrink-0 shadow-sm flex items-center gap-1.5"
+            className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-[#EAF4FF] dark:hover:bg-slate-800 text-[#263445] dark:text-slate-200 text-xs font-semibold rounded-lg border border-[#DFE7F0] dark:border-slate-800 transition shrink-0 shadow-2xs flex items-center gap-1.5 cursor-pointer"
           >
             <span>{q.label}</span>
             <ArrowRight className="w-3 h-3 text-slate-400" />
@@ -147,9 +147,9 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
       </div>
 
       {/* Chat Container */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col h-[560px]">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs flex flex-col h-[560px]">
         {/* Messages Scroll Area */}
-        <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4">
+        <div className="flex-1 p-4 md:p-5 overflow-y-auto space-y-4">
           {messages.map((msg) => {
             const isUser = msg.sender === 'user';
             return (
@@ -158,16 +158,16 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
                 className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
               >
                 {!isUser && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                     <Bot className="w-4 h-4" />
                   </div>
                 )}
 
                 <div
-                  className={`max-w-3xl min-w-0 rounded-2xl p-4 space-y-3 ${
+                  className={`max-w-3xl min-w-0 rounded-xl p-4 space-y-3 ${
                     isUser
-                      ? 'bg-blue-600 text-white rounded-tr-none'
-                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700/80 rounded-tl-none'
+                      ? 'bg-[#1976D2] text-white rounded-tr-none'
+                      : 'bg-[#F4F7FB] dark:bg-slate-800/80 text-[#263445] dark:text-slate-100 border border-[#DFE7F0] dark:border-slate-700/80 rounded-tl-none'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4 pb-1 border-b border-black/5 dark:border-white/10 text-[11px]">
@@ -248,7 +248,7 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
                 </div>
 
                 {isUser && (
-                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                     <User className="w-4 h-4" />
                   </div>
                 )}
@@ -258,11 +258,11 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
 
           {isLoading && (
             <div className="flex gap-3 justify-start items-center">
-              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
                 <Bot className="w-4 h-4" />
               </div>
-              <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-xs text-slate-500">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+              <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800 rounded-xl rounded-tl-none border border-[#DFE7F0] dark:border-slate-700 flex items-center gap-2 text-xs text-[#718096]">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
                 <span>Đang truy hồi tài liệu SOP và đối chiếu tiêu chuẩn ISO 15189:2022...</span>
               </div>
             </div>
@@ -271,7 +271,7 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
         </div>
 
         {/* Input Bar */}
-        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200/80 dark:border-slate-800 rounded-b-2xl">
+        <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 border-t border-[#DFE7F0] dark:border-slate-800 rounded-b-xl">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -284,12 +284,12 @@ export const IsoCopilotTab: React.FC<IsoCopilotTabProps> = ({ onShowToast }) => 
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
               placeholder="Nhập câu hỏi quy trình SOP, an toàn bức xạ, ISO 15189, TAT khẩn..."
-              className="flex-1 bg-white dark:bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-emerald-500 transition"
+              className="flex-1 bg-white dark:bg-slate-900 px-4 py-2.5 rounded-lg border border-[#DFE7F0] dark:border-slate-700 text-xs font-semibold text-[#263445] dark:text-slate-100 placeholder-slate-400 outline-none focus:border-[#1976D2] transition"
             />
             <button
               type="submit"
               disabled={!inputQuery.trim() || isLoading}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center gap-1.5 shrink-0"
+              className="px-4 py-2.5 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Gửi câu hỏi</span>

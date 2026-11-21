@@ -50,31 +50,31 @@ export const DepreciationUtilizationTab: React.FC<DepreciationUtilizationTabProp
   const simulatedProfitPerCase = Math.max(0, activeData.depr.averageRevenuePerCase - simulatedDeprCostPerCase);
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-300">
+    <div className="p-4 space-y-4 animate-in fade-in duration-300">
       {/* Header Info */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-[#F4F7FB] dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-xs font-bold uppercase tracking-wider mb-1">
-            <DollarSign className="w-4 h-4" /> QUẢN TRỊ TÀI CHÍNH THIẾT BỊ & TỐI ƯU CÔNG SUẤT PHÒNG MÁY
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold uppercase tracking-wider mb-0.5">
+            <DollarSign className="w-4 h-4" /> QUẢN TRỊ TÀI CHÍNH THIẾT BỊ &amp; TỐI ƯU CÔNG SUẤT PHÒNG MÁY
           </div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            Chi Phí Khấu Hao Trên Từng Ca & Phân Bổ Thời Gian Nhàn Rỗi (Run vs Idle Time)
+          <h2 className="text-base font-bold text-[#263445] dark:text-white">
+            Chi Phí Khấu Hao Trên Từng Ca &amp; Phân Bổ Thời Gian Nhàn Rỗi (Run vs Idle Time)
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-3xl">
+          <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5 max-w-3xl">
             Tự động trích khấu hao tài sản cố định theo phương pháp đường thẳng (Bộ Tài Chính), phân bổ chi phí trên từng ca chụp/xét nghiệm và tối ưu hóa thời gian nhàn rỗi phòng máy.
           </p>
         </div>
 
         {/* Machine Selector */}
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">Chọn máy:</span>
+          <span className="text-xs font-semibold text-[#718096] dark:text-slate-400 hidden sm:inline">Chọn máy:</span>
           <select
             value={activeData.eq.id}
             onChange={e => {
               setSelectedEqId(e.target.value);
               setSimulatedCasesAdjustment(0);
             }}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none cursor-pointer"
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] outline-none cursor-pointer"
           >
             {equipmentList.map(eq => (
               <option key={eq.id} value={eq.id}>
@@ -103,7 +103,7 @@ export const DepreciationUtilizationTab: React.FC<DepreciationUtilizationTabProp
                 </div>
                 <button
                   onClick={() => onOpenDetailModal(activeData.eq)}
-                  className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+                  className="px-3 py-1.5 bg-[#EAF4FF] dark:bg-sky-950/60 text-[#155A9C] dark:text-sky-300 hover:bg-[#1976D2] hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors border border-[#1976D2]/20 cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>Hồ sơ</span>
@@ -112,65 +112,65 @@ export const DepreciationUtilizationTab: React.FC<DepreciationUtilizationTabProp
 
               {/* 4 Stat Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Thời Gian Khấu Hao</span>
-                  <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
-                    {activeData.depr.depreciationYears} <span className="text-xs font-normal text-slate-500">năm (96T)</span>
+                <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
+                  <span className="text-[11px] font-semibold text-[#718096] dark:text-slate-400 block">Thời Gian Khấu Hao</span>
+                  <div className="text-base font-bold text-[#263445] dark:text-white mt-1">
+                    {activeData.depr.depreciationYears} <span className="text-xs font-normal text-[#718096]">năm (96T)</span>
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Khấu Hao Tháng</span>
-                  <div className="text-lg font-black text-slate-900 dark:text-white mt-1">
-                    {(activeData.depr.monthlyDepreciation / 1000000).toFixed(1)} <span className="text-xs font-normal text-slate-500">tr/tháng</span>
+                <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-700">
+                  <span className="text-[11px] font-semibold text-[#718096] dark:text-slate-400 block">Khấu Hao Tháng</span>
+                  <div className="text-base font-bold text-[#263445] dark:text-white mt-1">
+                    {(activeData.depr.monthlyDepreciation / 1000000).toFixed(1)} <span className="text-xs font-normal text-[#718096]">tr/tháng</span>
                   </div>
                 </div>
 
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-900/60">
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-900/60">
                   <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block">Khấu Hao / 1 Ca</span>
-                  <div className="text-lg font-black text-emerald-800 dark:text-emerald-300 mt-1">
+                  <div className="text-base font-bold text-emerald-800 dark:text-emerald-300 mt-1">
                     {(activeData.depr.depreciationCostPerCase).toLocaleString('vi-VN')} <span className="text-xs font-normal text-emerald-600">đ</span>
                   </div>
                 </div>
 
-                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-900/60">
-                  <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-400 block">Giá Viện Phí / Ca</span>
-                  <div className="text-lg font-black text-indigo-800 dark:text-indigo-300 mt-1">
-                    {(activeData.depr.averageRevenuePerCase).toLocaleString('vi-VN')} <span className="text-xs font-normal text-indigo-600">đ</span>
+                <div className="p-3 bg-[#EAF4FF] dark:bg-sky-950/40 rounded-lg border border-[#1976D2]/25 dark:border-sky-900/60">
+                  <span className="text-[11px] font-semibold text-[#155A9C] dark:text-sky-400 block">Giá Viện Phí / Ca</span>
+                  <div className="text-base font-bold text-[#155A9C] dark:text-sky-300 mt-1">
+                    {(activeData.depr.averageRevenuePerCase).toLocaleString('vi-VN')} <span className="text-xs font-normal text-[#1976D2]">đ</span>
                   </div>
                 </div>
               </div>
 
               {/* Progress & Contribution Ratio */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="p-3.5 bg-[#F4F7FB] dark:bg-slate-800/40 rounded-lg border border-[#DFE7F0] dark:border-slate-800 space-y-2">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-600 dark:text-slate-400">Tỷ lệ chi phí khấu hao trong cơ cấu giá dịch vụ:</span>
-                  <strong className="text-indigo-600 dark:text-indigo-400">{activeData.depr.depreciationPercentage}% viện phí</strong>
+                  <span className="text-[#718096] dark:text-slate-400">Tỷ lệ chi phí khấu hao trong cơ cấu giá dịch vụ:</span>
+                  <strong className="text-[#1976D2] dark:text-sky-400">{activeData.depr.depreciationPercentage}% viện phí</strong>
                 </div>
-                <div className="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
                   <div 
                     className="h-full bg-emerald-500 transition-all duration-500" 
                     style={{ width: `${Math.min(100, activeData.depr.depreciationPercentage)}%` }}
                     title={`Chi phí khấu hao: ${activeData.depr.depreciationPercentage}%`}
                   ></div>
                   <div 
-                    className="h-full bg-indigo-500 transition-all duration-500" 
+                    className="h-full bg-[#1976D2] transition-all duration-500" 
                     style={{ width: `${Math.max(0, 100 - activeData.depr.depreciationPercentage)}%` }}
                     title="Chi phí vật tư, nhân lực & thặng dư"
                   ></div>
                 </div>
-                <div className="flex justify-between text-[11px] text-slate-400 mt-1">
+                <div className="flex justify-between text-[11px] text-[#718096] mt-1">
                   <span>🟢 Khấu hao máy: {activeData.depr.depreciationPercentage}%</span>
-                  <span>🔵 Chi phí vận hành & nhân công CLS: {(100 - activeData.depr.depreciationPercentage).toFixed(1)}%</span>
+                  <span>🔵 Chi phí vận hành &amp; nhân công CLS: {(100 - activeData.depr.depreciationPercentage).toFixed(1)}%</span>
                 </div>
               </div>
             </div>
 
             {/* Interactive Simulation: Adjust Monthly Patient Volume */}
-            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-6 rounded-2xl border border-indigo-900 shadow-md space-y-4">
+            <div className="bg-[#155A9C] text-white p-5 rounded-xl border border-[#155A9C] shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Calculator className="w-5 h-5 text-indigo-400" />
+                  <Calculator className="w-5 h-5 text-sky-200" />
                   <h4 className="font-bold text-sm">Mô Phỏng Tối Ưu Chi Phí Khấu Hao Khi Tăng Số Ca (Economies of Scale)</h4>
                 </div>
                 <span className="text-xs px-2.5 py-1 bg-indigo-500/20 text-indigo-300 rounded-full font-mono font-bold">
@@ -310,35 +310,35 @@ export const DepreciationUtilizationTab: React.FC<DepreciationUtilizationTabProp
       )}
 
       {/* All Equipment Depreciation Comparison Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs overflow-hidden">
+        <div className="p-3.5 border-b border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-900 flex items-center justify-between">
+          <h3 className="font-bold text-sm text-[#263445] dark:text-white flex items-center gap-2">
             <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             Bảng Tổng Hợp Chi Phí Khấu Hao Toàn Khoa
           </h3>
-          <span className="text-xs text-slate-400">Đơn vị tiền tệ: VNĐ</span>
+          <span className="text-xs text-[#718096]">Đơn vị tiền tệ: VNĐ</span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-            <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-200 dark:border-slate-800">
+          <table className="w-full text-left text-xs text-[#263445] dark:text-slate-300">
+            <thead className="bg-[#F4F7FB] dark:bg-slate-800/80 text-[#263445] dark:text-slate-300 font-bold uppercase tracking-wider text-[11px] border-b border-[#DFE7F0] dark:border-slate-800">
               <tr>
-                <th className="p-3.5">Mã & Thiết Bị</th>
-                <th className="p-3.5">Nguyên Giá (VNĐ)</th>
-                <th className="p-3.5">Khung KH</th>
-                <th className="p-3.5">Khấu Hao Tháng</th>
-                <th className="p-3.5">Số Ca TB / Tháng</th>
-                <th className="p-3.5">Khấu Hao / 1 Ca</th>
-                <th className="p-3.5">Viện Phí Thu / Ca</th>
-                <th className="p-3.5">% Khấu Hao / Giá Thu</th>
+                <th className="p-3">Mã &amp; Thiết Bị</th>
+                <th className="p-3">Nguyên Giá (VNĐ)</th>
+                <th className="p-3">Khung KH</th>
+                <th className="p-3">Khấu Hao Tháng</th>
+                <th className="p-3">Số Ca TB / Tháng</th>
+                <th className="p-3">Khấu Hao / 1 Ca</th>
+                <th className="p-3">Viện Phí Thu / Ca</th>
+                <th className="p-3">% Khấu Hao / Giá Thu</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
+            <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-800 bg-white dark:bg-slate-900">
               {data.map(({ eq, depr }) => (
                 <tr 
                   key={eq.id} 
                   onClick={() => setSelectedEqId(eq.id)}
-                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${selectedEqId === eq.id ? 'bg-indigo-50/50 dark:bg-indigo-950/30 font-semibold' : ''}`}
+                  className={`hover:bg-[#EAF4FF]/60 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${selectedEqId === eq.id ? 'bg-[#EAF4FF] dark:bg-sky-950/30 font-semibold' : ''}`}
                 >
                   <td className="p-3.5 font-bold text-slate-900 dark:text-white">
                     {eq.name}

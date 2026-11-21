@@ -88,28 +88,28 @@ export const OeeReliabilityTab: React.FC<OeeReliabilityTabProps> = ({
   };
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-300">
+    <div className="p-4 space-y-4 animate-in fade-in duration-300">
       {/* Header Info */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-[#F4F7FB] dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">
-            <Gauge className="w-4 h-4" /> QUẢN TRỊ HIỆU SUẤT THIẾT BỊ NÂNG CAO (OEE & MTBF/MTTR)
+          <div className="flex items-center gap-2 text-[#1976D2] dark:text-sky-400 text-[11px] font-bold uppercase tracking-wider mb-0.5">
+            <Gauge className="w-4 h-4" /> QUẢN TRỊ HIỆU SUẤT THIẾT BỊ NÂNG CAO (OEE &amp; MTBF/MTTR)
           </div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            Bộ Chỉ Số Đo Lường Hiệu Suất Tổng Thể & Độ Tin Cậy Thiết Bị
+          <h2 className="text-base font-bold text-[#263445] dark:text-white">
+            Bộ Chỉ Số Đo Lường Hiệu Suất Tổng Thể &amp; Độ Tin Cậy Thiết Bị
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+          <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5 max-w-2xl">
             Đánh giá toàn diện 3 trụ cột: Tính khả dụng (Availability), Hiệu suất vận hành (Performance), và Chất lượng kết quả (Quality) theo chuẩn ISO 15189 và JCI.
           </p>
         </div>
 
         {/* Category Filter */}
         <div className="flex items-center gap-2 shrink-0">
-          <Filter className="w-4 h-4 text-slate-400" />
+          <Filter className="w-4 h-4 text-[#718096]" />
           <select
             value={selectedCategory}
             onChange={e => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none cursor-pointer"
+            className="px-3 py-2 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] outline-none cursor-pointer"
           >
             <option value="all">Toàn bộ chuyên khoa ({equipmentList.length} máy)</option>
             <option value="Chẩn đoán hình ảnh">Chẩn đoán hình ảnh (CT, MRI, X-Quang)</option>
@@ -121,25 +121,25 @@ export const OeeReliabilityTab: React.FC<OeeReliabilityTabProps> = ({
       </div>
 
       {/* KPI Cards: Aggregate OEE and MTBF/MTTR */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Card 1: Department OEE */}
-        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-2xl border border-indigo-800/60 shadow-md relative overflow-hidden">
+        <div className="bg-[#155A9C] text-white p-4 rounded-xl border border-[#155A9C] shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">OEE Toàn Khoa</span>
-            <span className="p-2 bg-indigo-500/20 rounded-xl">
-              <Gauge className="w-5 h-5 text-indigo-400" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-sky-100">OEE Toàn Khoa</span>
+            <span className="p-2 bg-white/15 rounded-lg">
+              <Gauge className="w-4 h-4 text-white" />
             </span>
           </div>
-          <div className="text-3xl font-black text-white mt-2">
+          <div className="text-2xl font-bold text-white mt-1.5 tabular-nums">
             {avgOEE}%
           </div>
-          <div className="mt-2 text-xs text-indigo-200 flex items-center gap-1.5">
+          <div className="mt-1.5 text-xs text-sky-100 flex items-center gap-1.5">
             {avgOEE >= 85 ? (
-              <span className="text-emerald-400 font-bold">★ Đẳng cấp quốc tế</span>
+              <span className="text-emerald-300 font-bold">★ Đẳng cấp quốc tế</span>
             ) : avgOEE >= 75 ? (
-              <span className="text-emerald-300 font-bold">✓ Đạt mức tốt chuẩn</span>
+              <span className="text-emerald-200 font-bold">✓ Đạt mức tốt chuẩn</span>
             ) : (
-              <span className="text-amber-300 font-bold">⚡ Cần tối ưu thêm</span>
+              <span className="text-amber-200 font-bold">⚡ Cần tối ưu thêm</span>
             )}
             <span>(A × P × Q)</span>
           </div>
@@ -220,86 +220,86 @@ export const OeeReliabilityTab: React.FC<OeeReliabilityTabProps> = ({
       </div>
 
       {/* Equipment Detailed OEE & MTBF Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-            <Activity className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-2xs overflow-hidden">
+        <div className="p-3.5 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-[#F4F7FB] dark:bg-slate-900">
+          <h3 className="font-bold text-sm text-[#263445] dark:text-white flex items-center gap-2">
+            <Activity className="w-4 h-4 text-[#1976D2] dark:text-sky-400" />
             Bảng Đánh Giá Hiệu Suất Từng Thiết Bị Trong Khoa
           </h3>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
+          <span className="text-xs text-[#718096] dark:text-slate-400">
             Hiển thị <strong>{filteredData.length}</strong> thiết bị
           </span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300 border-collapse">
-            <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-200 dark:border-slate-800">
+          <table className="w-full text-left text-xs text-[#263445] dark:text-slate-300 border-collapse">
+            <thead className="bg-[#F4F7FB] dark:bg-slate-800/80 text-[#263445] dark:text-slate-300 font-bold uppercase tracking-wider text-[11px] border-b border-[#DFE7F0] dark:border-slate-800">
               <tr>
-                <th className="py-3.5 px-4 min-w-[230px]">Mã & Tên Máy</th>
-                <th className="py-3.5 px-4 min-w-[120px]">Khả Dụng (A)</th>
-                <th className="py-3.5 px-4 min-w-[120px]">Hiệu Suất (P)</th>
-                <th className="py-3.5 px-4 min-w-[120px]">Chất Lượng (Q)</th>
-                <th className="py-3.5 px-4 text-center min-w-[100px]">Chỉ Số OEE</th>
-                <th className="py-3.5 px-4 min-w-[150px]">MTBF / MTTR</th>
-                <th className="py-3.5 px-4 min-w-[190px]">Đánh Giá Chuẩn</th>
-                <th className="py-3.5 px-4 text-right min-w-[95px]">Chi Tiết</th>
+                <th className="py-3 px-4 min-w-[230px]">Mã &amp; Tên Máy</th>
+                <th className="py-3 px-4 min-w-[120px]">Khả Dụng (A)</th>
+                <th className="py-3 px-4 min-w-[120px]">Hiệu Suất (P)</th>
+                <th className="py-3 px-4 min-w-[120px]">Chất Lượng (Q)</th>
+                <th className="py-3 px-4 text-center min-w-[100px]">Chỉ Số OEE</th>
+                <th className="py-3 px-4 min-w-[150px]">MTBF / MTTR</th>
+                <th className="py-3 px-4 min-w-[190px]">Đánh Giá Chuẩn</th>
+                <th className="py-3 px-4 text-right min-w-[95px]">Chi Tiết</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
+            <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-800 bg-white dark:bg-slate-900">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                  <td colSpan={8} className="py-12 text-center text-[#718096] dark:text-slate-500">
                     <p className="font-semibold text-sm">Chưa có thiết bị nào trong hệ thống</p>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-xs text-[#718096] mt-1">
                       Hãy thêm thiết bị cận lâm sàng mới hoặc dùng tính năng &quot;Nhập từ Excel&quot; để đồng bộ danh mục máy thực tế của khoa.
                     </p>
                   </td>
                 </tr>
               ) : (
                 filteredData.map(({ eq, oee, reliability }) => (
-                <tr key={eq.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                <tr key={eq.id} className="hover:bg-[#EAF4FF]/60 dark:hover:bg-slate-800/50 transition-colors">
                   {/* Name & Code */}
-                  <td className="py-3.5 px-4 align-middle">
+                  <td className="py-3 px-4 align-middle">
                     <button
                       onClick={() => onOpenDetailModal(eq)}
-                      className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 text-left transition-colors block text-sm leading-snug"
+                      className="font-bold text-[#263445] dark:text-white hover:text-[#1976D2] dark:hover:text-sky-400 text-left transition-colors block text-xs leading-snug cursor-pointer"
                     >
                       {eq.name}
                     </button>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono mt-1">
+                    <div className="text-[11px] text-[#718096] dark:text-slate-500 font-mono mt-0.5">
                       {eq.code} &bull; {eq.room}
                     </div>
                   </td>
 
                   {/* Availability */}
-                  <td className="py-3.5 px-4 align-middle font-semibold">
-                    <div className="text-slate-900 dark:text-slate-100 text-sm font-bold">{oee.availability}%</div>
-                    <div className="text-[11px] text-slate-400 font-normal mt-0.5">
+                  <td className="py-3 px-4 align-middle font-semibold">
+                    <div className="text-[#263445] dark:text-slate-100 text-sm font-bold">{oee.availability}%</div>
+                    <div className="text-[11px] text-[#718096] font-normal mt-0.5">
                       Chạy {oee.runTimeHours}h / {oee.plannedHours}h
                     </div>
                   </td>
 
                   {/* Performance */}
-                  <td className="py-3.5 px-4 align-middle font-semibold">
-                    <div className="text-slate-900 dark:text-slate-100 text-sm font-bold">{oee.performance}%</div>
-                    <div className="text-[11px] text-slate-400 font-normal mt-0.5">
+                  <td className="py-3 px-4 align-middle font-semibold">
+                    <div className="text-[#263445] dark:text-slate-100 text-sm font-bold">{oee.performance}%</div>
+                    <div className="text-[11px] text-[#718096] font-normal mt-0.5">
                       {oee.totalCasesProcessed} ca ({oee.cycleTimePerCaseMinutes}p/ca)
                     </div>
                   </td>
 
                   {/* Quality */}
-                  <td className="py-3.5 px-4 align-middle font-semibold">
-                    <div className="text-slate-900 dark:text-slate-100 text-sm font-bold">{oee.quality}%</div>
+                  <td className="py-3 px-4 align-middle font-semibold">
+                    <div className="text-[#263445] dark:text-slate-100 text-sm font-bold">{oee.quality}%</div>
                     <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-normal mt-0.5">
                       Đạt chuẩn ISO
                     </div>
                   </td>
 
                   {/* Overall OEE */}
-                  <td className="py-3.5 px-4 align-middle text-center">
+                  <td className="py-3 px-4 align-middle text-center">
                     <div className="inline-flex flex-col items-center justify-center">
                       <span className={`text-base font-black ${
-                        oee.oee >= 85 ? 'text-indigo-600 dark:text-indigo-400' :
+                        oee.oee >= 85 ? 'text-[#1976D2] dark:text-sky-400' :
                         oee.oee >= 75 ? 'text-emerald-600 dark:text-emerald-400' :
                         oee.oee >= 65 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
                       }`}>
@@ -309,25 +309,25 @@ export const OeeReliabilityTab: React.FC<OeeReliabilityTabProps> = ({
                   </td>
 
                   {/* MTBF / MTTR */}
-                  <td className="py-3.5 px-4 align-middle">
-                    <div className="font-mono text-xs text-slate-800 dark:text-slate-200">
+                  <td className="py-3 px-4 align-middle">
+                    <div className="font-mono text-xs text-[#263445] dark:text-slate-200">
                       MTBF: <strong>{reliability.mtbfHours.toLocaleString('vi-VN')}h</strong>
                     </div>
-                    <div className="font-mono text-[11px] text-slate-500 mt-0.5">
+                    <div className="font-mono text-[11px] text-[#718096] mt-0.5">
                       MTTR: {reliability.mttrHours}h ({reliability.failureCount} sự cố)
                     </div>
                   </td>
 
                   {/* Rating badge (Multi-line comfortable card) */}
-                  <td className="py-3.5 px-4 align-middle">
+                  <td className="py-3 px-4 align-middle">
                     {getOeeBadge(oee.oeeRating)}
                   </td>
 
                   {/* Action */}
-                  <td className="py-3.5 px-4 align-middle text-right">
+                  <td className="py-3 px-4 align-middle text-right">
                     <button
                       onClick={() => onOpenDetailModal(eq)}
-                      className="px-3 py-1.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-xl text-xs font-bold transition-all shadow-2xs whitespace-nowrap inline-flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-[#EAF4FF] text-[#155A9C] dark:bg-sky-950/80 dark:text-sky-300 hover:bg-[#1976D2] hover:text-white rounded-lg text-xs font-semibold transition-colors whitespace-nowrap inline-flex items-center gap-1.5 border border-[#1976D2]/20 cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>Hồ sơ</span>

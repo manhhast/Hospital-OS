@@ -109,44 +109,44 @@ ${briefing.actionChecklist.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Top Action Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
-            <Sparkles className="w-5 h-5 animate-pulse" />
+          <div className="w-10 h-10 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shadow-xs shrink-0">
+            <Sparkles className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                AI Morning Briefing Generator
+              <h2 className="text-base font-bold text-[#263445] dark:text-slate-100">
+                Bản Tin Giao Ban Thông Minh
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 rounded-full border border-amber-300 dark:border-amber-800">
-                07:00 Sáng Tự Động
+              <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 tabular-nums">
+                · 07:00 Sáng Tự Động
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-[#718096] dark:text-slate-400">
               Quét toàn bộ số liệu 24h qua, phát hiện quá tải cục bộ, sự cố thiết bị & gợi ý phân bổ nhân sự
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200">
-            <Calendar className="w-4 h-4 text-blue-500" />
+          <div className="flex items-center gap-1.5 bg-[#F4F7FB] dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-[#DFE7F0] dark:border-slate-700 text-xs font-semibold text-[#263445] dark:text-slate-200">
+            <Calendar className="w-4 h-4 text-[#1976D2]" />
             <span>Ngày:</span>
             <input 
               type="date"
               value={reportDate}
               onChange={(e) => setReportDate(e.target.value)}
-              className="bg-transparent outline-none cursor-pointer font-bold text-slate-900 dark:text-slate-100"
+              className="bg-transparent outline-none cursor-pointer font-bold text-[#263445] dark:text-slate-100"
             />
           </div>
 
           <button
             onClick={fetchBriefing}
             disabled={isLoading}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition shadow-md shadow-blue-600/20"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             <span>{isLoading ? 'Đang tổng hợp...' : 'Làm mới'}</span>
@@ -155,25 +155,21 @@ ${briefing.actionChecklist.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
       </div>
 
       {isLoading ? (
-        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-          <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800">
+          <RefreshCw className="w-8 h-8 text-[#1976D2] animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-[#263445] dark:text-slate-300">
             Trí tuệ nhân tạo Gemini đang quét số liệu ca bệnh, nhật ký máy móc và lịch trực...
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#718096] mt-1">
             Đang trích xuất điểm nóng và tối ưu hóa nhân sự giao ban 07:00 sáng
           </p>
         </div>
       ) : briefing ? (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Executive Summary Hero Card */}
-          <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-blue-950 text-white p-6 rounded-3xl border border-indigo-700/40 shadow-xl relative overflow-hidden">
-            {/* Ambient Background Lights */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
-
+          <div className="bg-[#155A9C] text-white p-5 rounded-xl border border-[#1976D2] shadow-sm relative overflow-hidden">
             <div className="relative z-10 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-indigo-500/30">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/15">
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-lg text-xs font-black tracking-wide flex items-center gap-1.5">
                     <Award className="w-3.5 h-3.5" />
@@ -267,9 +263,9 @@ ${briefing.actionChecklist.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
           </div>
 
           {/* Section 2: Hotspots & Equipment Incidents Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Hotspots Card */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950/80 text-rose-600 flex items-center justify-center">
@@ -314,7 +310,7 @@ ${briefing.actionChecklist.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
             </div>
 
             {/* Equipment Warnings */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 flex items-center justify-center">
@@ -356,37 +352,37 @@ ${briefing.actionChecklist.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
           </div>
 
           {/* Section 3: Staffing Directives & Action Checklist */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Staffing Allocation */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/80 text-blue-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/80 text-[#1976D2] flex items-center justify-center">
                   <UserCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                  <h4 className="text-sm font-bold text-[#263445] dark:text-slate-100">
                     Đề Xuất Phân Bổ Nhân Lực Giao Ban (Staffing Rostering)
                   </h4>
-                  <p className="text-[11px] text-slate-500">AI tự động gợi ý điều động kíp trực giải tỏa điểm nghẽn</p>
+                  <p className="text-[11px] text-[#718096]">AI tự động gợi ý điều động kíp trực giải tỏa điểm nghẽn</p>
                 </div>
               </div>
 
               <div className="space-y-3">
                 {briefing.staffingRecommendations.map((staff, idx) => (
-                  <div key={idx} className="p-3.5 bg-blue-50/50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/60 flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  <div key={idx} className="p-3.5 bg-[#EAF4FF]/60 dark:bg-blue-950/30 rounded-lg border border-[#DFE7F0] dark:border-blue-900/60 flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-[#1976D2] text-white font-black text-xs flex items-center justify-center shrink-0 mt-0.5">
                       {idx + 1}
                     </div>
                     <div className="space-y-1 text-xs flex-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-900 dark:text-slate-100">
+                        <span className="font-bold text-[#263445] dark:text-slate-100">
                           {staff.role} → {staff.targetRoom}
                         </span>
-                        <span className="font-bold text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 text-[10px]">
+                        <span className="font-bold text-[#1976D2] dark:text-blue-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-[#DFE7F0] dark:border-blue-800 text-[10px]">
                           {staff.shiftTime}
                         </span>
                       </div>
-                      <p className="text-slate-600 dark:text-slate-300">
+                      <p className="text-[#718096] dark:text-slate-300">
                         {staff.rationale}
                       </p>
                     </div>
@@ -396,7 +392,7 @@ ${briefing.actionChecklist.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
             </div>
 
             {/* Checklist of Directives */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 flex items-center justify-center">
                   <CheckCircle2 className="w-4 h-4" />

@@ -4,8 +4,11 @@ import { Pool, type PoolClient } from "pg";
 import type {
   DepartmentUnit,
   EquipmentItem,
+  NotificationLog,
   ParaclinicalRoom,
   RepairLog,
+  ScheduledAlertHistoryItem,
+  ScheduledAlertRuleConfig,
   StaffProfile,
   User,
 } from "../src/types/hospital";
@@ -1802,3 +1805,286 @@ export function registerPostgresSyncRoutes(app: Express): void {
     });
   });
 }
+
+// ==========================================
+// SERVER-SIDE HELPERS FOR SCHEDULED ALERTS
+// ==========================================
+
+export function isPostgresConfigured(): boolean {
+  return Boolean(getPool());
+}
+
+export async function loadCloudBucketsForServer(
+  bucketKeys: string[]
+): Promise<Record<string, Record<string, unknown>[]>> {
+  const pool = getPool();
+  if (!pool || bucketKeys.length === 0) return {};
+
+  try {
+    await ensureSchema(pool);
+    const validKeys = bucketKeys.filter((k) => ALLOWED_CLOUD_BUCKETS.has(k));
+    if (validKeys.length === 0) return {};
+
+    const res = await pool.query<{
+      bucket_key: string;
+      items: Record<string, unknown>[];
+    }>(
+      `SELECT bucket_key, items FROM app_buckets WHERE bucket_key = ANY($1::text[])`,
+      [validKeys]
+    );
+
+    const out: Record<string, Record<string, unknown>[]> = {};
+    for (const row of res.rows) {
+      out[row.bucket_key] = Array.isArray(row.items) ? row.items : [];
+    }
+    return out;
+  } catch (err: any) {
+    console.error("[PostgresSync] loadCloudBucketsForServer error:", err?.message);
+    return {};
+  }
+}
+
+export async function loadReportArchiveMonthForServer(
+  year: number,
+  monthNum: number
+): Promise<Record<string, unknown>[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  const archiveKey = `${year}_m${String(Math.min(12, Math.max(1, monthNum))).padStart(2, "0")}`;
+  try {
+    await ensureSchema(pool);
+    const res = await pool.query<{ items: Record<string, unknown>[] }>(
+      `SELECT items FROM app_report_archives WHERE archive_key = $1`,
+      [archiveKey]
+    );
+    const items = res.rows[0]?.items;
+    return Array.isArray(items) ? items : [];
+  } catch (err: any) {
+    console.error("[PostgresSync] loadReportArchiveMonthForServer error:", err?.message);
+    return [];
+  }
+}
+
+export async function upsertReportArchiveMonthFromServer(
+  year: number,
+  monthNum: number,
+  monthKey: string,
+  items: unknown[]
+): Promise<boolean> {
+  const pool = getPool();
+  if (!pool) return false;
+  const archiveKey = `${year}_m${String(Math.min(12, Math.max(1, monthNum))).padStart(2, "0")}`;
+  if (!ARCHIVE_KEY_REGEX.test(archiveKey)) return false;
+
+  try {
+    await ensureSchema(pool);
+    const safeItems = Array.isArray(items) ? items.slice(0, 500) : [];
+    const nowMs = Date.now();
+    await pool.query(
+      `INSERT INTO app_report_archives (archive_key, year, month_key, items, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, NOW())
+       ON CONFLICT (archive_key)
+       DO UPDATE SET
+         year = EXCLUDED.year,
+         month_key = EXCLUDED.month_key,
+         items = EXCLUDED.items,
+         updated_by_id = EXCLUDED.updated_by_id,
+         updated_by_name = EXCLUDED.updated_by_name,
+         updated_at_ms = EXCLUDED.updated_at_ms,
+         updated_at = NOW()`,
+      [
+        archiveKey,
+        year,
+        monthKey,
+        JSON.stringify(safeItems),
+        "SYS-SCHEDULER",
+        "Hệ thống Cảnh báo Tự động",
+        nowMs,
+      ]
+    );
+
+    broadcastPostgresChange(pool, {
+      type: "report_archive",
+      key: archiveKey,
+      updatedAtMs: nowMs,
+      actorId: "SYS-SCHEDULER",
+    });
+    return true;
+  } catch (err: any) {
+    console.error("[PostgresSync] upsertReportArchiveMonthFromServer error:", err?.message);
+    return false;
+  }
+}
+
+export async function appendSystemNotificationToDb(
+  notif: NotificationLog
+): Promise<boolean> {
+  const pool = getPool();
+  if (!pool) return false;
+
+  try {
+    await ensureSchema(pool);
+    const res = await pool.query<{ items: Record<string, unknown>[] }>(
+      `SELECT items FROM app_buckets WHERE bucket_key = 'notifications'`
+    );
+    const existing = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+    const next = [notif, ...existing].slice(0, 200);
+    const nowMs = Date.now();
+
+    await pool.query(
+      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+       VALUES ('notifications', $1::jsonb, $2, 'SYS-SCHEDULER', 'Hệ thống Cảnh báo Tự động', $3, NOW())
+       ON CONFLICT (bucket_key)
+       DO UPDATE SET
+         items = EXCLUDED.items,
+         item_count = EXCLUDED.item_count,
+         updated_by_id = EXCLUDED.updated_by_id,
+         updated_by_name = EXCLUDED.updated_by_name,
+         updated_at_ms = EXCLUDED.updated_at_ms,
+         updated_at = NOW()`,
+      [JSON.stringify(next), next.length, nowMs]
+    );
+
+    broadcastPostgresChange(pool, {
+      type: "bucket",
+      key: "notifications",
+      updatedAtMs: nowMs,
+      actorId: "SYS-SCHEDULER",
+    });
+    return true;
+  } catch (err: any) {
+    console.error("[PostgresSync] appendSystemNotificationToDb error:", err?.message);
+    return false;
+  }
+}
+
+export async function saveScheduledAlertRulesToDb(
+  rules: ScheduledAlertRuleConfig[]
+): Promise<boolean> {
+  const pool = getPool();
+  if (!pool) return false;
+
+  try {
+    await ensureSchema(pool);
+    const res = await pool.query<{ items: Record<string, unknown>[] }>(
+      `SELECT items FROM app_buckets WHERE bucket_key = 'settings'`
+    );
+    const currentList = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+    const baseSettings =
+      currentList[0] && typeof currentList[0] === "object"
+        ? { ...currentList[0] }
+        : {};
+    const nextSettings = [{ ...baseSettings, scheduledAlertsConfig: rules }];
+    const nowMs = Date.now();
+
+    await pool.query(
+      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+       VALUES ('settings', $1::jsonb, 1, 'SYS-SCHEDULER', 'Cấu hình Cảnh báo Tự động', $2, NOW())
+       ON CONFLICT (bucket_key)
+       DO UPDATE SET
+         items = EXCLUDED.items,
+         item_count = EXCLUDED.item_count,
+         updated_by_id = EXCLUDED.updated_by_id,
+         updated_by_name = EXCLUDED.updated_by_name,
+         updated_at_ms = EXCLUDED.updated_at_ms,
+         updated_at = NOW()`,
+      [JSON.stringify(nextSettings), nowMs]
+    );
+
+    broadcastPostgresChange(pool, {
+      type: "bucket",
+      key: "settings",
+      updatedAtMs: nowMs,
+      actorId: "SYS-SCHEDULER",
+    });
+    return true;
+  } catch (err: any) {
+    console.error("[PostgresSync] saveScheduledAlertRulesToDb error:", err?.message);
+    return false;
+  }
+}
+
+const inMemoryDailyAlertClaims = new Set<string>();
+
+export async function tryClaimDailyAlertLock(
+  ruleId: string,
+  dateVN: string,
+  hostLabel: string
+): Promise<boolean> {
+  const lockKey = `scheduled_alert_lock_${ruleId}_${dateVN}`;
+  const pool = getPool();
+  if (!pool) {
+    if (inMemoryDailyAlertClaims.has(lockKey)) return false;
+    inMemoryDailyAlertClaims.add(lockKey);
+    return true;
+  }
+
+  try {
+    await ensureSchema(pool);
+    const payload = JSON.stringify({
+      claimedAt: new Date().toISOString(),
+      hostLabel: hostLabel || "cls-server",
+    });
+    const res = await pool.query<{ meta_key: string }>(
+      `INSERT INTO app_meta (meta_key, meta_value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (meta_key) DO NOTHING
+       RETURNING meta_key`,
+      [lockKey, payload]
+    );
+    return res.rows.length > 0;
+  } catch (err: any) {
+    console.error("[PostgresSync] tryClaimDailyAlertLock error:", err?.message);
+    if (inMemoryDailyAlertClaims.has(lockKey)) return false;
+    inMemoryDailyAlertClaims.add(lockKey);
+    return true;
+  }
+}
+
+const SCHEDULED_ALERT_HISTORY_META_KEY = "scheduled_alert_history_v1";
+let inMemoryAlertHistory: ScheduledAlertHistoryItem[] = [];
+
+export async function loadScheduledAlertHistoryFromDb(): Promise<ScheduledAlertHistoryItem[]> {
+  const pool = getPool();
+  if (!pool) return inMemoryAlertHistory;
+
+  try {
+    await ensureSchema(pool);
+    const res = await pool.query<{ meta_value: string }>(
+      `SELECT meta_value FROM app_meta WHERE meta_key = $1`,
+      [SCHEDULED_ALERT_HISTORY_META_KEY]
+    );
+    const raw = res.rows[0]?.meta_value;
+    if (!raw) return inMemoryAlertHistory;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ScheduledAlertHistoryItem[]) : [];
+  } catch {
+    return inMemoryAlertHistory;
+  }
+}
+
+export async function appendScheduledAlertHistoryToDb(
+  entry: ScheduledAlertHistoryItem
+): Promise<ScheduledAlertHistoryItem[]> {
+  const current = await loadScheduledAlertHistoryFromDb();
+  const next = [entry, ...current.filter((h) => h.id !== entry.id)].slice(0, 60);
+  inMemoryAlertHistory = next;
+
+  const pool = getPool();
+  if (!pool) return next;
+
+  try {
+    await ensureSchema(pool);
+    await pool.query(
+      `INSERT INTO app_meta (meta_key, meta_value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (meta_key)
+       DO UPDATE SET meta_value = EXCLUDED.meta_value, updated_at = NOW()`,
+      [SCHEDULED_ALERT_HISTORY_META_KEY, JSON.stringify(next)]
+    );
+  } catch (err: any) {
+    console.error("[PostgresSync] appendScheduledAlertHistoryToDb error:", err?.message);
+  }
+  return next;
+}
+

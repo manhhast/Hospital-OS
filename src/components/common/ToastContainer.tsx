@@ -20,23 +20,23 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismis
         return (
           <div
             key={`${toast.id || 'toast'}-${idx}`}
-            className={`pointer-events-auto flex items-start p-4 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-300 animate-in slide-in-from-bottom-5`}
+            className={`pointer-events-auto flex items-start p-3.5 rounded-xl shadow-lg border border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-300 animate-in slide-in-from-bottom-5`}
           >
             <div className="shrink-0 mr-3 mt-0.5">
-              {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-              {isError && <XCircle className="w-5 h-5 text-rose-500" />}
+              {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+              {isError && <XCircle className="w-5 h-5 text-rose-600" />}
               {isWarning && <AlertTriangle className="w-5 h-5 text-amber-500" />}
-              {!isSuccess && !isError && !isWarning && <Info className="w-5 h-5 text-blue-500" />}
+              {!isSuccess && !isError && !isWarning && <Info className="w-5 h-5 text-[#1976D2]" />}
             </div>
 
             <div className="flex-1 min-w-0 pr-2">
-              <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{toast.title}</h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{toast.message}</p>
+              <h4 className="text-xs font-bold text-[#263445] dark:text-slate-100">{toast.title}</h4>
+              <p className="text-xs text-[#718096] dark:text-slate-300 mt-0.5 leading-snug">{toast.message}</p>
             </div>
 
             <button
               onClick={() => onDismiss(toast.id)}
-              className="shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md"
+              className="shrink-0 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 p-1 rounded-md"
             >
               <X className="w-4 h-4" />
             </button>

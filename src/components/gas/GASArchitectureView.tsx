@@ -48,13 +48,13 @@ export const GASArchitectureView: React.FC<GASArchitectureViewProps> = ({ onShow
 
   if (!isAdmin) {
     return (
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-12 border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-4 max-w-xl mx-auto my-12 animate-in fade-in duration-200">
-        <div className="w-16 h-16 bg-rose-100 dark:bg-rose-950/60 text-rose-600 rounded-full flex items-center justify-center mx-auto">
-          <Lock className="w-8 h-8" />
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-10 border border-[#DFE7F0] dark:border-slate-800 shadow-xs text-center space-y-4 max-w-xl mx-auto my-12 animate-in fade-in duration-200">
+        <div className="w-14 h-14 bg-rose-100 dark:bg-rose-950/60 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+          <Lock className="w-7 h-7" />
         </div>
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Quyền truy cập bị hạn chế</h3>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          Thư viện Kiến trúc Mã nguồn Google Apps Script (GAS Code) chỉ dành riêng cho Quản trị viên hệ thống (<span className="font-bold text-purple-600">Admin</span>).
+        <h3 className="text-lg font-bold text-[#263445] dark:text-slate-100">Quyền truy cập bị hạn chế</h3>
+        <p className="text-xs text-[#718096] leading-relaxed">
+          Thư viện Kiến trúc Mã nguồn Google Apps Script (GAS Code) chỉ dành riêng cho Quản trị viên hệ thống (<span className="font-bold text-[#1976D2]">Admin</span>).
           <br />Vui lòng chuyển đổi vai trò sang Admin ở góc trên bên phải thanh Header để xem toàn bộ mã nguồn backend/frontend.
         </p>
       </div>
@@ -62,16 +62,16 @@ export const GASArchitectureView: React.FC<GASArchitectureViewProps> = ({ onShow
   }
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+    <div className="space-y-4 w-full pb-8 animate-in fade-in duration-200">
 
       {/* Top Banner / System Overview */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800 space-y-4">
+      <div className="bg-slate-900 text-white rounded-xl p-5 shadow-md border border-slate-800 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <span className="px-2.5 py-1 bg-blue-600 text-white text-[10px] font-extrabold uppercase rounded-md tracking-wider">
+            <span className="px-2.5 py-1 bg-[#1976D2] text-white text-[10px] font-extrabold uppercase rounded-md tracking-wider">
               Google Apps Script Enterprise Architecture
             </span>
-            <h2 className="text-xl font-bold tracking-tight mt-2">Kiến trúc Hệ thống Hospital OS (4-Layer Pattern)</h2>
+            <h2 className="text-lg font-bold tracking-tight mt-2">Kiến trúc Hệ thống Hospital OS (4-Layer Pattern)</h2>
             <p className="text-slate-300 text-xs mt-1">
               Mô hình chuẩn Doanh nghiệp: Presentation Layer &rarr; Service Layer &rarr; Repository Layer &rarr; Google Services (Spreadsheet, Drive, Gmail, Telegram)
             </p>
@@ -80,14 +80,14 @@ export const GASArchitectureView: React.FC<GASArchitectureViewProps> = ({ onShow
           <div className="flex items-center space-x-2 shrink-0">
             <button
               onClick={handleCopyCode}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition-colors shadow-md"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-semibold rounded-lg text-xs transition-colors shadow-xs"
             >
               {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               <span>{copied ? 'Đã copy!' : 'Copy Code File Này'}</span>
             </button>
             <button
               onClick={() => handleDownloadFile(selectedFile)}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs border border-slate-700 transition-colors"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-lg text-xs border border-slate-700 transition-colors"
             >
               <Download className="w-4 h-4" />
               <span>Tải file .gs / .js</span>
@@ -120,28 +120,28 @@ export const GASArchitectureView: React.FC<GASArchitectureViewProps> = ({ onShow
       </div>
 
       {/* Code Inspector Main Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left File Tree Selector (4 cols) */}
-        <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-            <h3 className="font-bold text-xs uppercase text-slate-500 tracking-wider">Danh sách File Mã Nguồn ({gasFilesList.length})</h3>
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-[#DFE7F0] dark:border-slate-800">
+            <h3 className="font-bold text-xs uppercase text-[#718096] tracking-wider">Danh sách File Mã Nguồn ({gasFilesList.length})</h3>
 
             <div className="flex items-center space-x-1 text-[11px]">
               <button
                 onClick={() => setFilterType('all')}
-                className={`px-2 py-0.5 rounded-md ${filterType === 'all' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2 py-0.5 rounded-md ${filterType === 'all' ? 'bg-[#1976D2] text-white font-bold' : 'text-[#718096] hover:bg-[#F4F7FB]'}`}
               >
                 Tất cả
               </button>
               <button
                 onClick={() => setFilterType('backend')}
-                className={`px-2 py-0.5 rounded-md ${filterType === 'backend' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2 py-0.5 rounded-md ${filterType === 'backend' ? 'bg-[#1976D2] text-white font-bold' : 'text-[#718096] hover:bg-[#F4F7FB]'}`}
               >
                 Backend
               </button>
               <button
                 onClick={() => setFilterType('frontend')}
-                className={`px-2 py-0.5 rounded-md ${filterType === 'frontend' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2 py-0.5 rounded-md ${filterType === 'frontend' ? 'bg-[#1976D2] text-white font-bold' : 'text-[#718096] hover:bg-[#F4F7FB]'}`}
               >
                 Frontend
               </button>
@@ -155,10 +155,10 @@ export const GASArchitectureView: React.FC<GASArchitectureViewProps> = ({ onShow
                 <button
                   key={f.filename}
                   onClick={() => setSelectedFile(f)}
-                  className={`w-full text-left p-2.5 rounded-xl text-xs transition-all flex items-center justify-between ${
+                  className={`w-full text-left p-2.5 rounded-lg text-xs transition-all flex items-center justify-between border ${
                     isSelected
-                      ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      ? 'bg-[#EAF4FF] dark:bg-blue-900/30 text-[#155A9C] dark:text-blue-300 font-bold border-[#1976D2]/25 dark:border-blue-800'
+                      : 'border-transparent hover:bg-[#F4F7FB] dark:hover:bg-slate-800 text-[#263445] dark:text-slate-300'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5 min-w-0">
@@ -178,7 +178,7 @@ export const GASArchitectureView: React.FC<GASArchitectureViewProps> = ({ onShow
         </div>
 
         {/* Right Code Viewer & Description (8 cols) */}
-        <div className="lg:col-span-8 bg-slate-950 rounded-2xl border border-slate-800 p-5 text-slate-200 shadow-2xl flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-8 bg-slate-950 rounded-xl border border-slate-800 p-4 text-slate-200 shadow-xl flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div>

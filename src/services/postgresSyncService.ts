@@ -71,6 +71,8 @@ class PostgresSyncService {
   private failedRetryBuckets = new Set<CloudBucketKey>();
   private lastServerTimeMs = 0;
   private isHydrating = false;
+  private hasExplicitSessionLogin = false;
+  private inMemorySessionToken = '';
   private eventSource: EventSource | null = null;
   private sseReconnectTimer: number | null = null;
   private sseReconnectAttempt = 0;
@@ -120,20 +122,13 @@ class PostgresSyncService {
   }
 
   private getSessionToken(): string {
-    try {
-      return localStorage.getItem(PG_SESSION_TOKEN_KEY) || '';
-    } catch {
-      return '';
-    }
+    return this.inMemorySessionToken;
   }
 
   private saveSessionToken(token: string): void {
+    this.inMemorySessionToken = token || '';
     try {
-      if (token) {
-        localStorage.setItem(PG_SESSION_TOKEN_KEY, token);
-      } else {
-        localStorage.removeItem(PG_SESSION_TOKEN_KEY);
-      }
+      localStorage.removeItem(PG_SESSION_TOKEN_KEY);
     } catch {
       // ignore storage errors
     }
@@ -162,6 +157,9 @@ class PostgresSyncService {
   public async init(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
+    this.hasExplicitSessionLogin = false;
+    this.saveSessionToken('');
+    storageService.setAuthenticated(false);
     await this.refreshServerStatus();
   }
 
@@ -234,7 +232,7 @@ class PostgresSyncService {
       const directory: PublicStaffDirectoryItem[] = Array.isArray(dirData?.staff)
         ? dirData.staff
         : [];
-      const hasValidSession = Boolean(statusData.authenticated);
+      const hasValidSession = Boolean(statusData.authenticated) && this.hasExplicitSessionLogin;
 
       if (!statusData.connected) {
         this.setState({
@@ -324,6 +322,7 @@ class PostgresSyncService {
         };
       }
 
+      this.hasExplicitSessionLogin = true;
       this.saveSessionToken(json.token);
       this.activateStorageHooks();
 
@@ -367,6 +366,7 @@ class PostgresSyncService {
   }
 
   public async logout(): Promise<void> {
+    this.hasExplicitSessionLogin = false;
     this.stopPolling();
     this.clearPendingTimers();
     this.saveSessionToken('');
@@ -412,6 +412,7 @@ class PostgresSyncService {
       });
 
       if (res.status === 401) {
+        this.hasExplicitSessionLogin = false;
         this.saveSessionToken('');
         storageService.setAuthenticated(false);
         this.stopPolling();
@@ -604,6 +605,10 @@ class PostgresSyncService {
     }
   }
 
+  public async flushPendingSync(useKeepalive = false): Promise<void> {
+    await this.flushFailedRetries(useKeepalive);
+  }
+
   private async flushFailedRetries(useKeepalive = false): Promise<void> {
     if (!this.state.configured || !this.state.authenticated) return;
 
@@ -721,6 +726,7 @@ class PostgresSyncService {
       });
 
       if (res.status === 401) {
+        this.hasExplicitSessionLogin = false;
         this.saveSessionToken('');
         storageService.setAuthenticated(false);
         this.stopPolling();
@@ -795,6 +801,7 @@ class PostgresSyncService {
       });
 
       if (res.status === 401) {
+        this.hasExplicitSessionLogin = false;
         this.saveSessionToken('');
         storageService.setAuthenticated(false);
         this.stopPolling();

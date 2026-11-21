@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Bell, Search, User as UserIcon, Shield, Bug, Sun, Moon, Monitor, Check,
+  Bell, Search, User as UserIcon, Shield, Bug, Sun, Moon,
   Plus, CheckCircle2, AlertTriangle, Hospital, Activity, KeyRound, LogIn,
   X, FileText, CheckSquare, Wrench, Building2, Clock, Users, ArrowRight,
   Sparkles, Command, ChevronRight, LogOut, ArrowLeftRight, Send, BellRing,
-  Cloud, CloudOff, RefreshCw
+  Cloud, CloudOff, RefreshCw, Lock
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
@@ -31,6 +31,7 @@ interface HeaderProps {
   isDarkMode: boolean;
   activeModule: string;
   onOpenAuth: (mode: 'login' | 'change-password' | 'forgot-password') => void;
+  onQuickLock?: () => void;
   onShowToast?: (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
@@ -46,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   isDarkMode,
   activeModule,
   onOpenAuth,
+  onQuickLock,
   onShowToast
 }) => {
   const [currentUser, setCurrentUser] = useState<User>(storageService.getCurrentUser());
@@ -53,10 +55,8 @@ export const Header: React.FC<HeaderProps> = ({
   const [taskList, setTaskList] = useState<TaskItem[]>(() => storageService.getTasks());
   const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
-  const [showThemeDropdown, setShowThemeDropdown] = useState(false);
   const [showAlertPopover, setShowAlertPopover] = useState(false);
   const [alertTab, setAlertTab] = useState<'all' | 'equipment' | 'tasks'>('all');
-  const themeDropdownRef = useRef<HTMLDivElement>(null);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
   const alertPopoverRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +65,13 @@ export const Header: React.FC<HeaderProps> = ({
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Live System Clock (Section 3.1 HIS Header standard)
+  const [nowClock, setNowClock] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowClock(new Date()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const settings = storageService.getSettings();
 
@@ -122,9 +129,6 @@ export const Header: React.FC<HeaderProps> = ({
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (themeDropdownRef.current && !themeDropdownRef.current.contains(event.target as Node)) {
-        setShowThemeDropdown(false);
-      }
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
         setIsSearchFocused(false);
       }
@@ -170,6 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
   const getModuleTitle = (mod: string) => {
     switch (mod) {
       case 'dashboard': return 'Tổng quan Dashboard';
+      case 'ai-ecosystem': return 'Trợ lý AI Điều hành Khoa';
       case 'tasks': return 'Quản lý Công việc & Y vụ';
       case 'documents': return 'Hồ sơ & Quy trình SOP / ISO';
       case 'equipment': return 'Quản lý Máy móc & Thiết bị';
@@ -209,156 +214,36 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 md:px-6 bg-white border-b border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xs transition-colors">
-      {/* Left: Active Module Name & Quick Omnisearch Input */}
-      <div className="flex items-center space-x-3 md:space-x-5 flex-1 min-w-0 mr-2">
-        <div className="flex items-center space-x-2 text-slate-800 dark:text-slate-100 font-bold text-base md:text-lg shrink-0">
-          <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          <span className="hidden sm:inline capitalize truncate max-w-[200px] lg:max-w-none">{getModuleTitle(activeModule)}</span>
+    <header className="sm:sticky sm:top-0 z-30 flex flex-col bg-white dark:bg-[#162033] border-b border-[#DFE7F0] dark:border-slate-700/80 transition-colors shrink-0 shadow-2xs">
+      {/* Row 1: Prominent Module Title & System Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 md:px-6 py-2.5 min-h-[64px]">
+        {/* Left: Hospital Facility Unit & Prominent Active Page Title */}
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[#EAF4FF] dark:bg-sky-950/60 border border-[#1976D2]/25 flex items-center justify-center shrink-0 shadow-2xs">
+            <Hospital className="w-5 h-5 text-[#1976D2] dark:text-sky-400" />
+          </div>
+          <div className="flex flex-col min-w-0 leading-snug">
+            <h1 className="text-base sm:text-lg md:text-xl font-extrabold text-[#155A9C] dark:text-sky-300 tracking-tight truncate sm:whitespace-normal">
+              {getModuleTitle(activeModule)}
+            </h1>
+            <p className="text-xs font-medium text-[#718096] dark:text-slate-400 truncate">
+              Khoa Cận Lâm Sàng · Bệnh viện Đa khoa Sông Thương
+            </p>
+          </div>
         </div>
 
-        {/* Global Omnisearch Bar with Live Results Dropdown */}
-        <div className="relative flex-1 max-w-md lg:max-w-xl" ref={searchContainerRef}>
-          <div className="relative flex items-center">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
-              onKeyDown={handleKeyDown}
-              placeholder="Tìm nhanh SOP, máy móc, phòng ban, công việc..."
-              className="w-full pl-9 pr-20 py-2 text-xs md:text-sm bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-2xs"
-            />
-            <div className="absolute right-2 flex items-center gap-1">
-              {searchQuery ? (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              ) : (
-                <button
-                  onClick={() => onOpenSearchModal('')}
-                  className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-200/60 dark:bg-slate-700/60 rounded border border-slate-300/60 dark:border-slate-600/60 hover:text-blue-600 transition-colors"
-                  title="Mở bảng tìm kiếm Spotlight (Ctrl + K)"
-                >
-                  <Command className="w-2.5 h-2.5" /> K
-                </button>
-              )}
-            </div>
+        {/* Right: System Clock, Sync, Alerts, Theme Toggle, Quick Lock, Profile */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* HIS System Clock */}
+          <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F4F7FB] dark:bg-slate-800/70 border border-[#DFE7F0] dark:border-slate-700 text-xs font-mono font-semibold text-[#263445] dark:text-slate-200 tabular-nums shrink-0">
+            <Clock className="w-3.5 h-3.5 text-[#1976D2] dark:text-sky-400 shrink-0" />
+            <span>
+              {nowClock.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} &middot;{' '}
+              {nowClock.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            </span>
           </div>
 
-          {/* Live Search Popover Dropdown */}
-          {isSearchFocused && searchQuery.trim() !== '' && (
-            <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[75vh] flex flex-col">
-              <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700/80 flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-500" /> Kết quả khớp ({searchResults.length})
-                </span>
-                <span className="text-[10px] font-normal text-slate-400">Nhấn Enter để mở</span>
-              </div>
 
-              <div className="overflow-y-auto p-1.5 space-y-1 custom-scrollbar max-h-96">
-                {searchResults.length === 0 ? (
-                  <div className="p-6 text-center text-slate-400 space-y-2">
-                    <Search className="w-6 h-6 mx-auto opacity-50 text-slate-400" />
-                    <p className="text-xs">Không tìm thấy dữ liệu khớp với "{searchQuery}"</p>
-                    <button
-                      onClick={() => onOpenSearchModal(searchQuery)}
-                      className="text-xs text-blue-600 hover:underline font-semibold"
-                    >
-                      Mở tìm kiếm nâng cao toàn diện →
-                    </button>
-                  </div>
-                ) : (
-                  searchResults.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleSelectSearchResult(item)}
-                      className="p-2.5 rounded-xl hover:bg-blue-50/70 dark:hover:bg-slate-800/80 cursor-pointer transition-colors flex items-start gap-2.5 border border-transparent hover:border-blue-100 dark:hover:border-slate-700"
-                    >
-                      <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0 mt-0.5">
-                        {item.category === 'documents' ? <FileText className="w-3.5 h-3.5 text-emerald-500" /> :
-                         item.category === 'tasks' ? <CheckSquare className="w-3.5 h-3.5 text-blue-500" /> :
-                         item.category === 'equipment' ? <Wrench className="w-3.5 h-3.5 text-indigo-500" /> :
-                         item.category === 'rooms' ? <Building2 className="w-3.5 h-3.5 text-teal-500" /> :
-                         item.category === 'staff' ? <UserIcon className="w-3.5 h-3.5 text-purple-500" /> :
-                         item.category === 'shifts' ? <Clock className="w-3.5 h-3.5 text-rose-500" /> :
-                         <Users className="w-3.5 h-3.5 text-amber-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className={`px-1.5 py-0.2 text-[9px] font-bold rounded ${item.categoryColor}`}>
-                            {item.categoryLabel}
-                          </span>
-                          {item.code && (
-                            <span className="text-[10px] font-mono font-bold text-slate-500">
-                              #{item.code}
-                            </span>
-                          )}
-                        </div>
-                        <h5 className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                          {item.title}
-                        </h5>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                          {item.subtitle}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-2" />
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Bottom Expand Button */}
-              <div className="p-2 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-700/80 text-center">
-                <button
-                  onClick={() => onOpenSearchModal(searchQuery)}
-                  className="w-full py-1.5 px-3 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all"
-                >
-                  <span>Mở bảng Tìm Kiếm Toàn Diện Spotlight cho "{searchQuery}"</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Right: Actions, Notifications, Role Switcher, Profile */}
-      <div className="flex items-center space-x-2 md:space-x-3 shrink-0">
-        {/* Quick Spotlight Button */}
-        <button
-          onClick={() => onOpenSearchModal('')}
-          className="p-2 text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors hidden sm:flex items-center gap-1.5 text-xs font-semibold"
-          title="Tìm kiếm Spotlight toàn hệ thống (Ctrl + K)"
-        >
-          <Search className="w-4 h-4 text-blue-500" />
-          <span className="hidden md:inline">Spotlight</span>
-        </button>
-
-        {/* Quick Create Buttons */}
-        {activeModule === 'tasks' && (
-          <button
-            onClick={onOpenNewTask}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Tạo việc</span>
-          </button>
-        )}
-
-        {activeModule === 'documents' && (
-          <button
-            onClick={onOpenNewDoc}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Tải hồ sơ</span>
-          </button>
-        )}
 
         {/* Debug Mode Badge */}
         {settings.debugMode && (
@@ -651,124 +536,79 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Theme Mode Dropdown */}
-        <div className="relative" ref={themeDropdownRef}>
-          <button
-            onClick={() => setShowThemeDropdown(!showThemeDropdown)}
-            className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center space-x-1"
-            title="Tùy chỉnh giao diện Sáng / Tối / Hệ thống"
-          >
-            {isDarkMode ? (
-              <Sun className="w-5 h-5 text-amber-400" />
-            ) : (
-              <Moon className="w-5 h-5 text-indigo-500" />
-            )}
-          </button>
-
-          {showThemeDropdown && (
-            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-700/60 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Chủ đề giao diện
-              </div>
-              <div className="py-1">
-                <button
-                  onClick={() => {
-                    onChangeThemeMode?.('light');
-                    setShowThemeDropdown(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs font-medium flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors ${
-                    themeMode === 'light' ? 'text-amber-600 font-bold dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/30' : 'text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <Sun className="w-4 h-4 text-amber-500" />
-                    <span>Giao diện Sáng</span>
-                  </div>
-                  {themeMode === 'light' && <Check className="w-3.5 h-3.5 text-amber-500" />}
-                </button>
-
-                <button
-                  onClick={() => {
-                    onChangeThemeMode?.('dark');
-                    setShowThemeDropdown(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs font-medium flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors ${
-                    themeMode === 'dark' ? 'text-indigo-600 font-bold dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30' : 'text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <Moon className="w-4 h-4 text-indigo-400" />
-                    <span>Giao diện Tối</span>
-                  </div>
-                  {themeMode === 'dark' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                </button>
-
-                <button
-                  onClick={() => {
-                    onChangeThemeMode?.('system');
-                    setShowThemeDropdown(false);
-                  }}
-                  className={`w-full px-3 py-2 text-xs font-medium flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors ${
-                    themeMode === 'system' ? 'text-blue-600 font-bold dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/30' : 'text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <Monitor className="w-4 h-4 text-blue-500" />
-                    <span>Theo Hệ thống</span>
-                  </div>
-                  {themeMode === 'system' && <Check className="w-3.5 h-3.5 text-blue-500" />}
-                </button>
-              </div>
-            </div>
+        {/* Direct 1-Click Light / Dark Theme Toggle */}
+        <button
+          type="button"
+          onClick={onToggleTheme}
+          className="p-2 text-slate-600 hover:text-[#155A9C] dark:text-slate-200 dark:hover:text-white rounded-xl bg-[#F4F7FB] hover:bg-[#EAF4FF] dark:bg-slate-800/80 dark:hover:bg-slate-700/80 border border-[#DFE7F0] dark:border-slate-700 transition-colors flex items-center justify-center cursor-pointer"
+          title={isDarkMode ? 'Chuyển sang Giao diện Sáng' : 'Chuyển sang Giao diện Tối'}
+          aria-label={isDarkMode ? 'Chuyển sang Giao diện Sáng' : 'Chuyển sang Giao diện Tối'}
+        >
+          {isDarkMode ? (
+            <Sun className="w-4.5 h-4.5 text-amber-400" />
+          ) : (
+            <Moon className="w-4.5 h-4.5 text-[#1976D2]" />
           )}
-        </div>
+        </button>
+
+        {/* 1-Click Quick Lock Screen Button */}
+        {onQuickLock && (
+          <button
+            type="button"
+            onClick={onQuickLock}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#DFE7F0] dark:border-amber-800/70 bg-[#F4F7FB] hover:bg-[#EAF4FF] hover:border-[#1976D2]/40 dark:bg-amber-950/40 dark:hover:bg-amber-950/70 text-[#263445] hover:text-[#155A9C] dark:text-amber-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+            title="Khóa nhanh màn hình (Alt+L hoặc Ctrl+Shift+L)"
+          >
+            <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="hidden md:inline whitespace-nowrap">Khóa nhanh</span>
+          </button>
+        )}
 
         {/* Role & User Switcher */}
         <div className="relative" ref={roleDropdownRef}>
           <button
             onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-            className="flex items-center space-x-2.5 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+            className="flex items-center gap-2 p-1 pr-2 hover:bg-[#F4F7FB] dark:hover:bg-slate-800 rounded-lg border border-transparent hover:border-[#DFE7F0] transition-colors cursor-pointer whitespace-nowrap"
           >
             <img
               src={currentUser.avatar}
               alt={currentUser.name}
-              className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+              referrerPolicy="no-referrer"
+              className="w-7 h-7 rounded-full object-cover border border-[#DFE7F0] dark:border-slate-700 shrink-0"
             />
-            <div className="hidden lg:block text-left">
-              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-tight">
+            <div className="hidden lg:block text-left min-w-0">
+              <div className="text-xs font-semibold text-[#263445] dark:text-slate-100 leading-tight truncate max-w-[140px]">
                 {currentUser.name}
               </div>
-              <span className={`inline-block px-1.5 py-0.2 text-[10px] font-bold rounded-md ${getRoleBadgeColor(currentUser.role)}`}>
-                {currentUser.role}
-              </span>
+              <div className="text-[10px] text-[#718096] dark:text-slate-400 leading-tight truncate max-w-[140px]">
+                {currentUser.title ? `${currentUser.title} · ${currentUser.role}` : currentUser.role}
+              </div>
             </div>
           </button>
 
           {showRoleDropdown && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200/90 dark:border-slate-700/80 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 p-3.5">
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200/90 dark:border-slate-700/80 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 p-3.5">
               {/* Active User Information Card */}
-              <div className="flex items-center justify-between mb-3.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between mb-3.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="relative shrink-0">
-                    <img
-                      src={currentUser.avatar}
-                      alt={currentUser.name}
-                      className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-slate-700 shadow-xs"
-                    />
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-800" title="Đang trực tuyến"></span>
-                  </div>
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.name}
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                  />
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
                       {currentUser.name}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                       {currentUser.role === 'Admin'
-                        ? 'Quản trị ứng dụng & Hệ thống'
-                        : `${currentUser.title || 'Cán bộ'} • ${currentUser.department || 'Khoa Cận Lâm Sàng'}`}
+                        ? 'Quản trị hệ thống'
+                        : `${currentUser.title || 'Cán bộ'} · ${currentUser.department || 'Khoa CLS'}`}
                     </div>
                   </div>
                 </div>
-                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md shrink-0 shadow-2xs ${getRoleBadgeColor(currentUser.role)}`}>
+                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md shrink-0 ${getRoleBadgeColor(currentUser.role)}`}>
                   {currentUser.role}
                 </span>
               </div>
@@ -897,6 +737,157 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
           )}
+        </div>
+      </div>
+      </div>
+
+      {/* Row 2: Full-width Omnisearch Bar & Quick Contextual Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 md:px-6 py-2 border-t border-[#EDF2F7] dark:border-slate-700/60 bg-[#FAFBFD] dark:bg-[#131C2E]">
+        {/* Global Omnisearch Bar with Live Results Dropdown */}
+        <div className="relative flex-1 min-w-[240px] max-w-2xl" ref={searchContainerRef}>
+          <div className="relative flex items-center">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#718096] pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onKeyDown={handleKeyDown}
+              placeholder="Tra cứu nhanh SOP, máy móc, phòng ban, công việc..."
+              className="w-full min-w-0 pl-9 pr-14 py-2 text-xs sm:text-[13px] bg-white dark:bg-slate-800/90 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 placeholder-[#718096] dark:placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] transition-all"
+            />
+            <div className="absolute right-2 flex items-center gap-1">
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="p-1 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onOpenSearchModal('')}
+                  className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold text-[#718096] dark:text-slate-300 bg-[#F4F7FB] dark:bg-slate-700/60 rounded border border-[#DFE7F0] dark:border-slate-600/60 hover:text-[#1976D2] hover:border-[#1976D2] transition-colors cursor-pointer"
+                  title="Tìm kiếm nhanh toàn hệ thống (Ctrl + K)"
+                >
+                  <Command className="w-2.5 h-2.5" /> K
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Live Search Popover Dropdown */}
+          {isSearchFocused && searchQuery.trim() !== '' && (
+            <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[75vh] flex flex-col">
+              <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700/80 flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-500" /> Kết quả khớp ({searchResults.length})
+                </span>
+                <span className="text-[10px] font-normal text-slate-400">Nhấn Enter để mở</span>
+              </div>
+
+              <div className="overflow-y-auto p-1.5 space-y-1 custom-scrollbar max-h-96">
+                {searchResults.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 space-y-2">
+                    <Search className="w-6 h-6 mx-auto opacity-50 text-slate-400" />
+                    <p className="text-xs">Không tìm thấy dữ liệu khớp với "{searchQuery}"</p>
+                    <button
+                      onClick={() => onOpenSearchModal(searchQuery)}
+                      className="text-xs text-blue-600 hover:underline font-semibold"
+                    >
+                      Mở tìm kiếm nâng cao toàn diện →
+                    </button>
+                  </div>
+                ) : (
+                  searchResults.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => handleSelectSearchResult(item)}
+                      className="p-2.5 rounded-xl hover:bg-blue-50/70 dark:hover:bg-slate-800/80 cursor-pointer transition-colors flex items-start gap-2.5 border border-transparent hover:border-blue-100 dark:hover:border-slate-700"
+                    >
+                      <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0 mt-0.5">
+                        {item.category === 'documents' ? <FileText className="w-3.5 h-3.5 text-emerald-500" /> :
+                         item.category === 'tasks' ? <CheckSquare className="w-3.5 h-3.5 text-blue-500" /> :
+                         item.category === 'equipment' ? <Wrench className="w-3.5 h-3.5 text-indigo-500" /> :
+                         item.category === 'rooms' ? <Building2 className="w-3.5 h-3.5 text-teal-500" /> :
+                         item.category === 'staff' ? <UserIcon className="w-3.5 h-3.5 text-purple-500" /> :
+                         item.category === 'shifts' ? <Clock className="w-3.5 h-3.5 text-rose-500" /> :
+                         <Users className="w-3.5 h-3.5 text-amber-500" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className={`px-1.5 py-0.2 text-[9px] font-bold rounded ${item.categoryColor}`}>
+                            {item.categoryLabel}
+                          </span>
+                          {item.code && (
+                            <span className="text-[10px] font-mono font-bold text-slate-500">
+                              #{item.code}
+                            </span>
+                          )}
+                        </div>
+                        <h5 className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                          {item.title}
+                        </h5>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {item.subtitle}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-2" />
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Bottom Expand Button */}
+              <div className="p-2 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-700/80 text-center">
+                <button
+                  type="button"
+                  onClick={() => onOpenSearchModal(searchQuery)}
+                  className="w-full py-1.5 px-3 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <span>Mở bảng Tìm Kiếm Toàn Hệ Thống cho "{searchQuery}"</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Contextual Quick Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {activeModule === 'tasks' && (
+            <button
+              type="button"
+              onClick={onOpenNewTask}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tạo việc mới</span>
+            </button>
+          )}
+
+          {activeModule === 'documents' && (
+            <button
+              type="button"
+              onClick={onOpenNewDoc}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tải hồ sơ mới</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onOpenSearchModal(searchQuery)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 text-[#263445] dark:text-slate-200 hover:text-[#155A9C] border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+            title="Mở bảng tra cứu nâng cao toàn hệ thống"
+          >
+            <Search className="w-3.5 h-3.5 text-[#1976D2] dark:text-sky-400" />
+            <span>Tìm nâng cao</span>
+          </button>
         </div>
       </div>
     </header>

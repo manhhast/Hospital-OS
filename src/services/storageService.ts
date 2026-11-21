@@ -114,6 +114,7 @@ class HospitalStorageService {
   private cloudBucketChangeHandler: ((bucketKey: CloudBucketKey) => void) | null = null;
   private isCloudSyncedChecker: (() => boolean) | null = null;
   private dirtyBucketTimestamps: Partial<Record<CloudBucketKey, number>> = {};
+  private sessionAuthenticated = false;
 
   private nextUniqueId(prefix: string): string {
     this.idSeq = (this.idSeq + 1) % 1000000;
@@ -139,6 +140,11 @@ class HospitalStorageService {
   }
 
   constructor() {
+    try {
+      localStorage.removeItem('cls_workhub_is_authenticated');
+    } catch {
+      // ignore storage access errors
+    }
     this.initDefaultData();
     this.loadDirtyBucketTimestamps();
     this.captureCurrentBucketSnapshots();
@@ -1592,12 +1598,11 @@ class HospitalStorageService {
 
   // --- Authentication & Password Management ---
   public isAuthenticated(): boolean {
-    const val = localStorage.getItem('cls_workhub_is_authenticated');
-    return val !== 'false';
+    return this.sessionAuthenticated;
   }
 
   public setAuthenticated(status: boolean): void {
-    localStorage.setItem('cls_workhub_is_authenticated', status ? 'true' : 'false');
+    this.sessionAuthenticated = status;
     this.notify();
   }
 

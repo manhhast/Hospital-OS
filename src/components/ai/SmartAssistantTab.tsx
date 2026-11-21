@@ -20,7 +20,8 @@ import {
   Pencil,
   Plus,
   ExternalLink,
-  X
+  X,
+  Info
 } from 'lucide-react';
 import { SmartAssistantMessage, TelegramBotStatus } from '../../types/aiEcosystem';
 import type { AssistantMemoryCategory, AssistantMemoryItem } from '../../types/hospital';
@@ -88,6 +89,23 @@ const MEMORY_CATEGORY_META: Record<
     badgeCls: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
   }
 };
+
+function formatAssistantSourceLabel(modelUsed?: string): string {
+  if (!modelUsed) return '';
+  if (modelUsed === 'live-data-engine') return 'Tổng hợp dữ liệu trực tiếp';
+  if (modelUsed === 'gemini-4-hydrogen') return 'Gemini 4';
+  if (modelUsed === 'gemini-3.1-flash-lite') return 'Gemini Flash Lite';
+  return modelUsed;
+}
+
+function sanitizeWarningNotice(raw?: string): string {
+  if (!raw) return '';
+  if (raw.includes('"code":503') || raw.includes('UNAVAILABLE') || raw.includes('high demand')) {
+    return 'Máy chủ AI đám mây đang cao điểm quá tải tạm thời (503). Hệ thống đã tự động tổng hợp trực tiếp từ dữ liệu thực tế của khoa.';
+  }
+  const stripped = raw.replace(/\{[\s\S]*\}/g, '').trim();
+  return stripped || 'Hệ thống đang tổng hợp trực tiếp từ dữ liệu thực tế của khoa.';
+}
 
 export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
   onShowToast,
@@ -245,8 +263,16 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
 
   const quickPrompts = [
     {
+      label: 'Lịch nghỉ nhân viên tuần này',
+      query: 'Kiểm tra lịch đăng ký nghỉ của nhân viên tuần hiện tại'
+    },
+    {
       label: 'Số ca gần nhất & Tổng kết tháng',
       query: 'Tổng hợp chi tiết số ca ngày gần nhất và lũy kế các tháng năm nay theo từng bộ phận?'
+    },
+    {
+      label: 'Siêu âm tổng quát 3 ngày gần nhất',
+      query: 'Kiểm tra số liệu siêu âm tổng quát 3 ngày gần nhất'
     },
     {
       label: 'Cảnh báo máy móc & Hiệu chuẩn',
@@ -257,12 +283,8 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
       query: 'Hôm nay có ai trực và những công việc nào đang chờ xử lý hoặc quá hạn?'
     },
     {
-      label: 'Chuẩn TAT & Khuyến cáo Bộ Y tế (Internet)',
+      label: 'Chuẩn TAT & Khuyến cáo Bộ Y tế',
       query: 'So sánh thời gian trả kết quả Troponin khẩn và nội kiểm IQC của khoa với hướng dẫn mới nhất từ Bộ Y tế và ISO 15189?'
-    },
-    {
-      label: 'Dạy AI quy ước giao ban',
-      query: 'Hãy ghi nhớ giúp tôi: khi tóm tắt báo cáo giao ban hàng ngày, luôn nêu tổng số ca trước rồi phân tách rõ BHYT và Nhân dân.'
     }
   ];
 
@@ -337,24 +359,25 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
   return (
     <div className="space-y-4">
       {/* Live Data, Internet Grounding & AI Learning Status Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300/80 dark:border-slate-700 p-4 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 p-4 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+          <div className="w-10 h-10 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shrink-0 shadow-xs">
             <Database className="w-5 h-5" />
           </div>
           <div className="space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Trợ Lý Chuyên Môn CLS (App + Internet + Học Hỏi)
+              <h2 className="text-sm font-bold text-[#263445] dark:text-white">
+                Trợ Lý Chuyên Môn CLS
               </h2>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                Live Sync
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                · Đồng bộ trực tiếp
               </span>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              {liveSnapshot.caseReports.monthlyTotals.length} tháng số liệu ca •{' '}
-              {liveSnapshot.equipment.totalCount} máy móc ({liveSnapshot.equipment.alertItems.length} cảnh báo) •{' '}
-              {liveSnapshot.rooms.roomsCount} phòng • {liveSnapshot.staff.totalCount} nhân sự •{' '}
+            <p className="text-xs text-[#718096] dark:text-slate-300 tabular-nums">
+              {liveSnapshot.caseReports.monthlyTotals.length} tháng số liệu ca ·{' '}
+              {liveSnapshot.equipment.totalCount} máy móc ({liveSnapshot.equipment.alertItems.length} cảnh báo) ·{' '}
+              {liveSnapshot.rooms.roomsCount} phòng · {liveSnapshot.staff.totalCount} nhân sự (
+              {liveSnapshot.staff.leaveRequests?.length || 0} đơn nghỉ) ·{' '}
               {liveSnapshot.documents.totalCount} SOP/ISO
             </p>
           </div>
@@ -364,10 +387,10 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
           <button
             type="button"
             onClick={() => void handleToggleWebSearch()}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
               webSearchEnabled
                 ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                : 'bg-[#F4F7FB] dark:bg-slate-800 border-[#DFE7F0] dark:border-slate-700 text-[#718096] dark:text-slate-300'
             }`}
             title="Bật/tắt tra cứu Internet qua Google Search"
           >
@@ -378,10 +401,10 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
           <button
             type="button"
             onClick={() => setShowMemoryPanel((prev) => !prev)}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
               showMemoryPanel
-                ? 'bg-indigo-600 border-indigo-600 text-white'
-                : 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
+                ? 'bg-[#1976D2] border-[#1976D2] text-white'
+                : 'bg-[#EAF4FF] dark:bg-blue-950/60 border-[#1976D2]/30 dark:border-blue-800 text-[#155A9C] dark:text-blue-300 hover:bg-[#DCEEFF] dark:hover:bg-blue-900/50'
             }`}
           >
             <Brain className="w-3.5 h-3.5" />
@@ -394,9 +417,9 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
             <button
               type="button"
               onClick={() => onNavigateModule?.('telegram')}
-              className="px-3 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-xs font-semibold text-sky-800 dark:text-sky-200 flex items-center gap-1.5 cursor-pointer hover:bg-sky-100 dark:hover:bg-sky-900/50"
+              className="px-3 py-1.5 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/60 border border-[#1976D2]/30 dark:border-blue-800 text-xs font-semibold text-[#155A9C] dark:text-blue-200 flex items-center gap-1.5 cursor-pointer hover:bg-[#DCEEFF] dark:hover:bg-blue-900/50"
             >
-              <MessageCircle className="w-3.5 h-3.5 text-sky-600" />
+              <MessageCircle className="w-3.5 h-3.5 text-[#1976D2]" />
               <span>
                 @{telegramStatus.botUsername || 'Bot'} ({telegramStatus.totalAnswered})
               </span>
@@ -405,10 +428,10 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
             <button
               type="button"
               onClick={() => onNavigateModule?.('telegram')}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                 telegramStatus?.conflictDetected
                   ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50'
-                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                  : 'bg-[#F4F7FB] dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200'
               }`}
             >
               <Settings className="w-3.5 h-3.5" />
@@ -420,7 +443,7 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
             type="button"
             onClick={() => void refreshContextAndTelegram(true)}
             disabled={isSyncing}
-            className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/60 hover:bg-[#DCEEFF] dark:hover:bg-blue-900/60 border border-[#1976D2]/30 dark:border-blue-800 text-xs font-bold text-[#155A9C] dark:text-blue-300 flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>Đồng bộ</span>
@@ -430,7 +453,7 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
             type="button"
             onClick={handleResetChat}
             title="Làm mới cuộc hội thoại"
-            className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg bg-[#F4F7FB] dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-[#DFE7F0] dark:border-slate-700 text-[#718096] hover:text-[#263445] dark:hover:text-white transition-colors cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -558,8 +581,8 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
       </div>
 
       {/* Main Chat Window */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300/80 dark:border-slate-700 shadow-sm flex flex-col h-[580px]">
-        <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 custom-scrollbar">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs flex flex-col h-[580px]">
+        <div className="flex-1 p-4 md:p-5 overflow-y-auto space-y-4 custom-scrollbar">
           {messages.map((msg) => {
             const isUser = msg.sender === 'user';
             return (
@@ -568,35 +591,41 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
                 className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
               >
                 {!isUser && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                     <Bot className="w-4 h-4" />
                   </div>
                 )}
 
                 <div
-                  className={`max-w-3xl min-w-0 rounded-2xl p-4 space-y-3 ${
+                  className={`max-w-3xl min-w-0 rounded-xl p-4 space-y-3 ${
                     isUser
-                      ? 'bg-blue-600 text-white rounded-tr-none shadow-sm'
-                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-tl-none'
+                      ? 'bg-[#1976D2] text-white rounded-tr-none shadow-xs'
+                      : 'bg-[#F4F7FB] dark:bg-slate-800/80 text-[#263445] dark:text-slate-100 border border-[#DFE7F0] dark:border-slate-700 rounded-tl-none'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4 pb-1.5 border-b border-black/10 dark:border-white/10 text-[11px]">
                     <span className="font-bold opacity-90">
                       {isUser ? 'Bạn' : 'Trợ Lý Chuyên Môn CLS'}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 text-[11px]">
                       {!isUser && msg.usedWebSearch && (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1">
-                          <Globe className="w-2.5 h-2.5" />
-                          Internet
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1">
+                          <Globe className="w-3 h-3" />
+                          <span>Internet</span>
+                        </span>
+                      )}
+                      {!isUser && msg.usedWebSearch && msg.modelUsed && (
+                        <span aria-hidden="true" className="opacity-40">·</span>
+                      )}
+                      {!isUser && msg.modelUsed && (
+                        <span className="font-medium text-slate-500 dark:text-slate-400">
+                          {formatAssistantSourceLabel(msg.modelUsed)}
                         </span>
                       )}
                       {!isUser && msg.modelUsed && (
-                        <span className="px-1.5 py-0.5 rounded bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-500">
-                          {msg.modelUsed}
-                        </span>
+                        <span aria-hidden="true" className="opacity-40">·</span>
                       )}
-                      <span className="opacity-65">{msg.timestamp}</span>
+                      <span className="opacity-70 tabular-nums">{msg.timestamp}</span>
                       {!isUser && (
                         <button
                           type="button"
@@ -615,9 +644,9 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
                   </div>
 
                   {msg.aiWarning && (
-                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-2">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                      <span>{msg.aiWarning}</span>
+                    <div className="px-3 py-2 rounded-xl bg-slate-100/90 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 flex items-start gap-2">
+                      <Info className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                      <span>{sanitizeWarningNotice(msg.aiWarning)}</span>
                     </div>
                   )}
 
@@ -643,7 +672,7 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
                           <div className="text-[10px] font-semibold opacity-80 truncate">
                             {m.label}
                           </div>
-                          <div className="text-sm font-black mt-0.5 truncate">{m.value}</div>
+                          <div className="text-sm font-black mt-0.5 truncate tabular-nums">{m.value}</div>
                         </div>
                       ))}
                     </div>
@@ -797,7 +826,7 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
                 </div>
 
                 {isUser && (
-                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                     <User className="w-4 h-4" />
                   </div>
                 )}
@@ -807,11 +836,11 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
 
           {isLoading && (
             <div className="flex gap-3 justify-start items-center">
-              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shrink-0">
                 <Bot className="w-4 h-4" />
               </div>
-              <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+              <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800 rounded-xl rounded-tl-none border border-[#DFE7F0] dark:border-slate-700 flex items-center gap-2 text-xs text-[#718096] dark:text-slate-300">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1976D2]" />
                 <span>
                   {webSearchEnabled
                     ? 'Đang phân tích dữ liệu khoa & tra cứu tri thức Internet...'
@@ -824,7 +853,7 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
         </div>
 
         {/* Input Form */}
-        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 rounded-b-2xl">
+        <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 border-t border-[#DFE7F0] dark:border-slate-800 rounded-b-xl">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -837,12 +866,12 @@ export const SmartAssistantTab: React.FC<SmartAssistantTabProps> = ({
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
               placeholder="Hỏi bất kỳ điều gì từ số liệu ngày/tháng, máy móc, lịch trực đến kiến thức y khoa Internet hoặc dạy AI ghi nhớ..."
-              className="flex-1 bg-white dark:bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition"
+              className="flex-1 bg-white dark:bg-slate-900 px-4 py-2.5 rounded-lg border border-[#DFE7F0] dark:border-slate-700 text-xs sm:text-sm font-medium text-[#263445] dark:text-slate-100 placeholder-slate-400 outline-none focus:border-[#1976D2] focus:ring-2 focus:ring-[#1976D2]/20 transition"
             />
             <button
               type="submit"
               disabled={!inputQuery.trim() || isLoading}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow-md shadow-blue-600/20 flex items-center gap-1.5 shrink-0 cursor-pointer"
+              className="px-4 py-2.5 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 text-white text-xs sm:text-sm font-bold rounded-lg transition shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Send className="w-4 h-4" />
               <span>Gửi câu hỏi</span>

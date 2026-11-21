@@ -443,15 +443,15 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+    <div className="space-y-4 pb-8 animate-in fade-in duration-200">
 
       {/* ===================== GOOGLE DRIVE STATUS & ACCESS POLICY BAR ===================== */}
-      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-emerald-50/80 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 rounded-3xl p-4 sm:p-5 border border-blue-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
 
         {/* Left: Drive Connection Info */}
         <div className="flex items-start sm:items-center space-x-3.5 min-w-0">
-          <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 shadow-md border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0">
-            <svg className="w-7 h-7" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+          <div className="w-11 h-11 rounded-xl bg-[#EAF4FF] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 flex items-center justify-center shrink-0">
+            <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
               <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
               <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44c-.8 1.4-1.2 2.95-1.2 4.5h27.5z" fill="#00ac47"/>
               <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
@@ -463,28 +463,28 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
 
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100">
+              <span className="font-bold text-sm sm:text-base text-[#263445] dark:text-slate-100">
                 Kho Hồ Sơ & Quy Trình trên Google Drive
               </span>
               {hasWriteSession ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>Google: {driveAuth.userEmail}</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  <Globe className="w-3.5 h-3.5" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800">
+                  <Globe className="w-3.5 h-3.5 text-[#1976D2]" />
                   <span>Chế độ Xem & Tải công khai</span>
                 </span>
               )}
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+            <p className="text-xs text-[#718096] dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
               <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
                 {documents.length} tài liệu ({realDriveCount} tệp trên Drive)
               </span>
               <span>•</span>
-              <span className="text-blue-700 dark:text-blue-400 font-semibold">
+              <span className="text-[#1976D2] dark:text-blue-400 font-semibold">
                 Mọi người có thể Xem trước &amp; Tải về · Cần đăng nhập Google để Tải lên hoặc Xóa
               </span>
             </p>
@@ -515,10 +515,10 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
           {/* Diagnostic Test Button */}
           <button
             onClick={() => setIsDriveDiagOpen(true)}
-            className="px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl text-xs flex items-center gap-2 transition-all border border-indigo-200 dark:border-indigo-800 shadow-2xs hover:shadow-xs"
+            className="px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 text-[#1976D2] dark:text-blue-400 font-bold rounded-lg text-xs flex items-center gap-2 transition-colors border border-[#DFE7F0] hover:border-[#1976D2]/40 dark:border-slate-700"
             title="Kiểm tra kết nối Google Drive"
           >
-            <HardDrive className="w-4 h-4 text-indigo-500" />
+            <HardDrive className="w-4 h-4 text-[#1976D2]" />
             <span>Kiểm tra kết nối Drive</span>
           </button>
 
@@ -527,7 +527,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
             href={driveFolderUrl}
             target="_blank"
             rel="noreferrer"
-            className="p-2 text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+            className="p-2 text-[#718096] hover:text-[#1976D2] dark:text-slate-300 dark:hover:text-blue-400 hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-lg transition-colors border border-[#DFE7F0] dark:border-slate-700"
             title="Mở thư mục lưu trữ trên Google Drive trong tab mới"
           >
             <ExternalLink className="w-4 h-4" />
@@ -536,24 +536,24 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="relative w-full md:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#718096]" />
             <input
               type="text"
               placeholder="Tìm tên hồ sơ, từ khóa, người tạo..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100 focus:outline-none focus:border-[#1976D2]"
             />
           </div>
 
-          <div className="flex items-center space-x-3 overflow-x-auto text-xs">
+          <div className="flex items-center space-x-2.5 overflow-x-auto text-xs">
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+              className="px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-200 focus:outline-none focus:border-[#1976D2]"
             >
               <option value="ALL">Tất cả loại tài liệu</option>
               <option value="Quy trình SOP">Quy trình SOP</option>
@@ -568,7 +568,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
             <select
               value={selectedExtension}
               onChange={(e) => setSelectedExtension(e.target.value)}
-              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+              className="px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-200 focus:outline-none focus:border-[#1976D2]"
             >
               <option value="ALL">Tất cả định dạng</option>
               <option value="PDF">PDF</option>
@@ -585,7 +585,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
             <button
               type="button"
               onClick={handleOpenUpload}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold rounded-xl flex items-center gap-1.5 shrink-0 transition-all shadow-xs"
+              className="px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] active:scale-95 text-white font-semibold rounded-lg flex items-center gap-1.5 shrink-0 transition-all shadow-2xs"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>Tải hồ sơ lên Drive</span>
@@ -595,16 +595,16 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       </div>
 
       {/* Documents Grid View */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
         {filteredDocs.length === 0 ? (
-          <div className="col-span-full text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <div className="col-span-full text-center py-14 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800">
             <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h4 className="text-base font-bold text-slate-700 dark:text-slate-300">Không có hồ sơ nào</h4>
-            <p className="text-xs text-slate-400 mt-1">Hãy tải tài liệu đầu tiên lên hệ thống Google Drive.</p>
+            <h4 className="text-base font-bold text-[#263445] dark:text-slate-300">Không có hồ sơ nào</h4>
+            <p className="text-xs text-[#718096] mt-1">Hãy tải tài liệu đầu tiên lên hệ thống Google Drive.</p>
             <button
               type="button"
               onClick={handleOpenUpload}
-              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs"
+              className="mt-4 px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs"
             >
               <Upload className="w-3.5 h-3.5" />
               <span>Tải hồ sơ lên Google Drive ngay</span>
@@ -617,21 +617,21 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
             return (
               <div
                 key={doc.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3 relative group"
+                className="bg-white dark:bg-slate-900 rounded-xl p-3.5 border border-[#DFE7F0] dark:border-slate-800 shadow-2xs hover:border-[#1976D2]/50 transition-all flex flex-col justify-between space-y-3 relative group"
               >
                 {/* Top info */}
                 <div>
                   <div className="flex items-start justify-between">
-                    <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                    <div className="p-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0]/80 dark:border-slate-700 rounded-lg">
                       {getExtensionIcon(doc.fileExtension)}
                     </div>
                     <div className="flex flex-col items-end space-y-1">
                       <div className="flex items-center gap-1">
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 text-[10px] font-bold rounded-md">
+                        <span className="px-2 py-0.5 bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950/60 dark:text-blue-300 text-[10px] font-bold rounded">
                           {doc.version}
                         </span>
                         {doc.isExpired && (
-                          <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-md">
+                          <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded">
                             Hết hạn
                           </span>
                         )}
@@ -642,7 +642,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                           Google Drive
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-[#F4F7FB] text-[#718096] dark:bg-slate-800 dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700">
                           Mẫu hệ thống
                         </span>
                       )}
@@ -651,26 +651,26 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
 
                   <h4
                     onClick={() => setPreviewDoc(doc)}
-                    className="font-bold text-sm text-slate-800 dark:text-slate-100 mt-3 line-clamp-2 break-all hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer"
+                    className="font-bold text-sm text-[#263445] dark:text-slate-100 mt-3 line-clamp-2 break-all hover:text-[#1976D2] dark:hover:text-blue-400 cursor-pointer"
                     title={doc.title}
                   >
                     {doc.title}
                   </h4>
 
-                  <p className="text-xs text-slate-400 mt-1">{doc.docType} | {(doc.fileSize / (1024 * 1024)).toFixed(1)} MB</p>
+                  <p className="text-xs text-[#718096] mt-1">{doc.docType} | {(doc.fileSize / (1024 * 1024)).toFixed(1)} MB</p>
 
                   {/* Tags */}
                   <div className="flex flex-wrap gap-1 mt-2">
                     {doc.tags.map((tag, idx) => (
-                      <span key={idx} className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] rounded-md flex items-center">
-                        <Tag className="w-2.5 h-2.5 mr-1 text-slate-400" /> {tag}
+                      <span key={idx} className="px-2 py-0.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0]/70 dark:border-slate-700 text-[#718096] dark:text-slate-300 text-[10px] rounded flex items-center">
+                        <Tag className="w-2.5 h-2.5 mr-1 text-[#718096]" /> {tag}
                       </span>
                     ))}
                   </div>
                 </div>
 
                 {/* Bottom Actions */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <div className="pt-2.5 border-t border-[#DFE7F0]/80 dark:border-slate-800 flex items-center justify-between text-xs text-[#718096]">
                   <span className="truncate max-w-[85px]" title={doc.owner}>{doc.owner}</span>
 
                   <div className="flex items-center space-x-1">
@@ -678,7 +678,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setPreviewDoc(doc)}
-                      className="p-1.5 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                      className="p-1.5 hover:text-[#1976D2] hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-md transition-colors"
                       title="Xem trước tài liệu"
                     >
                       <Eye className="w-4 h-4" />
@@ -688,7 +688,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                     <button
                       type="button"
                       onClick={() => void handleDownloadDoc(doc)}
-                      className="p-1.5 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                      className="p-1.5 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded-md transition-colors"
                       title="Tải tài liệu về máy (không cần đăng nhập Google)"
                     >
                       <Download className="w-4 h-4" />
@@ -699,7 +699,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                         href={googleDriveService.getViewUrl(doc)}
                         target="_blank"
                         rel="noreferrer"
-                        className="p-1.5 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                        className="p-1.5 hover:text-[#1976D2] hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-md transition-colors"
                         title="Mở tệp trực tiếp trên Google Drive"
                       >
                         <ExternalLink className="w-4 h-4" />
@@ -709,7 +709,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setVersionDoc(doc)}
-                      className="p-1.5 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                      className="p-1.5 hover:text-[#155A9C] hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-md transition-colors"
                       title="Lịch sử phiên bản"
                     >
                       <History className="w-4 h-4" />
@@ -720,7 +720,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                       type="button"
                       disabled={isDeleting}
                       onClick={() => handleRequestDeleteDoc(doc)}
-                      className="p-1.5 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
+                      className="p-1.5 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-md transition-colors disabled:opacity-50"
                       title={hasWriteSession ? 'Xóa tài liệu trên Google Drive' : 'Cần đăng nhập Google để xóa tài liệu'}
                     >
                       {isDeleting ? (
@@ -740,21 +740,21 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       {/* UPLOAD MODAL (GATED BY GOOGLE SIGN-IN) */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-lg w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-lg bg-[#EAF4FF] dark:bg-blue-900/50 text-[#1976D2] dark:text-blue-400 flex items-center justify-center font-bold">
                   <Upload className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Tải hồ sơ lên Google Drive</h3>
-                  <p className="text-[11px] text-slate-500">Lưu trữ an toàn trên Google Drive Khoa Cận Lâm Sàng</p>
+                  <h3 className="text-base font-bold text-[#263445] dark:text-slate-100">Tải hồ sơ lên Google Drive</h3>
+                  <p className="text-[11px] text-[#718096]">Lưu trữ an toàn trên Google Drive Khoa Cận Lâm Sàng</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-[#F4F7FB] dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -838,20 +838,20 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                       processSelectedFile(file);
                     }
                   }}
-                  className={`border-2 border-dashed rounded-2xl p-6 text-center space-y-3 cursor-pointer transition-all duration-200 ${
+                  className={`border-2 border-dashed rounded-xl p-5 text-center space-y-3 cursor-pointer transition-all duration-200 ${
                     isDragging
-                      ? 'border-blue-500 bg-blue-100/70 dark:bg-blue-900/40 ring-4 ring-blue-500/20 scale-[1.01]'
-                      : 'border-blue-200 hover:border-blue-500 bg-blue-50/50 hover:bg-blue-50/80 dark:border-slate-700 dark:bg-slate-800/40 dark:hover:bg-slate-800/60'
+                      ? 'border-[#1976D2] bg-[#EAF4FF] dark:bg-blue-900/40 ring-4 ring-[#1976D2]/20 scale-[1.01]'
+                      : 'border-[#1976D2]/30 hover:border-[#1976D2] bg-[#EAF4FF]/40 hover:bg-[#EAF4FF]/70 dark:border-slate-700 dark:bg-slate-800/40 dark:hover:bg-slate-800/60'
                   }`}
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto shadow-xs">
-                    <Upload className={`w-6 h-6 transition-transform duration-200 ${isDragging ? 'scale-125 -translate-y-1' : ''}`} />
+                  <div className="w-11 h-11 rounded-xl bg-[#EAF4FF] dark:bg-blue-900/50 text-[#1976D2] dark:text-blue-400 flex items-center justify-center mx-auto shadow-2xs">
+                    <Upload className={`w-5 h-5 transition-transform duration-200 ${isDragging ? 'scale-125 -translate-y-1' : ''}`} />
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-slate-800 dark:text-slate-100">
-                      Kéo thả file vào đây hoặc <span className="text-blue-600 dark:text-blue-400 underline">bấm chọn tệp</span>
+                    <p className="font-bold text-sm text-[#263445] dark:text-slate-100">
+                      Kéo thả file vào đây hoặc <span className="text-[#1976D2] dark:text-blue-400 underline">bấm chọn tệp</span>
                     </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    <p className="text-[11px] text-[#718096] dark:text-slate-400 mt-1">
                       Hỗ trợ: PDF, DOCX, XLSX, PPTX, PNG, JPG, ZIP, MP4, MP3
                     </p>
                   </div>
@@ -862,7 +862,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                         e.stopPropagation();
                         fileInputRef.current?.click();
                       }}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold rounded-xl text-xs transition-all shadow-xs inline-flex items-center gap-1.5"
+                      className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] active:scale-95 text-white font-semibold rounded-lg text-xs transition-all shadow-2xs inline-flex items-center gap-1.5"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Chọn tệp từ máy tính</span>
@@ -1011,19 +1011,19 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   disabled={isUploadingToDrive}
                   onClick={handleCloseModal}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-[#263445] dark:text-slate-300 hover:bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={!hasWriteSession || !selectedFile || isUploadingToDrive}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-2xs transition-all flex items-center gap-1.5"
                 >
                   {isUploadingToDrive ? (
                     <>
@@ -1046,17 +1046,17 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       {/* GOOGLE AUTH GATE MODAL WHEN DELETING WITHOUT GOOGLE LOGIN */}
       {pendingDeleteDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-md w-full p-5 space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                  <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">
                     Cần đăng nhập Google để Xóa tài liệu
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="text-[11px] text-[#718096] dark:text-slate-400 mt-0.5">
                     Bảo vệ dữ liệu Google Drive trước khi xóa
                   </p>
                 </div>
@@ -1064,21 +1064,21 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
               <button
                 type="button"
                 onClick={() => setPendingDeleteDoc(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                className="text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 p-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Để xóa tài liệu <strong className="text-slate-800 dark:text-slate-100">"{pendingDeleteDoc.title}"</strong> khỏi Google Drive, bạn cần đăng nhập bằng tài khoản Google có quyền quản lý tệp.
+            <p className="text-xs text-[#718096] dark:text-slate-300 leading-relaxed">
+              Để xóa tài liệu <strong className="text-[#263445] dark:text-slate-100">"{pendingDeleteDoc.title}"</strong> khỏi Google Drive, bạn cần đăng nhập bằng tài khoản Google có quyền quản lý tệp.
             </p>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#DFE7F0] dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setPendingDeleteDoc(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-[#263445] dark:text-slate-300 hover:bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 dark:hover:bg-slate-800 rounded-lg"
               >
                 Hủy
               </button>
@@ -1121,21 +1121,21 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       {/* VERSION HISTORY MODAL */}
       {versionDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Lịch sử phiên bản {versionDoc.title}</h3>
-              <button onClick={() => setVersionDoc(null)} className="text-slate-400 hover:text-slate-600 p-1">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-lg w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-[#263445] dark:text-slate-100">Lịch sử phiên bản {versionDoc.title}</h3>
+              <button onClick={() => setVersionDoc(null)} className="text-[#718096] hover:text-[#263445] p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 max-h-60 overflow-y-auto">
+            <div className="space-y-2.5 max-h-60 overflow-y-auto">
               {versionDoc.versionHistory.map((ver, idx) => (
-                <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                <div key={idx} className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between text-xs">
                   <div>
-                    <span className="font-bold text-blue-600 dark:text-blue-400">{ver.version}</span>
-                    <p className="text-slate-600 dark:text-slate-300 mt-0.5">{ver.note}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Bởi {ver.updatedBy} lúc {ver.updatedAt}</p>
+                    <span className="font-bold text-[#1976D2] dark:text-blue-400">{ver.version}</span>
+                    <p className="text-[#263445] dark:text-slate-300 mt-0.5">{ver.note}</p>
+                    <p className="text-[10px] text-[#718096] mt-0.5">Bởi {ver.updatedBy} lúc {ver.updatedAt}</p>
                   </div>
                 </div>
               ))}
@@ -1143,7 +1143,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
 
             <button
               onClick={handleAddVersion}
-              className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs rounded-xl transition-colors"
+              className="w-full py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-semibold text-xs rounded-lg transition-colors"
             >
               + Tạo phiên bản mới ({(parseFloat(versionDoc.version.replace('v', '')) + 0.1).toFixed(1)})
             </button>

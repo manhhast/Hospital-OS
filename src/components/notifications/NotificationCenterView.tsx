@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Bell, Send, BellRing, Clock, Wrench, CheckCircle2, Trash2 } from 'lucide-react';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { ScheduledAlertsPanel } from './ScheduledAlertsPanel';
 import { NotificationLog, NotificationChannel, EquipmentItem, TaskItem } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import {
@@ -149,19 +150,25 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+    <div className="space-y-4 pb-8 animate-in fade-in duration-200 w-full">
+      {/* Fixed-Time Scheduled Alerts & Daily Telegram Briefings (07:00 · 12:45 · 17:00 VN) */}
+      <ScheduledAlertsPanel
+        onShowToast={onShowToast}
+        onNotificationsUpdated={onNotificationsUpdated}
+      />
+
       {/* Auto-Detected Equipment & Task Reminder Queue */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
           <div className="flex items-center space-x-2.5">
-            <div className="p-2 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 rounded-xl">
-              <BellRing className="w-5 h-5" />
+            <div className="p-2 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 rounded-lg">
+              <BellRing className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                Hàng đợi Cảnh báo Thiết bị & Nhắc việc tự động
+              <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">
+                Hàng đợi Cảnh báo Thiết bị &amp; Nhắc việc tự động
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-[#718096] dark:text-slate-400">
                 Phát hiện <strong className="text-rose-600 tabular-nums">{eqCompliance.alerts.length}</strong> mốc thiết bị ≤30 ngày và{' '}
                 <strong className="text-amber-600 tabular-nums">{taskReminders.alerts.length}</strong> công việc cần nhắc (≤3 ngày)
               </p>
@@ -171,7 +178,7 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
           <button
             type="button"
             onClick={handleBatchAutoDispatch}
-            className="flex items-center space-x-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+            className="flex items-center space-x-2 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer shrink-0"
           >
             <BellRing className="w-4 h-4" />
             <span>
@@ -291,16 +298,16 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
       </div>
 
       {/* Send Notification Box */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-        <div className="flex items-center space-x-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <Bell className="w-5 h-5 text-blue-600" />
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Gửi thông báo đa kênh (Email / Telegram / In-App)</h3>
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex items-center space-x-2 border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+          <Bell className="w-4 h-4 text-[#1976D2]" />
+          <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">Gửi thông báo đa kênh (Email / Telegram / In-App)</h3>
         </div>
 
         <form onSubmit={handleSendNotification} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Người nhận</label>
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Người nhận</label>
               <select
                 value={recipient}
                 onChange={(e) => {
@@ -308,7 +315,7 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
                   setRecipient(nextName);
                   setTargetAddress(resolveAddressForUser(nextName, channel));
                 }}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100"
               >
                 {users.map((u) => (
                   <option key={u.id} value={u.name}>
@@ -322,7 +329,7 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Kênh thông báo</label>
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Kênh thông báo</label>
               <select
                 value={channel}
                 onChange={(e) => {
@@ -330,7 +337,7 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
                   setChannel(nextChannel);
                   setTargetAddress(resolveAddressForUser(recipient, nextChannel));
                 }}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100"
               >
                 <option value="Telegram">Telegram Bot</option>
                 <option value="Email">Gmail Email</option>
@@ -339,42 +346,42 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Địa chỉ nhận (Email/ChatID)</label>
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Địa chỉ nhận (Email/ChatID)</label>
               <input
                 type="text"
                 value={targetAddress}
                 onChange={(e) => setTargetAddress(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+                className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100"
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Tiêu đề thông báo</label>
+            <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Tiêu đề thông báo</label>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+              className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100"
             />
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Nội dung chi tiết</label>
+            <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">Nội dung chi tiết</label>
             <textarea
               rows={3}
               required
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
+              className="w-full px-3 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-slate-100"
             ></textarea>
           </div>
 
           <div className="flex justify-end">
             <button
               type="submit"
-              className="flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+              className="flex items-center space-x-2 px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
             >
               <Send className="w-4 h-4" />
               <span>Phát thông báo ngay</span>
@@ -384,16 +391,16 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
       </div>
 
       {/* Notification Logs History Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 p-5 shadow-xs space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+          <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100">
             Lịch sử phát thông báo ({notifications.length})
           </h3>
           <button
             type="button"
             disabled={notifications.length === 0}
             onClick={() => setIsConfirmClearOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold transition-colors cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Xóa lịch sử thông báo</span>
@@ -401,46 +408,46 @@ export const NotificationCenterView: React.FC<NotificationCenterViewProps> = ({
         </div>
 
         {notifications.length === 0 ? (
-          <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
+          <div className="p-6 text-center text-xs text-[#718096] bg-[#F4F7FB] dark:bg-slate-800/40 rounded-lg border border-[#DFE7F0] dark:border-slate-800">
             Chưa có lịch sử phát thông báo nào.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200">
-              <thead className="bg-slate-50 dark:bg-slate-800 uppercase font-bold text-[10px] text-slate-400">
+            <table className="w-full text-left text-xs text-[#263445] dark:text-slate-200">
+              <thead className="bg-[#F4F7FB] dark:bg-slate-800 uppercase font-bold text-[10px] text-[#718096]">
                 <tr>
-                  <th className="p-3">Mã</th>
-                  <th className="p-3">Người nhận</th>
-                  <th className="p-3">Kênh</th>
-                  <th className="p-3">Tiêu đề</th>
-                  <th className="p-3">Thời gian</th>
-                  <th className="p-3">Trạng thái</th>
-                  <th className="p-3 text-right">Thao tác</th>
+                  <th className="p-2.5">Mã</th>
+                  <th className="p-2.5">Người nhận</th>
+                  <th className="p-2.5">Kênh</th>
+                  <th className="p-2.5">Tiêu đề</th>
+                  <th className="p-2.5">Thời gian</th>
+                  <th className="p-2.5">Trạng thái</th>
+                  <th className="p-2.5 text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-800">
                 {notifications.map((log, idx) => (
-                  <tr key={`${log.id}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                    <td className="p-3 font-mono text-slate-400">{log.id}</td>
-                    <td className="p-3 font-medium">{log.recipient}</td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold rounded-md">
+                  <tr key={`${log.id}-${idx}`} className="hover:bg-[#EAF4FF]/40 dark:hover:bg-slate-800/40">
+                    <td className="p-2.5 font-mono text-[#718096]">{log.id}</td>
+                    <td className="p-2.5 font-medium">{log.recipient}</td>
+                    <td className="p-2.5">
+                      <span className="px-2 py-0.5 bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950/60 dark:text-blue-300 font-semibold rounded">
                         {log.channel}
                       </span>
                     </td>
-                    <td className="p-3">{log.title}</td>
-                    <td className="p-3 text-slate-400 tabular-nums">{log.sentAt}</td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold rounded-md">
+                    <td className="p-2.5">{log.title}</td>
+                    <td className="p-2.5 text-[#718096] tabular-nums">{log.sentAt}</td>
+                    <td className="p-2.5">
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold rounded">
                         {log.status}
                       </span>
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="p-2.5 text-right">
                       <button
                         type="button"
                         onClick={() => handleDeleteNotification(log.id)}
                         title="Xóa thông báo này"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-[#718096] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

@@ -72,18 +72,18 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Sub-header & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#F4F7FB] dark:bg-slate-800/40 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800">
         <div>
-          <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="font-bold text-[#263445] dark:text-white text-sm flex items-center gap-2">
+            <Users className="w-4 h-4 text-[#1976D2] dark:text-blue-400" />
             <span>Nhân Sự Công Tác Tại Phòng / Bộ Phận</span>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 border border-[#1976D2]/20 dark:border-blue-800">
               {assignedStaff.length} người
             </span>
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5">
             Dữ liệu nhân sự được liên kết trực tiếp với module <strong>Nhân Sự & Đào Tạo</strong>. Mọi thay đổi điều chuyển sẽ cập nhật hồ sơ công tác.
           </p>
         </div>
@@ -94,13 +94,13 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
               setStaffSearchTerm('');
               setShowAssignModal(true);
             }}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm shrink-0"
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-all shadow-xs shrink-0"
           >
             <UserPlus className="w-4 h-4" /> Gán / Điều Chuyển Nhân Sự Vào Phòng
           </button>
         ) : (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold shrink-0">
-            <Shield className="w-3.5 h-3.5 text-slate-400" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 text-[#718096] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700 text-xs font-semibold shrink-0">
+            <Shield className="w-3.5 h-3.5 text-[#718096]" />
             {scopeHint || 'Chỉ xem'}
           </span>
         )}
@@ -108,12 +108,12 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
 
       {/* Staff List Grid */}
       {assignedStaff.length === 0 ? (
-        <div className="p-10 text-center bg-slate-50/50 dark:bg-slate-800/20 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-500 flex items-center justify-center mx-auto">
+        <div className="p-8 text-center bg-[#F4F7FB] dark:bg-slate-800/20 rounded-xl border-2 border-dashed border-[#DFE7F0] dark:border-slate-800 space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-[#EAF4FF] dark:bg-blue-950/60 text-[#1976D2] flex items-center justify-center mx-auto">
             <Users className="w-6 h-6" />
           </div>
-          <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">Chưa có nhân viên nào được phân công tại phòng này</h4>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+          <h4 className="font-bold text-[#263445] dark:text-slate-200 text-sm">Chưa có nhân viên nào được phân công tại phòng này</h4>
+          <p className="text-xs text-[#718096] dark:text-slate-400 max-w-md mx-auto">
             {canManage
               ? 'Nhấn vào nút "Gán / Điều Chuyển Nhân Sự Vào Phòng" ở trên để bổ sung Bác sĩ, Kỹ thuật viên hoặc Điều dưỡng từ danh sách hồ sơ nhân sự của Khoa.'
               : 'Bạn chỉ có quyền xem danh sách nhân sự tại phòng này.'}
@@ -121,14 +121,14 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
           {canManage && (
             <button
               onClick={() => setShowAssignModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-all shadow-xs"
             >
               <UserPlus className="w-4 h-4" /> Chọn nhân viên ngay
             </button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {assignedStaff.map(staff => {
             const isManager = room.managerInCharge === staff.fullName;
             const isDeputy = room.deputyManager === staff.fullName;
@@ -136,20 +136,20 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
             return (
               <div
                 key={staff.userId}
-                className={`p-4 rounded-xl border transition-all relative ${
+                className={`p-3.5 rounded-xl border transition-all relative ${
                   isManager
-                    ? 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800'
-                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    ? 'bg-[#EAF4FF]/60 dark:bg-blue-950/30 border-[#1976D2]/40 dark:border-blue-800'
+                    : 'bg-white dark:bg-slate-900 border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2]/30 dark:hover:border-slate-700'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-[#1976D2] text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
                       {staff.fullName.split(' ').pop()?.charAt(0) || 'U'}
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                        <h4 className="font-bold text-[#263445] dark:text-white text-sm">
                           {staff.fullName}
                         </h4>
                         {isManager && (
@@ -158,12 +158,12 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
                           </span>
                         )}
                         {isDeputy && !isManager && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 border border-[#1976D2]/20 dark:border-blue-800">
                             KTV Trưởng
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
+                      <p className="text-xs text-[#1976D2] dark:text-blue-400 font-semibold mt-0.5">
                         {staff.title || 'Cán bộ'} • {staff.specialty || 'Chuyên môn Cận lâm sàng'}
                       </p>
                     </div>
@@ -171,20 +171,20 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
                 </div>
 
                 {/* Contact & Status Details */}
-                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="mt-3 pt-2.5 border-t border-[#DFE7F0] dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px] text-[#718096] dark:text-slate-400">
                   <div className="flex items-center space-x-1.5 truncate">
-                    <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <Phone className="w-3.5 h-3.5 text-[#718096] shrink-0" />
                     <span className="truncate">{staff.phone || 'Chưa cập nhật'}</span>
                   </div>
                   <div className="flex items-center space-x-1.5 truncate">
-                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <Mail className="w-3.5 h-3.5 text-[#718096] shrink-0" />
                     <span className="truncate">{staff.email || 'Chưa cập nhật'}</span>
                   </div>
                 </div>
 
                 {/* Card Action Controls */}
                 {canManage && (
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <div className="mt-2.5 pt-2.5 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between gap-2">
                     <div className="flex items-center space-x-1">
                       {!isManager && (
                         <button
@@ -203,14 +203,14 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
                           setSelectedTargetRoom('');
                         }}
                         title="Điều chuyển nhân viên này sang phòng khác"
-                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-medium"
+                        className="p-1.5 text-[#718096] dark:text-slate-400 hover:text-[#1976D2] dark:hover:text-blue-400 hover:bg-[#EAF4FF] dark:hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-medium"
                       >
                         <ArrowRightLeft className="w-3.5 h-3.5" /> Điều chuyển
                       </button>
                       <button
                         onClick={() => setConfirmRemoveStaff(staff)}
                         title="Gỡ khỏi phòng này (về Chưa phân phòng)"
-                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                        className="p-1.5 text-[#718096] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
                       >
                         <UserMinus className="w-3.5 h-3.5" />
                       </button>
@@ -226,40 +226,40 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
       {/* MODAL 1: Assign Multiple Staff to Room */}
       {showAssignModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+          <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-[#F4F7FB] dark:bg-slate-800/50">
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                <h3 className="font-bold text-[#263445] dark:text-white text-base">
                   Gán Nhân Sự Vào Phòng: {room.name}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-[#718096] dark:text-slate-400">
                   Chọn một hoặc nhiều cán bộ từ danh mục Nhân Sự của Khoa để điều chuyển vào phòng này.
                 </p>
               </div>
               <button
                 onClick={() => setShowAssignModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-1.5 rounded-lg text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="p-4 border-b border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-900">
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#718096]" />
                 <input
                   type="text"
                   placeholder="Tìm kiếm theo họ tên, chức danh, chuyên môn, phòng hiện tại..."
                   value={staffSearchTerm}
                   onChange={e => setStaffSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-9 pr-4 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs text-[#263445] dark:text-white outline-none focus:ring-2 focus:ring-[#1976D2]"
                 />
               </div>
             </div>
 
             <div className="p-4 space-y-2 overflow-y-auto custom-scrollbar flex-1">
               {availableStaff.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400">
+                <div className="p-8 text-center text-xs text-[#718096]">
                   Không tìm thấy nhân viên phù hợp hoặc tất cả nhân sự đã thuộc phòng này.
                 </div>
               ) : (
@@ -269,10 +269,10 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
                     <div
                       key={staff.userId}
                       onClick={() => toggleStaffSelection(staff.userId)}
-                      className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                      className={`p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-all ${
                         isSelected
-                          ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500'
-                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                          ? 'bg-[#EAF4FF] dark:bg-blue-950/40 border-[#1976D2]'
+                          : 'bg-white dark:bg-slate-900 border-[#DFE7F0] dark:border-slate-800 hover:border-[#1976D2]/40 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-center space-x-3 min-w-0">
@@ -280,19 +280,19 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => {}} // handled by parent div click
-                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                          className="w-4 h-4 text-[#1976D2] rounded border-[#DFE7F0] focus:ring-[#1976D2]"
                         />
                         <div className="truncate">
-                          <h5 className="font-bold text-slate-900 dark:text-white text-xs truncate">
+                          <h5 className="font-bold text-[#263445] dark:text-white text-xs truncate">
                             {staff.fullName}
                           </h5>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          <p className="text-[11px] text-[#718096] dark:text-slate-400 truncate">
                             {staff.title || 'Cán bộ'} • {staff.specialty}
                           </p>
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F4F7FB] dark:bg-slate-800 text-[#718096] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700">
                           {staff.room ? `Hiện tại: ${staff.room}` : 'Chưa phân phòng'}
                         </span>
                       </div>
@@ -302,15 +302,15 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
               )}
             </div>
 
-            <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Đã chọn: <strong className="text-blue-600 dark:text-blue-400">{selectedStaffIds.length}</strong> nhân sự
+            <div className="px-5 py-3 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-[#F4F7FB] dark:bg-slate-800/50">
+              <span className="text-xs text-[#718096] dark:text-slate-400 font-medium">
+                Đã chọn: <strong className="text-[#1976D2] dark:text-blue-400">{selectedStaffIds.length}</strong> nhân sự
               </span>
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(false)}
-                  className="px-3.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg"
+                  className="px-3.5 py-1.5 text-xs text-[#718096] dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-medium"
                 >
                   Hủy
                 </button>
@@ -318,7 +318,7 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
                   type="button"
                   disabled={selectedStaffIds.length === 0}
                   onClick={handleBulkAssign}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-all shadow-sm"
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 rounded-lg transition-all shadow-xs"
                 >
                   Gán Vào Phòng Này ({selectedStaffIds.length})
                 </button>
@@ -331,15 +331,15 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
       {/* MODAL 2: Transfer Staff to Another Room */}
       {transferStaffUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4 text-blue-500" />
+          <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-[#F4F7FB] dark:bg-slate-800/50">
+              <h3 className="font-bold text-[#263445] dark:text-white text-sm flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-[#1976D2]" />
                 Điều Chuyển Phòng Công Tác
               </h3>
               <button
                 onClick={() => setTransferStaffUser(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1 rounded-lg text-[#718096] hover:text-[#263445]"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -347,22 +347,22 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
 
             <form onSubmit={handleTransferSubmit} className="p-5 space-y-4">
               <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Nhân sự điều chuyển:</p>
-                <h4 className="font-bold text-slate-900 dark:text-white text-sm mt-0.5">
+                <p className="text-xs text-[#718096] dark:text-slate-400">Nhân sự điều chuyển:</p>
+                <h4 className="font-bold text-[#263445] dark:text-white text-sm mt-0.5">
                   {transferStaffUser.fullName} ({transferStaffUser.title || 'Cán bộ'})
                 </h4>
-                <p className="text-[11px] text-slate-500">Phòng hiện tại: {room.name}</p>
+                <p className="text-[11px] text-[#718096]">Phòng hiện tại: {room.name}</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                   Chọn Phòng / Bộ Phận Đích <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
                   value={selectedTargetRoom}
                   onChange={e => setSelectedTargetRoom(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-3 py-2 text-xs bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none"
                 >
                   <option value="">-- Chọn phòng tiếp nhận --</option>
                   {allRooms.filter(r => r.name !== room.name).map(r => (
@@ -373,18 +373,18 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
                 </select>
               </div>
 
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-2">
+              <div className="pt-3 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setTransferStaffUser(null)}
-                  className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 rounded-lg"
+                  className="px-3.5 py-1.5 text-xs text-[#718096] dark:text-slate-300 hover:bg-[#F4F7FB] border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-medium"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={!selectedTargetRoom}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-all"
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 rounded-lg transition-all"
                 >
                   Xác Nhận Điều Chuyển
                 </button>
@@ -397,18 +397,18 @@ export const RoomStaffTab: React.FC<RoomStaffTabProps> = ({
       {/* MODAL 3: Confirm Remove Staff From Room */}
       {confirmRemoveStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
-            <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+          <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-md p-5 space-y-4">
+            <h3 className="font-bold text-[#263445] dark:text-white text-sm">
               Xác nhận gỡ nhân sự khỏi phòng
             </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Bạn có chắc chắn muốn gỡ nhân viên <strong>"{confirmRemoveStaff.fullName}"</strong> khỏi phòng <strong>"{room.name}"</strong>?
+            <p className="text-xs text-[#718096] dark:text-slate-300 leading-relaxed">
+              Bạn có chắc chắn muốn gỡ nhân viên <strong className="text-[#263445] dark:text-white">"{confirmRemoveStaff.fullName}"</strong> khỏi phòng <strong className="text-[#263445] dark:text-white">"{room.name}"</strong>?
             </p>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setConfirmRemoveStaff(null)}
-                className="px-3.5 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium"
+                className="px-3.5 py-1.5 text-xs text-[#718096] dark:text-slate-300 hover:bg-[#F4F7FB] dark:hover:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-medium"
               >
                 Hủy
               </button>

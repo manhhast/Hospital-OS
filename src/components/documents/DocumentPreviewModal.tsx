@@ -144,31 +144,31 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className={`bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden transition-all duration-200 ${
-        isFullscreen ? 'fixed inset-2 z-50 rounded-2xl' : 'max-w-5xl w-full max-h-[94vh]'
+      <div className={`bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 flex flex-col overflow-hidden transition-all duration-200 ${
+        isFullscreen ? 'fixed inset-2 z-50 rounded-xl' : 'max-w-5xl w-full max-h-[94vh]'
       }`}>
         
         {/* ===================== MODAL TOP BAR ===================== */}
-        <div className="p-3.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/90 shrink-0">
+        <div className="p-3.5 sm:p-4 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between gap-3 bg-[#F4F7FB] dark:bg-slate-900/90 shrink-0">
           
           {/* File Info Left */}
           <div className="flex items-center space-x-3 min-w-0 pr-2">
-            <div className="p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-xs border border-slate-200 dark:border-slate-700 shrink-0">
+            <div className="p-2.5 bg-white dark:bg-slate-800 rounded-lg shadow-xs border border-[#DFE7F0] dark:border-slate-700 shrink-0">
               {doc.fileExtension === 'PDF' ? <FileText className="w-5 h-5 text-rose-500" /> :
-               doc.fileExtension === 'DOCX' ? <FileText className="w-5 h-5 text-blue-500" /> :
+               doc.fileExtension === 'DOCX' ? <FileText className="w-5 h-5 text-[#1976D2]" /> :
                doc.fileExtension === 'XLSX' ? <FileSpreadsheet className="w-5 h-5 text-emerald-500" /> :
                doc.fileExtension === 'PNG' || doc.fileExtension === 'JPG' ? <ImageIcon className="w-5 h-5 text-purple-500" /> :
-               doc.fileExtension === 'MP4' ? <Video className="w-5 h-5 text-indigo-500" /> :
+               doc.fileExtension === 'MP4' ? <Video className="w-5 h-5 text-[#1976D2]" /> :
                doc.fileExtension === 'MP3' ? <Music className="w-5 h-5 text-amber-500" /> :
-               <FileText className="w-5 h-5 text-slate-400" />}
+               <FileText className="w-5 h-5 text-[#718096]" />}
             </div>
 
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.2 rounded">
+                <span className="text-[10px] font-mono font-bold text-[#718096] dark:text-slate-400 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 px-1.5 py-0.2 rounded">
                   {doc.code || doc.id}
                 </span>
-                <span className="px-2 py-0.2 text-[10px] font-bold rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                <span className="px-2 py-0.2 text-[10px] font-bold rounded-md bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 border border-[#1976D2]/20 dark:border-blue-800">
                   {doc.fileExtension}
                 </span>
                 <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-md bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
@@ -180,13 +180,13 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                     Lưu trên Google Drive
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.2 rounded-md border border-slate-200 dark:border-slate-700">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#718096] dark:text-slate-300 bg-white dark:bg-slate-800 px-2 py-0.2 rounded-md border border-[#DFE7F0] dark:border-slate-700">
                     Hồ sơ mẫu hệ thống
                   </span>
                 )}
               </div>
 
-              <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate mt-0.5" title={doc.title}>
+              <h3 className="text-xs sm:text-sm font-bold text-[#263445] dark:text-slate-100 truncate mt-0.5" title={doc.title}>
                 {doc.title}
               </h3>
             </div>
@@ -196,20 +196,20 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
           <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
             
             {/* Zoom Controls (For PDF, Images, Spreadsheets) */}
-            <div className="hidden md:flex items-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-0.5 text-xs">
+            <div className="hidden md:flex items-center bg-white dark:bg-slate-800 rounded-lg border border-[#DFE7F0] dark:border-slate-700 p-0.5 text-xs">
               <button
                 onClick={() => handleZoom(-15)}
-                className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                className="p-1.5 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-md hover:bg-[#F4F7FB] dark:hover:bg-slate-700 transition-colors"
                 title="Thu nhỏ (-15%)"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
-              <span className="px-2 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300">
+              <span className="px-2 font-mono text-[11px] font-bold text-[#263445] dark:text-slate-300">
                 {zoomLevel}%
               </span>
               <button
                 onClick={() => handleZoom(15)}
-                className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                className="p-1.5 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-md hover:bg-[#F4F7FB] dark:hover:bg-slate-700 transition-colors"
                 title="Phóng to (+15%)"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
@@ -219,7 +219,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
             {/* Print Button */}
             <button
               onClick={handlePrint}
-              className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="p-2 text-[#718096] dark:text-slate-300 hover:text-[#1976D2] hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
               title="In tài liệu y tế"
             >
               <Printer className="w-4 h-4" />
@@ -228,7 +228,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
             {/* Download Button (Open to all users) */}
             <button
               onClick={() => void handleDownload()}
-              className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="p-2 text-[#718096] dark:text-slate-300 hover:text-[#1976D2] hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
               title="Tải tệp về máy tính (không cần đăng nhập Google)"
             >
               <Download className="w-4 h-4" />
@@ -238,7 +238,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
             {hasRealDriveId && (
               <button
                 onClick={handleCopyLink}
-                className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                className="p-2 text-[#718096] dark:text-slate-300 hover:text-[#1976D2] hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
                 title="Sao chép liên kết Google Drive"
               >
                 {copiedLink ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -251,7 +251,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                 href={driveFileUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-blue-200 dark:border-blue-800"
+                className="px-2.5 py-1.5 bg-[#EAF4FF] hover:bg-[#1976D2]/15 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-[#155A9C] dark:text-blue-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border border-[#1976D2]/25 dark:border-blue-800"
                 title="Mở tệp trực tiếp trong Google Drive"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -262,7 +262,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
             {/* Fullscreen Toggle */}
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="p-2 text-[#718096] dark:text-slate-300 hover:text-[#263445] hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
               title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -271,7 +271,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors ml-1"
+              className="p-2 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors ml-1"
               title="Đóng cửa sổ xem trước (Esc)"
             >
               <X className="w-5 h-5" />
@@ -280,14 +280,14 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
         </div>
 
         {/* ===================== VIEW MODE TABS ===================== */}
-        <div className="px-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 text-xs">
+        <div className="px-5 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 text-xs">
           <div className="flex items-center space-x-1">
             <button
               onClick={() => setActiveTab('preview')}
               className={`py-2.5 px-3 font-bold border-b-2 transition-all flex items-center gap-1.5 ${
                 activeTab === 'preview'
-                  ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  ? 'border-[#1976D2] text-[#1976D2] dark:border-blue-400 dark:text-blue-400'
+                  : 'border-transparent text-[#718096] hover:text-[#263445] dark:hover:text-slate-300'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -298,8 +298,8 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
               onClick={() => setActiveTab('metadata')}
               className={`py-2.5 px-3 font-bold border-b-2 transition-all flex items-center gap-1.5 ${
                 activeTab === 'metadata'
-                  ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  ? 'border-[#1976D2] text-[#1976D2] dark:border-blue-400 dark:text-blue-400'
+                  : 'border-transparent text-[#718096] hover:text-[#263445] dark:hover:text-slate-300'
               }`}
             >
               <HardDrive className="w-3.5 h-3.5" />
@@ -310,8 +310,8 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
               onClick={() => setActiveTab('versions')}
               className={`py-2.5 px-3 font-bold border-b-2 transition-all flex items-center gap-1.5 ${
                 activeTab === 'versions'
-                  ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  ? 'border-[#1976D2] text-[#1976D2] dark:border-blue-400 dark:text-blue-400'
+                  : 'border-transparent text-[#718096] hover:text-[#263445] dark:hover:text-slate-300'
               }`}
             >
               <History className="w-3.5 h-3.5" />
@@ -327,7 +327,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
         </div>
 
         {/* ===================== MAIN PREVIEW BODY ===================== */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/70 dark:bg-slate-950 flex flex-col justify-start items-center">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-[#F4F7FB] dark:bg-slate-950 flex flex-col justify-start items-center">
           
           {/* TAB 1: INTERACTIVE PREVIEW */}
           {activeTab === 'preview' && (
@@ -336,19 +336,19 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
               {/* ---------------- 1. REAL EMBEDDED PDF VIEWER (LOCAL OR PUBLIC GOOGLE DRIVE) ---------------- */}
               {doc.fileExtension === 'PDF' && !matchedSop && (
                 <div 
-                  className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transition-transform origin-top"
+                  className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 overflow-hidden flex flex-col transition-transform origin-top"
                   style={{ transform: `scale(${zoomLevel / 100})`, marginBottom: zoomLevel > 100 ? `${(zoomLevel - 100) * 4}px` : '0px' }}
                 >
                   {/* Top Bar for Real PDF */}
-                  <div className="p-3 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
+                  <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/90 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 font-bold text-[11px] rounded-md border border-rose-200 dark:border-rose-900 flex items-center gap-1">
                         <FileText className="w-3.5 h-3.5" /> {hasRealDriveId ? 'PDF TRÊN GOOGLE DRIVE' : 'PDF'}
                       </span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-100 truncate max-w-xs sm:max-w-md" title={doc.title}>
+                      <span className="font-semibold text-[#263445] dark:text-slate-100 truncate max-w-xs sm:max-w-md" title={doc.title}>
                         {doc.title}
                       </span>
-                      <span className="text-slate-400 font-mono text-[11px]">
+                      <span className="text-[#718096] font-mono text-[11px]">
                         ({formatFileSize(doc.fileSize)})
                       </span>
                     </div>
@@ -359,14 +359,14 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                           href={realFileUrl || driveFileUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-3 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                          className="px-3 py-1 bg-white dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
                         >
                           <ExternalLink className="w-3.5 h-3.5" /> Mở tab mới
                         </a>
                       )}
                       <button
                         onClick={() => void handleDownload()}
-                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                        className="px-3 py-1 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
                       >
                         <Download className="w-3.5 h-3.5" /> Tải về máy
                       </button>
@@ -374,29 +374,29 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                   </div>
 
                   {/* Native PDF / Google Drive Embedded Viewer */}
-                  <div className="w-full relative min-h-[580px] h-[72vh] bg-slate-100 dark:bg-slate-950 flex flex-col items-center justify-center">
+                  <div className="w-full relative min-h-[580px] h-[72vh] bg-[#F4F7FB] dark:bg-slate-950 flex flex-col items-center justify-center">
                     {realFileUrl || driveEmbedUrl ? (
                       <div className="w-full h-full relative flex flex-col">
                         <iframe
                           src={realFileUrl || driveEmbedUrl || undefined}
-                          className="w-full h-full border-0 bg-white dark:bg-slate-900 rounded-b-2xl"
+                          className="w-full h-full border-0 bg-white dark:bg-slate-900 rounded-b-xl"
                           title={doc.title}
                           allow="autoplay"
                         />
                       </div>
                     ) : (
                       <div className="p-8 text-center flex flex-col items-center justify-center space-y-3">
-                        <FileText className="w-14 h-14 text-slate-400" />
-                        <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                        <FileText className="w-14 h-14 text-[#718096]" />
+                        <h4 className="text-base font-bold text-[#263445] dark:text-slate-200">
                           {doc.title}
                         </h4>
-                        <p className="text-xs text-slate-500 max-w-md">
+                        <p className="text-xs text-[#718096] max-w-md">
                           Hồ sơ mẫu hệ thống. Để xem trực tiếp tệp PDF thực tế cho mọi người dùng, quản trị viên có thể tải lên tệp mới lên Google Drive.
                         </p>
                         <div className="flex gap-2 pt-2">
                           <button
                             onClick={() => void handleDownload()}
-                            className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl flex items-center gap-2"
+                            className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white text-xs font-semibold rounded-lg flex items-center gap-2"
                           >
                             <Download className="w-4 h-4" /> Tải phiếu thông tin ({formatFileSize(doc.fileSize)})
                           </button>
@@ -531,21 +531,21 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
               {/* ---------------- 3. WORD / DOCX VIEWER (EMBEDDED GOOGLE DRIVE PREVIEW OR CARD) ---------------- */}
               {doc.fileExtension === 'DOCX' && !matchedSop && (
                 hasRealDriveId && driveEmbedUrl ? (
-                  <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
-                      <span className="font-bold text-blue-700 dark:text-blue-300">{doc.title}</span>
+                  <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 overflow-hidden flex flex-col">
+                    <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/90 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
+                      <span className="font-bold text-[#155A9C] dark:text-blue-300">{doc.title}</span>
                       <div className="flex items-center gap-2">
                         <a
                           href={driveFileUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold flex items-center gap-1"
+                          className="px-3 py-1 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold flex items-center gap-1 hover:bg-[#EAF4FF]"
                         >
                           <ExternalLink className="w-3.5 h-3.5" /> Mở trên Google Docs
                         </a>
                         <button
                           onClick={() => void handleDownload()}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center gap-1"
+                          className="px-3 py-1 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold flex items-center gap-1"
                         >
                           <Download className="w-3.5 h-3.5" /> Tải về
                         </button>
@@ -559,41 +559,41 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                     />
                   </div>
                 ) : (
-                  <div className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 flex flex-col items-center text-center space-y-5">
-                    <div className="w-20 h-20 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center shadow-xs">
-                      <FileText className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+                  <div className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 p-8 flex flex-col items-center text-center space-y-5">
+                    <div className="w-16 h-16 rounded-xl bg-[#EAF4FF] dark:bg-blue-950/60 border border-[#1976D2]/25 dark:border-blue-800 flex items-center justify-center shadow-xs">
+                      <FileText className="w-9 h-9 text-[#1976D2] dark:text-blue-400" />
                     </div>
                     <div className="space-y-1.5 max-w-lg">
-                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 text-[11px] font-bold rounded-full">
+                      <span className="px-3 py-1 bg-[#EAF4FF] dark:bg-blue-950/70 text-[#155A9C] dark:text-blue-300 text-[11px] font-bold rounded-full border border-[#1976D2]/20">
                         TÀI LIỆU MICROSOFT WORD (.DOCX)
                       </span>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 pt-1">
+                      <h3 className="text-lg font-bold text-[#263445] dark:text-slate-100 pt-1">
                         {doc.title}
                       </h3>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-[#718096]">
                         Kích thước: {formatFileSize(doc.fileSize)} • Ngày tải lên: {doc.uploadDate} • Phiên bản: {doc.version}
                       </p>
                     </div>
 
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 max-w-md w-full text-left space-y-2">
+                    <div className="p-4 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-xl border border-[#DFE7F0] dark:border-slate-700 text-xs text-[#718096] dark:text-slate-300 max-w-md w-full text-left space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Người phụ trách:</span>
-                        <strong className="text-slate-700 dark:text-slate-200">{doc.owner}</strong>
+                        <span className="text-[#718096]">Người phụ trách:</span>
+                        <strong className="text-[#263445] dark:text-slate-200">{doc.owner}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Loại hồ sơ:</span>
-                        <strong className="text-slate-700 dark:text-slate-200">{doc.docType}</strong>
+                        <span className="text-[#718096]">Loại hồ sơ:</span>
+                        <strong className="text-[#263445] dark:text-slate-200">{doc.docType}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Google Drive File ID:</span>
-                        <span className="font-mono text-[10px] text-blue-600">{doc.driveFileId}</span>
+                        <span className="text-[#718096]">Google Drive File ID:</span>
+                        <span className="font-mono text-[10px] text-[#1976D2]">{doc.driveFileId}</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 pt-2">
                       <button
                         onClick={() => void handleDownload()}
-                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors"
+                        className="px-5 py-2.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs transition-colors"
                       >
                         <Download className="w-4 h-4" /> Tải tệp DOCX về máy
                       </button>
@@ -602,7 +602,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                           href={driveFileUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-5 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-2xs"
+                          className="px-5 py-2.5 bg-white dark:bg-slate-800 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors shadow-2xs"
                         >
                           <ExternalLink className="w-4 h-4" /> Mở trên Google Drive
                         </a>
@@ -615,21 +615,21 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
               {/* ---------------- 2. EXCEL / XLSX SPREADSHEET VIEWER ---------------- */}
               {doc.fileExtension === 'XLSX' && (
                 hasRealDriveId && driveEmbedUrl && !isPredefinedSop && doc.isUserUploaded ? (
-                  <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
+                  <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 overflow-hidden flex flex-col">
+                    <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/90 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
                       <span className="font-bold text-emerald-700 dark:text-emerald-300">{doc.title}</span>
                       <div className="flex items-center gap-2">
                         <a
                           href={driveFileUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold flex items-center gap-1"
+                          className="px-3 py-1 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold flex items-center gap-1 hover:bg-[#EAF4FF]"
                         >
                           <ExternalLink className="w-3.5 h-3.5" /> Mở trên Google Sheets
                         </a>
                         <button
                           onClick={() => void handleDownload()}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center gap-1"
+                          className="px-3 py-1 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold flex items-center gap-1"
                         >
                           <Download className="w-3.5 h-3.5" /> Tải về
                         </button>
@@ -644,7 +644,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                   </div>
                 ) : (
                 <div 
-                  className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col text-xs"
+                  className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 overflow-hidden flex flex-col text-xs"
                   style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
                 >
                   {/* Spreadsheet Header / Formula Bar */}
@@ -897,12 +897,12 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
               {/* ---------------- 6. ARCHIVE / OTHER ---------------- */}
               {['ZIP', 'RAR', 'PPTX'].includes(doc.fileExtension) && (
                 hasRealDriveId && doc.fileExtension === 'PPTX' && driveEmbedUrl ? (
-                  <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
+                  <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 overflow-hidden flex flex-col">
+                    <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/90 border-b border-[#DFE7F0] dark:border-slate-700 flex items-center justify-between gap-3 text-xs flex-wrap">
                       <span className="font-bold text-orange-700 dark:text-orange-300">{doc.title}</span>
                       <button
                         onClick={() => void handleDownload()}
-                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center gap-1"
+                        className="px-3 py-1 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-semibold flex items-center gap-1"
                       >
                         <Download className="w-3.5 h-3.5" /> Tải về
                       </button>
@@ -915,13 +915,13 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                     />
                   </div>
                 ) : (
-                <div className="w-full max-w-md bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 text-center space-y-4">
-                  <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center">
-                    <FileText className="w-8 h-8" />
+                <div className="w-full max-w-md bg-white dark:bg-slate-900 p-8 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 text-center space-y-4">
+                  <div className="w-14 h-14 rounded-xl bg-[#EAF4FF] dark:bg-blue-950/60 text-[#1976D2] dark:text-blue-400 mx-auto flex items-center justify-center border border-[#1976D2]/20">
+                    <FileText className="w-7 h-7" />
                   </div>
                   <div>
-                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-100">{doc.title}</h4>
-                    <p className="text-xs text-slate-400 mt-1">Tệp nén dữ liệu hoặc tệp trình chiếu đã được lưu trữ an toàn trên Google Drive</p>
+                    <h4 className="text-base font-bold text-[#263445] dark:text-slate-100">{doc.title}</h4>
+                    <p className="text-xs text-[#718096] mt-1">Tệp nén dữ liệu hoặc tệp trình chiếu đã được lưu trữ an toàn trên Google Drive</p>
                   </div>
                   <div className="pt-2 flex flex-col gap-2">
                     {hasRealDriveId && (
@@ -929,7 +929,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                         href={driveFileUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                        className="w-full py-2.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                       >
                         <ExternalLink className="w-4 h-4" />
                         <span>Mở tệp trên Google Drive</span>
@@ -937,7 +937,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                     )}
                     <button
                       onClick={() => void handleDownload()}
-                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                      className="w-full py-2 bg-[#F4F7FB] hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Download className="w-4 h-4" />
                       <span>Tải tệp về máy tính</span>
@@ -952,48 +952,48 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
 
           {/* TAB 2: GOOGLE DRIVE METADATA */}
           {activeTab === 'metadata' && (
-            <div className="w-full max-w-2xl bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 space-y-5 text-xs">
-              <div className="flex items-center space-x-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+            <div className="w-full max-w-2xl bg-white dark:bg-slate-900 p-5 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 space-y-5 text-xs">
+              <div className="flex items-center space-x-3 pb-4 border-b border-[#DFE7F0] dark:border-slate-800">
+                <div className="w-10 h-10 rounded-lg bg-[#EAF4FF] dark:bg-blue-950/60 text-[#1976D2] dark:text-blue-400 flex items-center justify-center font-bold border border-[#1976D2]/20">
                   <HardDrive className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                  <h4 className="text-sm font-bold text-[#263445] dark:text-slate-100">
                     Chi tiết Lưu trữ & Đồng bộ Google Drive
                   </h4>
-                  <p className="text-slate-400 text-[11px]">
+                  <p className="text-[#718096] text-[11px]">
                     Thông tin định danh và bảo mật tệp trên hạ tầng đám mây
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Drive File ID:</span>
-                  <div className="font-mono font-bold text-blue-600 dark:text-blue-400 break-all text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Drive File ID:</span>
+                  <div className="font-mono font-bold text-[#1976D2] dark:text-blue-400 break-all text-xs">
                     {doc.driveFileId || 'drive_sample_id'}
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Thư mục Drive:</span>
-                  <div className="font-semibold text-slate-700 dark:text-slate-200 text-xs">
+                <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Thư mục Drive:</span>
+                  <div className="font-semibold text-[#263445] dark:text-slate-200 text-xs">
                     Khoa Cận Lâm Sàng - Bệnh viện Sông Thương
                   </div>
-                  <div className="font-mono text-[10px] text-slate-500 break-all">
+                  <div className="font-mono text-[10px] text-[#718096] break-all">
                     ID: {folderId}
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Mã băm Checksum (SHA-256):</span>
-                  <div className="font-mono text-slate-600 dark:text-slate-300 break-all text-[11px]">
+                <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Mã băm Checksum (SHA-256):</span>
+                  <div className="font-mono text-[#718096] dark:text-slate-300 break-all text-[11px]">
                     {doc.checksum || 'sha256_e4d909c290d0fb1ca068ffaddf22cbd0'}
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Thời gian đồng bộ gần nhất:</span>
+                <div className="p-3 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-lg border border-[#DFE7F0] dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Thời gian đồng bộ gần nhất:</span>
                   <div className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>{doc.lastSyncedAt || doc.uploadDate || '2026-11-10 16:45'}</span>
@@ -1001,7 +1001,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                 </div>
               </div>
 
-              <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+              <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
                   <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
                   <div>
@@ -1016,7 +1016,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                     href={driveFileUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shrink-0 transition-colors"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shrink-0 transition-colors"
                   >
                     Mở trên Drive
                   </a>
@@ -1027,11 +1027,11 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
 
           {/* TAB 3: VERSION HISTORY */}
           {activeTab === 'versions' && (
-            <div className="w-full max-w-2xl bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 space-y-4 text-xs">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="w-full max-w-2xl bg-white dark:bg-slate-900 p-5 rounded-xl shadow-md border border-[#DFE7F0] dark:border-slate-800 space-y-4 text-xs">
+              <div className="flex items-center justify-between pb-3 border-b border-[#DFE7F0] dark:border-slate-800">
                 <div>
-                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Lịch sử Phiên bản & Nhật ký Cập nhật</h4>
-                  <p className="text-[11px] text-slate-400">Tất cả các bản soát xét đều được đánh dấu phiên bản trong danh mục hồ sơ</p>
+                  <h4 className="text-sm font-bold text-[#263445] dark:text-slate-100">Lịch sử Phiên bản & Nhật ký Cập nhật</h4>
+                  <p className="text-[11px] text-[#718096]">Tất cả các bản soát xét đều được đánh dấu phiên bản trong danh mục hồ sơ</p>
                 </div>
                 {onOpenVersionModal && (
                   <button
@@ -1039,30 +1039,30 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                       onClose();
                       onOpenVersionModal(doc);
                     }}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                    className="px-3 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
                   >
                     + Tạo phiên bản mới
                   </button>
                 )}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {doc.versionHistory?.map((ver, idx) => (
                   <div 
                     key={idx}
-                    className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-start justify-between"
+                    className="p-3.5 bg-[#F4F7FB] dark:bg-slate-800/60 rounded-xl border border-[#DFE7F0] dark:border-slate-700/80 flex items-start justify-between"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-950 px-2 py-0.5 rounded text-[11px]">
+                        <span className="font-mono font-bold text-[#155A9C] dark:text-blue-400 bg-[#EAF4FF] dark:bg-blue-950 px-2 py-0.5 rounded text-[11px] border border-[#1976D2]/20">
                           {ver.version}
                         </span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-100">
+                        <span className="font-semibold text-[#263445] dark:text-slate-100">
                           {ver.note || 'Cập nhật phiên bản'}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400">
-                        Cập nhật bởi: <strong className="text-slate-600 dark:text-slate-300">{ver.updatedBy}</strong> • Lúc: {ver.updatedAt}
+                      <p className="text-[11px] text-[#718096]">
+                        Cập nhật bởi: <strong className="text-[#263445] dark:text-slate-300">{ver.updatedBy}</strong> • Lúc: {ver.updatedAt}
                       </p>
                     </div>
 
@@ -1078,16 +1078,16 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
         </div>
 
         {/* ===================== MODAL FOOTER ===================== */}
-        <div className="p-3.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between text-xs shrink-0 flex-wrap gap-2">
-          <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
+        <div className="p-3.5 sm:p-4 border-t border-[#DFE7F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between text-xs shrink-0 flex-wrap gap-2">
+          <div className="flex items-center space-x-2 text-[#718096] dark:text-slate-400">
             <span className="font-semibold">Chủ sở hữu:</span>
-            <span className="text-slate-800 dark:text-slate-200 font-bold">{doc.owner}</span>
+            <span className="text-[#263445] dark:text-slate-200 font-bold">{doc.owner}</span>
             <span>•</span>
             <span className="font-semibold">Dung lượng:</span>
             <span>{(doc.fileSize / (1024 * 1024)).toFixed(2)} MB</span>
             <span>•</span>
             <span className="font-semibold">Hạn hiệu lực:</span>
-            <span className={doc.isExpired ? 'text-rose-600 font-bold' : 'text-slate-700 dark:text-slate-300'}>
+            <span className={doc.isExpired ? 'text-rose-600 font-bold' : 'text-[#263445] dark:text-slate-300'}>
               {doc.expirationDate || 'Vô thời hạn'}
             </span>
           </div>
@@ -1095,7 +1095,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
           <div className="flex items-center space-x-2">
             <button
               onClick={() => void handleDownload()}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold flex items-center gap-1.5 transition-colors"
+              className="px-3 py-1.5 bg-[#F4F7FB] hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-semibold flex items-center gap-1.5 transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Tải về</span>
@@ -1106,7 +1106,7 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                 href={driveFileUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                className="px-4 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition-colors"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Mở trên Google Drive</span>

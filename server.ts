@@ -14,6 +14,11 @@ import {
   loadStoredTelegramSettingsFromDb,
   registerPostgresSyncRoutes,
 } from "./server/postgresSync";
+import {
+  registerScheduledAlertRoutes,
+  startScheduledAlertsEngine,
+  stopScheduledAlertsEngine,
+} from "./server/scheduledAlerts";
 
 function getRequestHostLabel(req: express.Request): string {
   const fwd = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
@@ -28,6 +33,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: "12mb" }));
 registerPostgresSyncRoutes(app);
+registerScheduledAlertRoutes(app);
 
 // Health Check API
 app.get("/api/health", (_req, res) => {
@@ -743,6 +749,7 @@ async function startServer() {
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[CLS WorkHub Full-Stack Server] running on http://0.0.0.0:${PORT}`);
+    startScheduledAlertsEngine();
     void (async () => {
       try {
         const storedTg = await loadStoredTelegramSettingsFromDb();
@@ -760,6 +767,7 @@ async function startServer() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[CLS WorkHub] Received ${signal}, closing Telegram polling & HTTP server...`);
+    stopScheduledAlertsEngine();
     try {
       await telegramManager.shutdown();
     } catch {

@@ -189,12 +189,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200/90 dark:border-slate-800 max-w-lg w-full p-6 space-y-4.5 relative text-slate-800 dark:text-slate-100 max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-lg w-full p-5 space-y-4 relative text-[#263445] dark:text-slate-100 max-h-[92vh] overflow-y-auto custom-scrollbar">
         
         {/* Close Button */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="absolute top-3.5 right-3.5 p-1.5 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 rounded-lg hover:bg-[#F4F7FB] dark:hover:bg-slate-800 transition-colors"
           title="Đóng cửa sổ"
         >
           <X className="w-5 h-5" />
@@ -202,15 +202,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Header Title */}
         <div className="text-center space-y-1 pt-1">
-          <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-blue-100 dark:border-blue-900/60 shadow-xs">
-            <KeyRound className="w-6 h-6" />
+          <div className="w-10 h-10 bg-[#EAF4FF] dark:bg-sky-950/70 text-[#1976D2] dark:text-sky-400 rounded-lg flex items-center justify-center mx-auto mb-2 border border-[#1976D2]/20 dark:border-sky-900/60">
+            <KeyRound className="w-5 h-5" />
           </div>
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          <h3 className="text-base font-bold text-[#263445] dark:text-slate-100">
             {mode === 'login' && 'Đăng nhập Hệ thống Hospital OS'}
             {mode === 'change-password' && 'Đổi Mật Khẩu Cán Bộ'}
             {mode === 'forgot-password' && 'Yêu cầu Reset Mật khẩu'}
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-[#718096] dark:text-slate-400">
             {mode === 'login' && 'Chọn nhân viên từ danh sách bên dưới và nhập mật khẩu để truy cập'}
             {mode === 'change-password' && `Cập nhật mật khẩu mới cho cán bộ: ${selectedUser?.name}`}
             {mode === 'forgot-password' && 'Gửi yêu cầu tới Admin để hỗ trợ khôi phục mật khẩu tài khoản'}
@@ -330,28 +330,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             {/* Selected Employee Preview Card */}
             {selectedUser && (
-              <div className="p-2.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/40 flex items-center justify-between">
+              <div className="p-2.5 rounded-lg bg-[#EAF4FF] dark:bg-sky-950/30 border border-[#1976D2]/25 dark:border-sky-900/40 flex items-center justify-between">
                 <div className="flex items-center space-x-2.5 min-w-0">
                   <img
                     src={selectedUser.avatar}
                     alt={selectedUser.name}
-                    className="w-9 h-9 rounded-full object-cover border border-blue-200 dark:border-blue-700 shrink-0"
+                    className="w-8 h-8 rounded-full object-cover border border-[#1976D2]/30 dark:border-sky-700 shrink-0"
                   />
                   <div className="min-w-0">
-                    <span className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400 tracking-wider">
+                    <span className="text-[10px] uppercase font-bold text-[#1976D2] dark:text-sky-400 tracking-wider">
                       Cán bộ đang chọn:
                     </span>
-                    <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                    <div className="text-xs font-bold text-[#263445] dark:text-slate-100 truncate">
                       {selectedUser.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    <div className="text-[11px] text-[#718096] dark:text-slate-400 truncate">
                       {selectedUser.role === 'Admin'
                         ? 'Quản trị ứng dụng & Hệ thống'
                         : `${selectedUser.title || 'Cán bộ y tế'} • ${selectedUser.department || 'Khoa Cận Lâm Sàng'}`}
                     </div>
                   </div>
                 </div>
-                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md shrink-0 ${getRoleBadgeColor(selectedUser.role)}`}>
+                <span className={`px-2 py-0.5 text-[10px] font-bold rounded shrink-0 ${getRoleBadgeColor(selectedUser.role)}`}>
                   {selectedUser.role}
                 </span>
               </div>
@@ -360,14 +360,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Password Input Field with Eye Toggle */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-blue-500" />
+                <label className="font-bold text-[#263445] dark:text-slate-200 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-[#1976D2]" />
                   <span>Mật khẩu truy cập *</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => setPassword('123456')}
-                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline flex items-center gap-1"
+                  className="text-[11px] font-semibold text-[#1976D2] hover:text-[#155A9C] dark:text-sky-400 hover:underline flex items-center gap-1"
                   title="Tự động điền mật khẩu mặc định 123456"
                 >
                   <Sparkles className="w-3 h-3 text-amber-500" />
@@ -376,19 +376,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#718096]" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="Nhập mật khẩu (mặc định: 123456)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-hidden font-mono text-xs"
+                  className="w-full pl-9 pr-10 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-[#1976D2]/20 focus:border-[#1976D2] outline-hidden font-mono text-xs"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#718096] hover:text-[#263445] dark:hover:text-slate-200"
                   title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -397,7 +397,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             {/* Default Password Hint Notice */}
-            <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
+            <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
               <div className="flex items-center space-x-1.5">
                 <HelpCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>Mật khẩu mặc định: <strong className="font-mono text-amber-900 dark:text-amber-200 font-bold">123456</strong></span>
@@ -411,7 +411,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-xs flex items-center justify-center space-x-2 text-xs"
+              className="w-full py-2.5 bg-[#1976D2] hover:bg-[#155A9C] text-white font-bold rounded-lg transition-colors flex items-center justify-center space-x-2 text-xs"
             >
               {loading ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
@@ -553,14 +553,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="button"
                 onClick={() => setMode('login')}
-                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold transition-colors"
+                className="px-4 py-2 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-300 hover:bg-[#F4F7FB] dark:hover:bg-slate-800 rounded-lg font-semibold transition-colors"
               >
                 Quay lại đăng nhập
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-xs flex items-center space-x-1.5"
+                className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-bold rounded-lg transition-colors flex items-center space-x-1.5"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -578,29 +578,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* ===================== MODE: FORGOT / RESET ===================== */}
         {mode === 'forgot-password' && (
           <form onSubmit={handleRequestReset} className="space-y-4 text-xs">
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl text-amber-800 dark:text-amber-300 text-xs">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-lg text-amber-800 dark:text-amber-300 text-xs">
               Mật khẩu mặc định hệ thống luôn là <strong>123456</strong>. Nếu bạn quên mật khẩu tự đặt, hãy gửi yêu cầu dưới đây để Quản trị viên reset về mặc định.
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">
                 Cán bộ yêu cầu reset mật khẩu:
               </label>
-              <div className="p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center space-x-2.5">
+              <div className="p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg flex items-center space-x-2.5">
                 <img
                   src={selectedUser?.avatar}
                   alt={selectedUser?.name}
                   className="w-8 h-8 rounded-full object-cover shrink-0"
                 />
                 <div className="min-w-0">
-                  <div className="font-bold text-slate-800 dark:text-slate-100">{selectedUser?.name}</div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{selectedUser?.email}</div>
+                  <div className="font-bold text-[#263445] dark:text-slate-100">{selectedUser?.name}</div>
+                  <div className="text-[11px] text-[#718096] dark:text-slate-400">{selectedUser?.email}</div>
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
+              <label className="block font-semibold text-[#263445] dark:text-slate-200 mb-1">
                 Lý do / Ghi chú gửi Admin
               </label>
               <textarea
@@ -608,7 +608,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 placeholder="Tôi quên mật khẩu truy cập hệ thống, nhờ Admin reset giúp về mật khẩu mặc định 123456."
                 value={resetNote}
                 onChange={(e) => setResetNote(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl"
+                className="w-full p-2.5 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg"
               />
             </div>
 
@@ -616,14 +616,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="button"
                 onClick={() => setMode('login')}
-                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-semibold"
+                className="px-4 py-2 border border-[#DFE7F0] dark:border-slate-700 text-[#263445] dark:text-slate-300 hover:bg-[#F4F7FB] dark:hover:bg-slate-800 rounded-lg font-semibold"
               >
                 Quay lại
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl"
+                className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-bold rounded-lg transition-colors"
               >
                 {loading ? 'Đang gửi...' : 'Gửi yêu cầu Reset'}
               </button>

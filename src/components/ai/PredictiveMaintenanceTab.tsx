@@ -52,23 +52,23 @@ export const PredictiveMaintenanceTab: React.FC<PredictiveMaintenanceTabProps> =
   }) || [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 text-white flex items-center justify-center shadow-md shadow-rose-500/20 shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shadow-xs shrink-0">
             <Wrench className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                AI Predictive Maintenance (Bảo Trì Dự Đoán)
+              <h2 className="text-base font-bold text-[#263445] dark:text-slate-100">
+                Bảo Trì Dự Đoán Thiết Bị
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 rounded-full border border-rose-300 dark:border-rose-800">
-                Cảnh Báo Trước 7-14 Ngày
+              <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                · Cảnh báo sớm 7-14 ngày
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-[#718096] dark:text-slate-400">
               Phân tích số ca chạy máy, cảm biến nhiệt độ & dự báo tuổi thọ còn lại (Remaining Useful Life - RUL)
             </p>
           </div>
@@ -77,7 +77,7 @@ export const PredictiveMaintenanceTab: React.FC<PredictiveMaintenanceTabProps> =
         <button
           onClick={loadSummary}
           disabled={isLoading}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition shadow-md shadow-rose-600/20 self-end sm:self-auto"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition shadow-xs self-end sm:self-auto cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           <span>{isLoading ? 'Đang phân tích...' : 'Quét lại cảm biến'}</span>
@@ -85,28 +85,28 @@ export const PredictiveMaintenanceTab: React.FC<PredictiveMaintenanceTabProps> =
       </div>
 
       {isLoading ? (
-        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-          <RefreshCw className="w-8 h-8 text-rose-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800">
+          <RefreshCw className="w-8 h-8 text-[#1976D2] animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-[#263445] dark:text-slate-300">
             Đang phân tích dữ liệu rung chấn, xung phát tia và nhật ký vận hành thiết bị...
           </p>
         </div>
       ) : summary ? (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* 4 Summary Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tổng máy giám sát</div>
-              <div className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
+              <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Tổng máy giám sát</div>
+              <div className="text-2xl font-black text-[#263445] dark:text-slate-100 mt-1">
                 {summary.totalMonitoredEquipment}{' '}
-                <span className="text-xs font-medium text-slate-500">hệ thống</span>
+                <span className="text-xs font-medium text-[#718096]">hệ thống</span>
               </div>
-              <div className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-1">
+              <div className="text-[11px] text-[#1976D2] dark:text-blue-400 font-semibold mt-1">
                 100% Cận Lâm Sàng
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-rose-200/80 dark:border-rose-900/60 shadow-sm bg-rose-50/20">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 shadow-xs bg-rose-50/20">
               <div className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Cảnh báo khẩn (RUL &lt; 10 ngày)</div>
               <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-2">
                 {summary.criticalRiskCount}{' '}
@@ -119,21 +119,21 @@ export const PredictiveMaintenanceTab: React.FC<PredictiveMaintenanceTabProps> =
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-amber-200/80 dark:border-amber-900/60 shadow-sm bg-amber-50/20">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 shadow-xs bg-amber-50/20">
               <div className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Nguy cơ cao (RUL &lt; 20 ngày)</div>
               <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
                 {summary.highRiskCount}{' '}
-                <span className="text-xs font-medium text-slate-500">hệ thống</span>
+                <span className="text-xs font-medium text-[#718096]">hệ thống</span>
               </div>
               <div className="text-[11px] text-amber-600 font-semibold mt-1">
                 MRI 3.0T & Cobas 6000
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Điểm sức khỏe TB toàn khoa</div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
+              <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Điểm sức khỏe TB toàn khoa</div>
               <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                {summary.avgDepartmentHealthScore} <span className="text-xs font-medium text-slate-500">/ 100</span>
+                {summary.avgDepartmentHealthScore} <span className="text-xs font-medium text-[#718096]">/ 100</span>
               </div>
               <div className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />
@@ -144,13 +144,13 @@ export const PredictiveMaintenanceTab: React.FC<PredictiveMaintenanceTabProps> =
 
           {/* Filter Chips */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-500">Lọc theo mức độ rủi ro:</span>
+            <span className="text-xs font-bold text-[#718096]">Lọc theo mức độ rủi ro:</span>
             <button
               onClick={() => setSelectedFilter('ALL')}
-              className={`px-3 py-1 text-xs font-bold rounded-xl transition ${
+              className={`px-3 py-1 text-xs font-bold rounded-lg transition cursor-pointer ${
                 selectedFilter === 'ALL'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+                  ? 'bg-[#1976D2] text-white'
+                  : 'bg-white dark:bg-slate-900 text-[#263445] dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-800'
               }`}
             >
               Tất cả ({summary.totalMonitoredEquipment})
@@ -197,12 +197,12 @@ export const PredictiveMaintenanceTab: React.FC<PredictiveMaintenanceTabProps> =
               return (
                 <div
                   key={eq.id}
-                  className={`bg-white dark:bg-slate-900 rounded-2xl border p-5 transition-all shadow-sm space-y-4 ${
+                  className={`bg-white dark:bg-slate-900 rounded-xl border p-5 transition-all shadow-xs space-y-4 ${
                     isCritical
                       ? 'border-rose-300 dark:border-rose-800/80 bg-rose-50/10'
                       : isHigh
                       ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/10'
-                      : 'border-slate-200/80 dark:border-slate-800'
+                      : 'border-[#DFE7F0] dark:border-slate-800'
                   }`}
                 >
                   {/* Card Header */}
@@ -348,7 +348,7 @@ export const PredictiveMaintenanceTab: React.FC<PredictiveMaintenanceTabProps> =
                             onShowToast('Lập Lịch Bảo Trì', `Đã chuyển tiếp lịch bảo dưỡng cho kỹ sư TBYT phụ trách ${eq.name}`, 'success');
                           }
                         }}
-                        className="px-3 py-1.5 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shrink-0 self-end sm:self-auto"
+                        className="px-3 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shrink-0 self-end sm:self-auto cursor-pointer"
                       >
                         <Calendar className="w-3.5 h-3.5" />
                         <span>Xếp lịch kỹ sư</span>

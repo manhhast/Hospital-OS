@@ -335,34 +335,34 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
 
   if (!canConfigureRbac) {
     return (
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-12 border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-4 max-w-xl mx-auto my-12 animate-in fade-in duration-200">
-        <div className="w-16 h-16 bg-rose-100 dark:bg-rose-950/60 text-rose-600 rounded-full flex items-center justify-center mx-auto">
-          <Lock className="w-8 h-8" />
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-10 border border-[#DFE7F0] dark:border-slate-800 shadow-xs text-center space-y-4 max-w-xl mx-auto my-8 animate-in fade-in duration-200">
+        <div className="w-14 h-14 bg-rose-100 dark:bg-rose-950/60 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+          <Lock className="w-7 h-7" />
         </div>
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Quyền truy cập bị hạn chế</h3>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          Chức năng điều chỉnh phân quyền &amp; phạm vi nhân sự chỉ dành cho tài khoản <span className="font-bold text-purple-600">Admin</span> hoặc quản lý được Admin ủy quyền phân quyền RBAC.
+        <h3 className="text-base font-bold text-[#263445] dark:text-slate-100">Quyền truy cập bị hạn chế</h3>
+        <p className="text-xs text-[#718096] leading-relaxed">
+          Chức năng điều chỉnh phân quyền &amp; phạm vi nhân sự chỉ dành cho tài khoản <span className="font-bold text-[#1976D2]">Admin</span> hoặc quản lý được Admin ủy quyền phân quyền RBAC.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+    <div className="space-y-4 pb-8 animate-in fade-in duration-200 w-full">
       {/* Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-            <ShieldCheck className="w-5 h-5 text-blue-600 mr-2" /> Phân Quyền Hệ Thống &amp; Phạm Vi Quản Lý (RBAC)
+          <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+            <ShieldCheck className="w-4 h-4 text-[#1976D2] mr-2" /> Phân Quyền Hệ Thống &amp; Phạm Vi Quản Lý (RBAC)
           </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-[#718096] mt-0.5">
             Thiết lập cấp quản lý (Admin, Trưởng khoa, Trưởng bộ phận, Trưởng phòng, Nhân viên), phạm vi Bộ phận/Phòng phụ trách và quyền chỉnh sửa chi tiết cho từng nhân viên.
           </p>
         </div>
 
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
+          className="flex items-center space-x-1.5 px-3.5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Thêm tài khoản</span>
@@ -371,13 +371,13 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
 
       {/* Pending Reset Requests Alert Banner */}
       {pendingResetRequests.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex items-center justify-between shadow-xs">
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between shadow-xs">
           <div className="flex items-start space-x-3">
-            <div className="p-2 bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400 rounded-xl">
-              <KeyRound className="w-5 h-5" />
+            <div className="p-2 bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400 rounded-lg">
+              <KeyRound className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+              <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200">
                 Có {pendingResetRequests.length} yêu cầu khôi phục mật khẩu đang chờ xử lý!
               </h4>
               <p className="text-xs text-amber-700 dark:text-amber-300/80 mt-0.5">
@@ -389,68 +389,68 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
       )}
 
       {/* 5-Tier Role Permission Matrix */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 p-4 sm:p-5 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+          <h4 className="text-sm font-bold text-[#263445] dark:text-slate-100">
             Ma Trận Phân Quyền Mặc Định Theo 5 Cấp Quản Lý
           </h4>
-          <span className="text-[11px] text-slate-500">
+          <span className="text-[11px] text-[#718096]">
             Có thể tùy chỉnh bật/tắt từng quyền cụ thể cho từng nhân viên bên dưới
           </span>
         </div>
 
         <div className="overflow-x-auto text-xs">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-300 font-bold uppercase text-[10px]">
+            <thead className="bg-[#F4F7FB] dark:bg-slate-800 text-[#718096] dark:text-slate-300 font-bold uppercase text-[10px]">
               <tr>
-                <th className="p-3 border-b border-slate-200 dark:border-slate-700">Nhóm quyền / Phạm vi</th>
-                <th className="p-3 text-center border-b border-slate-200 dark:border-slate-700 text-purple-700 dark:text-purple-300">Admin</th>
-                <th className="p-3 text-center border-b border-slate-200 dark:border-slate-700 text-blue-700 dark:text-blue-300">Trưởng khoa</th>
-                <th className="p-3 text-center border-b border-slate-200 dark:border-slate-700 text-indigo-700 dark:text-indigo-300">Trưởng bộ phận</th>
-                <th className="p-3 text-center border-b border-slate-200 dark:border-slate-700 text-teal-700 dark:text-teal-300">Trưởng phòng</th>
-                <th className="p-3 text-center border-b border-slate-200 dark:border-slate-700">Nhân viên / BS</th>
+                <th className="p-2.5 border-b border-[#DFE7F0] dark:border-slate-700">Nhóm quyền / Phạm vi</th>
+                <th className="p-2.5 text-center border-b border-[#DFE7F0] dark:border-slate-700 text-purple-700 dark:text-purple-300">Admin</th>
+                <th className="p-2.5 text-center border-b border-[#DFE7F0] dark:border-slate-700 text-[#155A9C] dark:text-blue-300">Trưởng khoa</th>
+                <th className="p-2.5 text-center border-b border-[#DFE7F0] dark:border-slate-700 text-[#1976D2] dark:text-blue-300">Trưởng bộ phận</th>
+                <th className="p-2.5 text-center border-b border-[#DFE7F0] dark:border-slate-700 text-teal-700 dark:text-teal-300">Trưởng phòng</th>
+                <th className="p-2.5 text-center border-b border-[#DFE7F0] dark:border-slate-700">Nhân viên / BS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+            <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-800 text-[#263445] dark:text-slate-300">
               <tr>
-                <td className="p-3 font-semibold">Phạm vi dữ liệu quản lý</td>
-                <td className="p-3 text-center font-bold text-purple-600">Toàn hệ thống</td>
-                <td className="p-3 text-center font-bold text-blue-600">Toàn Khoa CLS</td>
-                <td className="p-3 text-center font-bold text-indigo-600">Bộ phận phụ trách</td>
-                <td className="p-3 text-center font-bold text-teal-600">Phòng phụ trách</td>
-                <td className="p-3 text-center text-slate-500">Chỉ xem / Cá nhân</td>
+                <td className="p-2.5 font-semibold">Phạm vi dữ liệu quản lý</td>
+                <td className="p-2.5 text-center font-bold text-purple-600">Toàn hệ thống</td>
+                <td className="p-2.5 text-center font-bold text-[#155A9C]">Toàn Khoa CLS</td>
+                <td className="p-2.5 text-center font-bold text-[#1976D2]">Bộ phận phụ trách</td>
+                <td className="p-2.5 text-center font-bold text-teal-600">Phòng phụ trách</td>
+                <td className="p-2.5 text-center text-[#718096]">Chỉ xem / Cá nhân</td>
               </tr>
               <tr>
-                <td className="p-3 font-semibold">Quản lý Hồ sơ &amp; Chứng chỉ Nhân sự</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Full (kể cả Admin)</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Toàn Khoa (trừ Admin)</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Trong Bộ phận</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Sửa trong Phòng</td>
-                <td className="p-3 text-center text-rose-500 font-bold">✗ Khóa</td>
+                <td className="p-2.5 font-semibold">Quản lý Hồ sơ &amp; Chứng chỉ Nhân sự</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Full (kể cả Admin)</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Toàn Khoa (trừ Admin)</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Trong Bộ phận</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Sửa trong Phòng</td>
+                <td className="p-2.5 text-center text-rose-500 font-bold">✗ Khóa</td>
               </tr>
               <tr>
-                <td className="p-3 font-semibold">Quản lý Máy móc, Bảo trì &amp; LOTO</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Full</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Toàn Khoa</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Trong Bộ phận</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Trong Phòng</td>
-                <td className="p-3 text-center text-amber-600 font-bold">Chỉ báo sự cố</td>
+                <td className="p-2.5 font-semibold">Quản lý Máy móc, Bảo trì &amp; LOTO</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Full</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Toàn Khoa</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Trong Bộ phận</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Trong Phòng</td>
+                <td className="p-2.5 text-center text-amber-600 font-bold">Chỉ báo sự cố</td>
               </tr>
               <tr>
-                <td className="p-3 font-semibold">Điều phối Nhân sự / Thiết bị tại Phòng</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Toàn Khoa</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Toàn Khoa</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Bộ phận</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Phòng phụ trách</td>
-                <td className="p-3 text-center text-rose-500 font-bold">✗ Khóa</td>
+                <td className="p-2.5 font-semibold">Điều phối Nhân sự / Thiết bị tại Phòng</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Toàn Khoa</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Toàn Khoa</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Bộ phận</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Phòng phụ trách</td>
+                <td className="p-2.5 text-center text-rose-500 font-bold">✗ Khóa</td>
               </tr>
               <tr>
-                <td className="p-3 font-semibold">Phân quyền RBAC &amp; Cấu hình Hệ thống</td>
-                <td className="p-3 text-center text-emerald-600 font-bold">✓ Toàn quyền</td>
-                <td className="p-3 text-center text-amber-600 font-bold">Khi được ủy quyền</td>
-                <td className="p-3 text-center text-rose-500 font-bold">✗ Khóa</td>
-                <td className="p-3 text-center text-rose-500 font-bold">✗ Khóa</td>
-                <td className="p-3 text-center text-rose-500 font-bold">✗ Khóa</td>
+                <td className="p-2.5 font-semibold">Phân quyền RBAC &amp; Cấu hình Hệ thống</td>
+                <td className="p-2.5 text-center text-emerald-600 font-bold">✓ Toàn quyền</td>
+                <td className="p-2.5 text-center text-amber-600 font-bold">Khi được ủy quyền</td>
+                <td className="p-2.5 text-center text-rose-500 font-bold">✗ Khóa</td>
+                <td className="p-2.5 text-center text-rose-500 font-bold">✗ Khóa</td>
+                <td className="p-2.5 text-center text-rose-500 font-bold">✗ Khóa</td>
               </tr>
             </tbody>
           </table>
@@ -458,25 +458,25 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 p-3.5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#718096] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             placeholder="Tìm theo tên, email, chức danh, bộ phận hoặc phòng..."
-            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-100"
+            className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-[#1976D2]/25 focus:border-[#1976D2] text-[#263445] dark:text-slate-100"
           />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={() => setTierFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               tierFilter === 'all'
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                ? 'bg-[#155A9C] text-white'
+                : 'bg-[#F4F7FB] text-[#263445] hover:bg-[#EAF4FF] border border-[#DFE7F0] dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
             }`}
           >
             Tất cả ({users.length})
@@ -488,10 +488,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
                 key={t}
                 type="button"
                 onClick={() => setTierFilter(t)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   tierFilter === t
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                    ? 'bg-[#1976D2] text-white'
+                    : 'bg-[#F4F7FB] text-[#263445] hover:bg-[#EAF4FF] border border-[#DFE7F0] dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                 }`}
               >
                 {MANAGEMENT_TIER_META[t].shortLabel} ({count})
@@ -502,26 +502,26 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
       </div>
 
       {/* Users Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200">
-            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+          <table className="w-full text-left text-xs text-[#263445] dark:text-slate-200">
+            <thead className="bg-[#F4F7FB] dark:bg-slate-800 text-[#718096] font-bold uppercase text-[10px]">
               <tr>
-                <th className="p-3.5">Cán bộ &amp; Tài khoản</th>
-                <th className="p-3.5">Cấp Quản Lý &amp; Chức Danh</th>
-                <th className="p-3.5">Phạm Vi Quản Lý Thực Tế</th>
-                <th className="p-3.5">Quyền Tùy Chỉnh</th>
-                <th className="p-3.5">Trạng thái</th>
-                <th className="p-3.5 text-right">Thao Tác Phân Quyền</th>
+                <th className="p-3">Cán bộ &amp; Tài khoản</th>
+                <th className="p-3">Cấp Quản Lý &amp; Chức Danh</th>
+                <th className="p-3">Phạm Vi Quản Lý Thực Tế</th>
+                <th className="p-3">Quyền Tùy Chỉnh</th>
+                <th className="p-3">Trạng thái</th>
+                <th className="p-3 text-right">Thao Tác Phân Quyền</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-[#DFE7F0] dark:divide-slate-800">
               {filteredUsers.map(({ user: u, access, overrideCount }) => {
                 const tierMeta = MANAGEMENT_TIER_META[access.tier];
                 const isTargetLockedForActor = access.isSystemAdmin && !actorAccess.isSystemAdmin;
 
                 return (
-                  <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                  <tr key={u.id} className="hover:bg-[#EAF4FF]/40 dark:hover:bg-slate-800/40">
                     <td className="p-3.5">
                       <div className="flex items-center space-x-3">
                         <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
@@ -595,7 +595,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
                           className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
                             isTargetLockedForActor
                               ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed dark:bg-slate-800 dark:border-slate-700'
-                              : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800 cursor-pointer'
+                              : 'bg-[#EAF4FF] hover:bg-blue-100 text-[#155A9C] border-[#1976D2]/25 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800 cursor-pointer'
                           }`}
                         >
                           <Sliders className="w-3.5 h-3.5" />
@@ -633,16 +633,16 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
       {/* EDIT RBAC & SCOPE MODAL */}
       {editingRbacUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#DFE7F0] dark:border-slate-800 shrink-0">
               <div className="flex items-center gap-3">
-                <img src={editingRbacUser.avatar} alt={editingRbacUser.name} className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700" />
+                <img src={editingRbacUser.avatar} alt={editingRbacUser.name} className="w-10 h-10 rounded-lg object-cover border border-[#DFE7F0] dark:border-slate-700" />
                 <div>
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-[#1976D2]" />
                     <span>Điều chỉnh Quyền &amp; Phạm Vi: {editingRbacUser.name}</span>
                   </h3>
-                  <p className="text-xs text-slate-500">{editingRbacUser.email}</p>
+                  <p className="text-xs text-[#718096]">{editingRbacUser.email}</p>
                 </div>
               </div>
               <button
@@ -878,17 +878,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingRbacUser(null)}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-300 font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                  className="px-4 py-2 text-[#718096] dark:text-slate-300 font-semibold hover:bg-[#F4F7FB] dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs cursor-pointer"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-bold rounded-lg shadow-xs cursor-pointer"
                 >
                   Lưu Quyền &amp; Phạm Vi
                 </button>
@@ -901,12 +901,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
       {/* ADD USER MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                <Users className="w-5 h-5 text-blue-600 mr-2" /> Thêm người dùng mới vào hệ thống
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-lg w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+                <Users className="w-4 h-4 text-[#1976D2] mr-2" /> Thêm người dùng mới vào hệ thống
               </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+              <button onClick={() => setShowAddModal(false)} className="text-[#718096] hover:text-[#263445] p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1009,17 +1009,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
                 </div>
               </div>
 
-              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-[#DFE7F0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-300 font-medium cursor-pointer"
+                  className="px-4 py-2 text-[#718096] dark:text-slate-300 font-medium cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl cursor-pointer"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white font-semibold rounded-lg cursor-pointer"
                 >
                   Tạo tài khoản
                 </button>
@@ -1032,12 +1032,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
       {/* ADMIN RESET PASSWORD MODAL */}
       {resetModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                <KeyRound className="w-5 h-5 text-amber-500 mr-2" /> Đặt lại mật khẩu tài khoản
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#DFE7F0] dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-[#263445] dark:text-slate-100 flex items-center">
+                <KeyRound className="w-4 h-4 text-amber-500 mr-2" /> Đặt lại mật khẩu tài khoản
               </h3>
-              <button onClick={() => setResetModalUser(null)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+              <button onClick={() => setResetModalUser(null)} className="text-[#718096] hover:text-[#263445] p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>

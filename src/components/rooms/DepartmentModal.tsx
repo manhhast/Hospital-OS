@@ -92,23 +92,23 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50">
+        <div className="px-5 py-3.5 border-b border-[#DFE7F0] dark:border-slate-800 flex items-center justify-between bg-[#F4F7FB] dark:bg-slate-800/50">
           <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+            <div className="p-2 rounded-lg bg-[#EAF4FF] dark:bg-blue-950 text-[#1976D2] dark:text-blue-400 border border-[#1976D2]/20 dark:border-blue-800">
               <Layers className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                <h2 className="text-base font-bold text-[#263445] dark:text-white">
                   {isEdit ? 'Đổi Tên / Sửa Bộ Phận' : 'Thêm Bộ Phận Mới'}
                 </h2>
-                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-[#EAF4FF] dark:bg-blue-950 text-[#155A9C] dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800">
                   Cấp 1
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-[#718096] dark:text-slate-400">
                 {isEdit
                   ? 'Đổi tên bộ phận sẽ tự động cập nhật cho tất cả Phòng (Cấp 2) & Nhân sự trực thuộc'
                   : 'Tạo Bộ phận chuyên môn (Cấp 1) làm đơn vị cha để quản lý các Phòng trực thuộc (Cấp 2)'}
@@ -118,22 +118,22 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-[#718096] hover:text-[#263445] dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto custom-scrollbar">
           {errorMsg && (
-            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold text-rose-700 dark:text-rose-300">
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-300">
               {errorMsg}
             </div>
           )}
 
           {isEdit && initialDepartment && initialDepartment.name !== name.trim() && name.trim() !== '' && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-start space-x-2 text-xs text-amber-800 dark:text-amber-300">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg flex items-start space-x-2 text-xs text-amber-800 dark:text-amber-300">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <span>
                 <strong>Lưu ý đồng bộ:</strong> Đổi tên bộ phận từ <em>"{initialDepartment.name}"</em> sang <em>"{name.trim()}"</em> sẽ tự động cập nhật cho toàn bộ phòng (Cấp 2) và hồ sơ nhân sự thuộc bộ phận này.
@@ -143,7 +143,7 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-1">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Mã Bộ Phận <span className="text-rose-500">*</span>
               </label>
               <input
@@ -152,12 +152,12 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 placeholder="VD: BP-CDHA"
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none font-mono"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
                 Tên Bộ Phận (Cấp 1) <span className="text-rose-500">*</span>
               </label>
               <input
@@ -166,19 +166,19 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="VD: Chẩn đoán hình ảnh, Sinh hóa - Huyết học..."
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-semibold"
+                className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none font-semibold"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
               Phụ Trách Bộ Phận
             </label>
             <select
               value={managerName}
               onChange={e => setManagerName(e.target.value)}
-              className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none"
             >
               <option value="">-- Chọn người phụ trách bộ phận (tùy chọn) --</option>
               {activeStaffList.map(s => (
@@ -190,7 +190,7 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-bold text-[#263445] dark:text-slate-300 mb-1">
               Mô Tả Chức Năng Bộ Phận
             </label>
             <textarea
@@ -198,21 +198,21 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="Mô tả chức năng chuyên môn của bộ phận..."
-              className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              className="w-full px-3 py-2 text-sm bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-[#263445] dark:text-white focus:ring-2 focus:ring-[#1976D2] outline-none resize-none"
             />
           </div>
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-3">
+          <div className="pt-4 border-t border-[#DFE7F0] dark:border-slate-800 flex items-center justify-end space-x-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-[#718096] dark:text-slate-300 hover:bg-[#F4F7FB] dark:hover:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg transition-colors"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 rounded-xl transition-all shadow-md shadow-indigo-600/20"
+              className="px-5 py-2 text-xs font-bold text-white bg-[#1976D2] hover:bg-[#155A9C] rounded-lg transition-all shadow-xs"
             >
               {isEdit ? 'Lưu Thay Đổi' : 'Tạo Bộ Phận Mới'}
             </button>

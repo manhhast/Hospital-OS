@@ -7,6 +7,8 @@ import {
   type ArchivedCaseReportItem,
   type DailyCaseCount
 } from './reportArchiveService';
+import { isValidServiceName } from '../utils/caseReportParser';
+import { filterActiveStaffProfiles, getInactiveStaffMatchers } from '../utils/staffStatus';
 
 export interface LiveCaseDaySummary {
   year: number;
@@ -26,6 +28,13 @@ export interface LiveCaseDaySummary {
     nd: number;
   }>;
   topServices: Array<{
+    category: string;
+    name: string;
+    total: number;
+    bh: number;
+    nd: number;
+  }>;
+  services?: Array<{
     category: string;
     name: string;
     total: number;
@@ -137,7 +146,9 @@ export interface LiveHospitalContextSnapshot {
   };
   staff: {
     totalCount: number;
+    activeCount?: number;
     items: Array<{
+      userId?: string;
       fullName: string;
       title: string;
       departmentSection: string;
@@ -145,6 +156,23 @@ export interface LiveHospitalContextSnapshot {
       specialty: string;
       phone?: string;
       currentStatus?: string;
+    }>;
+    leaveRequests?: Array<{
+      id: string;
+      userId?: string;
+      userName: string;
+      userRole?: string;
+      departmentSection?: string;
+      room?: string;
+      leaveType: string;
+      startDate: string;
+      endDate: string;
+      totalDays: number;
+      reason: string;
+      substituteUserName?: string;
+      status: string;
+      approvedBy?: string;
+      createdAt?: string;
     }>;
     pendingLeaveRequests: Array<{
       userName: string;
@@ -167,6 +195,7 @@ export interface LiveHospitalContextSnapshot {
       date: string;
       title: string;
       workType?: string;
+      assignedUserId?: string;
       assignedUserName?: string;
       room?: string;
       machine?: string;
@@ -184,6 +213,7 @@ export interface LiveHospitalContextSnapshot {
     activeItems: Array<{
       id: string;
       title: string;
+      description?: string;
       status: string;
       priority: string;
       dueDate: string;
@@ -354,6 +384,7 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
       >();
 
       for (const item of items) {
+        if (!item?.name || !isValidServiceName(item.name)) continue;
         const cat = item.category || 'Khác';
         const dailyData = item.dailyData || {};
 
@@ -439,6 +470,7 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
             weekdayBuckets.set(dow, wb);
           }
 
+          const sortedServices = [...acc.services].sort((a, b) => b.total - a.total);
           allRecordedDays.push({
             year,
             monthKey,
@@ -453,7 +485,8 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
             byCategory: Array.from(acc.byCat.entries())
               .map(([category, v]) => ({ category, ...v }))
               .sort((a, b) => b.total - a.total),
-            topServices: acc.services.sort((a, b) => b.total - a.total).slice(0, 8)
+            topServices: sortedServices.slice(0, 8),
+            services: sortedServices
           });
         });
       }
@@ -471,7 +504,7 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
   }
 
   allRecordedDays.sort((a, b) => b.dateIso.localeCompare(a.dateIso));
-  const recentRecordedDays = allRecordedDays.slice(0, 45);
+  const recentRecordedDays = allRecordedDays.slice(0, 60);
   const latestRecordedDay = recentRecordedDays[0] || null;
   const previousRecordedDay = recentRecordedDays[1] || null;
 
@@ -562,7 +595,22 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
 
   // 4. Staff & Leave & Certificates
   const staffProfiles = storageService.getStaffProfiles();
-  const leaveRequests = storageService.getLeaveRequests();
+  const inactiveStaff = getInactiveStaffMatchers(staffProfiles);
+  const activeStaffProfiles = filterActiveStaffProfiles(staffProfiles);
+  const profileByUserId = new Map(staffProfiles.map(s => [s.userId, s]));
+  const profileByName = new Map(
+    staffProfiles.map(s => [(s.fullName || '').trim().toLowerCase(), s])
+  );
+
+  const rawLeaveRequests = storageService.getLeaveRequests();
+  const leaveRequests = rawLeaveRequests
+    .filter(
+      l =>
+        !inactiveStaff.ids.has(l.userId) &&
+        !inactiveStaff.names.has((l.userName || '').trim().toLowerCase())
+    )
+    .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+
   const expiringCertificates: LiveHospitalContextSnapshot['staff']['expiringCertificates'] = [];
 
   staffProfiles.forEach(s => {
@@ -578,15 +626,15 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
     });
   });
 
-  // 5. Shifts (from -1 day to +14 days)
+  // 5. Shifts (from -14 days to +21 days so current week / last week / next 3 weeks are all covered)
   const rawShifts = storageService.getShifts();
   const upcomingShifts = rawShifts
     .filter(s => {
       const diff = daysBetweenDates(todayIso, s.date);
-      return diff !== null && diff >= -1 && diff <= 14;
+      return diff !== null && diff >= -14 && diff <= 21;
     })
     .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 60);
+    .slice(0, 150);
   const pendingSwapCount = rawShifts.filter(s => s.swapRequest?.status === 'Chờ duyệt').length;
 
   // 6. Tasks
@@ -607,10 +655,11 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
   const activeTaskItems = rawTasks
     .filter(t => t.status !== 'Hủy')
     .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
-    .slice(0, 40)
+    .slice(0, 60)
     .map(t => ({
       id: t.id,
       title: t.title,
+      description: t.description ? t.description.slice(0, 160) : undefined,
       status: t.status,
       priority: t.priority,
       dueDate: t.dueDate,
@@ -699,7 +748,9 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
     },
     staff: {
       totalCount: staffProfiles.length,
-      items: staffProfiles.slice(0, 80).map(s => ({
+      activeCount: activeStaffProfiles.length,
+      items: staffProfiles.slice(0, 100).map(s => ({
+        userId: s.userId,
         fullName: s.fullName,
         title: s.title,
         departmentSection: s.departmentSection,
@@ -708,9 +759,31 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
         phone: s.phone,
         currentStatus: s.currentStatus
       })),
+      leaveRequests: leaveRequests.slice(0, 150).map(l => {
+        const matchedProfile =
+          profileByUserId.get(l.userId) ||
+          profileByName.get((l.userName || '').trim().toLowerCase());
+        return {
+          id: l.id,
+          userId: l.userId,
+          userName: l.userName,
+          userRole: l.userRole,
+          departmentSection: matchedProfile?.departmentSection || '',
+          room: matchedProfile?.room || '',
+          leaveType: l.leaveType,
+          startDate: l.startDate,
+          endDate: l.endDate,
+          totalDays: l.totalDays,
+          reason: l.reason,
+          substituteUserName: l.substituteUserName,
+          status: l.status,
+          approvedBy: l.approvedBy,
+          createdAt: l.createdAt
+        };
+      }),
       pendingLeaveRequests: leaveRequests
         .filter(l => l.status === 'Chờ duyệt')
-        .slice(0, 20)
+        .slice(0, 30)
         .map(l => ({
           userName: l.userName,
           leaveType: l.leaveType,
@@ -720,13 +793,14 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
           reason: l.reason,
           status: l.status
         })),
-      expiringCertificates: expiringCertificates.slice(0, 20)
+      expiringCertificates: expiringCertificates.slice(0, 25)
     },
     shifts: {
       todayAndUpcoming: upcomingShifts.map(s => ({
         date: s.date,
         title: s.title || s.shiftName || 'Ca làm việc',
         workType: s.workType,
+        assignedUserId: s.assignedUserId || s.userId,
         assignedUserName: s.assignedUserName || s.userName,
         room: s.room || s.roomLocation,
         machine: s.machine,
@@ -836,6 +910,7 @@ export async function syncLiveContextToServer(force = false): Promise<boolean> {
       eq: liveContext.equipment.totalCount,
       rm: liveContext.rooms.roomsCount,
       st: liveContext.staff.totalCount,
+      lr: (liveContext.staff.leaveRequests || []).map(l => `${l.id}:${l.status}:${l.startDate}`).slice(0, 30).join(','),
       tk: liveContext.tasks.totalCount,
       sh: liveContext.shifts.todayAndUpcoming.length,
       doc: liveContext.documents.totalCount,

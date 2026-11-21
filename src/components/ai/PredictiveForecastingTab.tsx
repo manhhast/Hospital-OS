@@ -40,23 +40,23 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-[#1976D2] text-white flex items-center justify-center shadow-xs shrink-0">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                Predictive Workload & Rostering AI
+              <h2 className="text-base font-bold text-[#263445] dark:text-slate-100">
+                Dự Báo Lưu Lượng &amp; Xếp Kíp Trực
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 rounded-full border border-blue-300 dark:border-blue-800">
-                Time-Series ML
+              <span className="text-xs font-semibold text-[#1976D2] dark:text-blue-300">
+                · Chuỗi thời gian 7 ngày
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-[#718096] dark:text-slate-400">
               Mô hình học máy dự báo chuỗi thời gian 7 ngày tới & tự động xếp kíp trực tối ưu TAT
             </p>
           </div>
@@ -65,7 +65,7 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
         <button
           onClick={loadForecast}
           disabled={isLoading}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition shadow-md shadow-blue-600/20 self-end sm:self-auto"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition shadow-xs self-end sm:self-auto cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           <span>{isLoading ? 'Đang phân tích ML...' : 'Chạy lại dự báo'}</span>
@@ -73,21 +73,21 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
       </div>
 
       {isLoading ? (
-        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-          <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-800">
+          <RefreshCw className="w-8 h-8 text-[#1976D2] animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-[#263445] dark:text-slate-300">
             Đang huấn luyện mô hình dự báo chuỗi thời gian dựa trên 12 tháng lịch sử...
           </p>
         </div>
       ) : forecastData ? (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Key Forecast Summary Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tổng dự báo 7 ngày</div>
-              <div className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
+              <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Tổng dự báo 7 ngày</div>
+              <div className="text-2xl font-black text-[#1976D2] dark:text-blue-400 mt-1">
                 {forecastData.totalPredictedWeek.toLocaleString()}{' '}
-                <span className="text-xs font-medium text-slate-500">ca</span>
+                <span className="text-xs font-medium text-[#718096]">ca</span>
               </div>
               <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1 flex items-center gap-1">
                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -95,20 +95,20 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Ngày cao điểm nhất</div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
+              <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Ngày cao điểm nhất</div>
               <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
                 {forecastData.peakDay}
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
+              <div className="text-[11px] text-[#718096] font-medium mt-1">
                 Tái khám BHYT & Đoàn KSK định kỳ
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Thời gian trả KQ dự kiến (TAT)</div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
+              <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Thời gian trả KQ dự kiến (TAT)</div>
               <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                28 <span className="text-xs font-medium text-slate-500">phút</span>
+                28 <span className="text-xs font-medium text-[#718096]">phút</span>
               </div>
               <div className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
                 <Zap className="w-3.5 h-3.5" />
@@ -116,9 +116,9 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Cơ cấu dự báo chuyên khoa</div>
-              <div className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-2 space-y-1">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs">
+              <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider">Cơ cấu dự báo chuyên khoa</div>
+              <div className="text-xs font-bold text-[#263445] dark:text-slate-200 mt-2 space-y-1">
                 {(() => {
                   const breakdown = forecastData.departmentBreakdown || {
                     xetNghiem: forecastData.dailyForecasts?.reduce((sum, d) => sum + (d.xetNghiemPredicted || 0), 0) || 4680,
@@ -129,15 +129,15 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
                     <>
                       <div className="flex justify-between">
                         <span>Xét nghiệm:</span>
-                        <span className="text-blue-600 font-black">{(breakdown.xetNghiem || 0).toLocaleString()} ca (52%)</span>
+                        <span className="text-[#1976D2] font-black">{(breakdown.xetNghiem || 0).toLocaleString()} ca (52%)</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Chẩn đoán H.Ảnh:</span>
-                        <span className="text-indigo-600 font-black">{(breakdown.cdha || 0).toLocaleString()} ca (39%)</span>
+                        <span className="text-[#155A9C] font-black">{(breakdown.cdha || 0).toLocaleString()} ca (39%)</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Thăm dò CN & Nội soi:</span>
-                        <span className="text-purple-600 font-black">{(breakdown.thamDoChucNang || 0).toLocaleString()} ca (9%)</span>
+                        <span className="text-emerald-600 font-black">{(breakdown.thamDoChucNang || 0).toLocaleString()} ca (9%)</span>
                       </div>
                     </>
                   );
@@ -147,7 +147,7 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
           </div>
 
           {/* Time Series Recharts Chart */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -248,26 +248,26 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
           </div>
 
           {/* Section: Hourly Peak Rostering AI Grid */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-base font-bold text-[#263445] dark:text-slate-100 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-[#1976D2]" />
                   Xếp Lịch Nhân Lực Thông Minh Theo Khung Giờ Cao Điểm (Smart Hourly Rostering)
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#718096]">
                   AI tính toán số lượng Bác sĩ đọc kết quả, Kỹ thuật viên vận hành máy và Tiếp đón theo từng khung giờ
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                <span className="text-xs font-bold text-[#263445] dark:text-slate-300">
                   Chọn ngày mô phỏng:
                 </span>
                 <select
                   value={selectedDay}
                   onChange={(e) => setSelectedDay(e.target.value)}
-                  className="px-3 py-1.5 text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-700 outline-none"
+                  className="px-3 py-1.5 text-xs font-bold bg-[#F4F7FB] dark:bg-slate-800 text-[#263445] dark:text-slate-100 rounded-lg border border-[#DFE7F0] dark:border-slate-700 outline-none"
                 >
                   <option value="Thứ Hai">Thứ Hai (Cao điểm nhất - 1.680 ca)</option>
                   <option value="Thứ Ba">Thứ Ba (1.450 ca)</option>
@@ -280,18 +280,18 @@ export const PredictiveForecastingTab: React.FC<PredictiveForecastingTabProps> =
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-2">
               {forecastData.hourlyRostering.map((slot, idx) => (
                 <div 
                   key={idx} 
-                  className={`p-4 rounded-2xl border transition-all relative overflow-hidden ${
+                  className={`p-4 rounded-xl border transition-all relative overflow-hidden ${
                     idx === 0 
-                      ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60 shadow-sm'
+                      ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60 shadow-xs'
                       : idx === 1
-                      ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 shadow-sm'
+                      ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 shadow-xs'
                       : idx === 2
-                      ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/60 shadow-sm'
-                      : 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800/60 shadow-sm'
+                      ? 'bg-[#EAF4FF]/60 dark:bg-blue-950/20 border-[#1976D2]/25 dark:border-blue-800/60 shadow-xs'
+                      : 'bg-[#F4F7FB] dark:bg-slate-800/40 border-[#DFE7F0] dark:border-slate-700 shadow-xs'
                   }`}
                 >
                   <div className="flex items-center justify-between">

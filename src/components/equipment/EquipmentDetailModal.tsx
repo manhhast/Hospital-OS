@@ -650,33 +650,33 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
     <div id="equipment-detail-modal-backdrop" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
       <div 
         id="equipment-detail-modal-container" 
-        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="bg-white dark:bg-slate-900 rounded-xl w-full max-w-4xl shadow-2xl border border-[#DFE7F0] dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header Bar */}
-        <div className="p-5 sm:px-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+        <div className="p-4 sm:px-6 border-b border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
           <div className="flex items-start gap-3.5">
-            <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-500/20 shrink-0 mt-0.5">
-              <Wrench className="w-6 h-6" />
+            <div className="p-2.5 bg-[#1976D2] text-white rounded-lg shadow-xs shrink-0 mt-0.5">
+              <Wrench className="w-5 h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 uppercase tracking-wider">
+                <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-[#EAF4FF] text-[#155A9C] dark:bg-blue-950 dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800 uppercase tracking-wider">
                   {equipment.code}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-white text-[#263445] dark:bg-slate-800 dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700">
                   {equipment.category}
                 </span>
                 {getStatusBadge(currentStatus)}
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-tight">
+              <h2 className="text-lg sm:text-xl font-bold text-[#263445] dark:text-white leading-tight">
                 {equipment.name}
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>Hãng SX: <strong className="text-slate-700 dark:text-slate-200">{equipment.manufacturer}</strong> ({equipment.originCountry || 'Chính hãng'})</span>
+              <p className="text-xs text-[#718096] dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>Hãng SX: <strong className="text-[#263445] dark:text-slate-200">{equipment.manufacturer}</strong> ({equipment.originCountry || 'Chính hãng'})</span>
                 <span>•</span>
-                <span>Model: <strong className="text-slate-700 dark:text-slate-200">{equipment.model}</strong></span>
+                <span>Model: <strong className="text-[#263445] dark:text-slate-200">{equipment.model}</strong></span>
                 <span>•</span>
-                <span>Số Serial: <strong className="text-slate-700 dark:text-slate-200">{equipment.serialNumber}</strong></span>
+                <span>Số Serial: <strong className="text-[#263445] dark:text-slate-200">{equipment.serialNumber}</strong></span>
               </p>
             </div>
           </div>
@@ -684,13 +684,13 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
           {/* Header Quick Actions & Status */}
           <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 flex-wrap justify-end">
             {saveSuccessMsg && (
-              <span className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 border border-emerald-300 dark:border-emerald-800 animate-in fade-in">
+              <span className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1 border border-emerald-300 dark:border-emerald-800 animate-in fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 {saveSuccessMsg}
               </span>
             )}
             {saveErrorMsg && (
-              <span className="px-3 py-1.5 bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 rounded-xl text-xs font-bold flex items-center gap-1 border border-rose-300 dark:border-rose-800 animate-in fade-in">
+              <span className="px-3 py-1.5 bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 rounded-lg text-xs font-bold flex items-center gap-1 border border-rose-300 dark:border-rose-800 animate-in fade-in">
                 <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                 {saveErrorMsg}
               </span>
@@ -701,19 +701,19 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsChangingStatus(!isChangingStatus)}
-                  className="px-3.5 py-2 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 shadow-xs hover:shadow-sm"
+                  className="px-3.5 py-2 bg-white hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] dark:text-slate-100 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border border-[#DFE7F0] dark:border-slate-700 shadow-xs"
                 >
                   <span>Đổi trạng thái</span>
                 </button>
                 {isChangingStatus && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-30">
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-[#DFE7F0] dark:border-slate-700 py-1.5 z-30">
                     {(['Hoạt động tốt', 'Cần bảo trì', 'Sự cố hỏng hóc', 'Đang hiệu chuẩn', 'Tạm ngưng'] as EquipmentStatus[]).map((st) => (
                       <button
                         key={st}
                         type="button"
                         onClick={() => handleSaveStatus(st)}
-                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
-                          currentStatus === st ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30' : 'text-slate-700 dark:text-slate-300'
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center justify-between hover:bg-[#EAF4FF]/60 dark:hover:bg-slate-700 transition-colors ${
+                          currentStatus === st ? 'text-[#1976D2] dark:text-blue-400 bg-[#EAF4FF] dark:bg-blue-950/30' : 'text-[#263445] dark:text-slate-300'
                         }`}
                       >
                         <span>{st}</span>
@@ -729,7 +729,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(true)}
-                className="p-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl border border-rose-200 dark:border-rose-900/60 transition-all shadow-xs"
+                className="p-2 text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg border border-rose-200 dark:border-rose-900/60 transition-all shadow-xs"
                 title="Xóa thiết bị này khỏi danh sách"
               >
                 <Trash2 className="w-4 h-4" />
@@ -739,7 +739,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <button
               type="button"
               onClick={() => window.print()}
-              className="p-2.5 text-slate-700 hover:text-indigo-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-700 transition-all shadow-xs"
+              className="p-2 bg-white dark:bg-slate-800 text-[#263445] hover:text-[#1976D2] dark:text-slate-300 hover:bg-[#EAF4FF] dark:hover:bg-slate-700 rounded-lg border border-[#DFE7F0] dark:border-slate-700 transition-all shadow-xs"
               title="In phiếu lý lịch máy"
             >
               <Printer className="w-4 h-4" />
@@ -748,7 +748,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-2.5 text-slate-500 hover:text-rose-600 dark:text-slate-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-700 transition-all shadow-xs"
+              className="p-2 bg-white dark:bg-slate-800 text-[#718096] hover:text-rose-600 dark:text-slate-400 hover:bg-rose-50 dark:hover:bg-slate-700 rounded-lg border border-[#DFE7F0] dark:border-slate-700 transition-all shadow-xs"
               title="Đóng cửa sổ"
             >
               <X className="w-5 h-5" />
@@ -757,64 +757,64 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
         </div>
 
         {/* Quick Highlights Summary Grid */}
-        <div className="p-4 sm:px-6 bg-slate-50/50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
-          <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 shadow-xs">
-            <span className="text-[11px] text-slate-400 dark:text-slate-400 font-medium flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-indigo-500" /> Vị trí phòng máy
+        <div className="p-3.5 sm:px-6 bg-white dark:bg-slate-800/40 border-b border-[#DFE7F0] dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+          <div className="p-2.5 rounded-lg bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700/80">
+            <span className="text-[11px] text-[#718096] dark:text-slate-400 font-medium flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-[#1976D2]" /> Vị trí phòng máy
             </span>
             <div className="mt-1 flex items-center gap-1.5 min-w-0" title={headerRoomDisplay.fullLabel}>
               {headerRoomDisplay.code && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#EAF4FF] dark:bg-blue-950/80 text-[#155A9C] dark:text-blue-300 border border-[#1976D2]/25 dark:border-blue-800 shrink-0">
                   {headerRoomDisplay.code}
                 </span>
               )}
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+              <p className="text-xs font-bold text-[#263445] dark:text-slate-100 truncate">
                 {headerRoomDisplay.name}
               </p>
             </div>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 shadow-xs">
-            <span className="text-[11px] text-slate-600 dark:text-slate-300 font-bold flex items-center gap-1">
+          <div className="p-2.5 rounded-lg bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700/80">
+            <span className="text-[11px] text-[#263445] dark:text-slate-300 font-bold flex items-center gap-1">
               <Calendar className="w-3 h-3 text-amber-500" /> Lịch Bảo Dưỡng
             </span>
-            <p className={`text-xs font-bold mt-1 ${isNextMaintenanceOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>
+            <p className={`text-xs font-bold mt-1 ${isNextMaintenanceOverdue ? 'text-red-600 dark:text-red-400' : 'text-[#263445] dark:text-slate-100'}`}>
               {formatDateVN(equipment.nextMaintenanceDate)} {isNextMaintenanceOverdue && '⚠️ Quá hạn'}
             </p>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 shadow-xs">
-            <span className="text-[11px] text-sky-700 dark:text-sky-300 font-bold flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-sky-500" /> Hạn Kiểm Định
+          <div className="p-2.5 rounded-lg bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700/80">
+            <span className="text-[11px] text-[#155A9C] dark:text-sky-300 font-bold flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3 text-[#1976D2]" /> Hạn Kiểm Định
             </span>
-            <p className={`text-xs font-bold mt-1 ${isCalibrationOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>
+            <p className={`text-xs font-bold mt-1 ${isCalibrationOverdue ? 'text-red-600 dark:text-red-400' : 'text-[#263445] dark:text-slate-100'}`}>
               {equipment.calibrationExpiry ? formatDateVN(equipment.calibrationExpiry) : 'Định kỳ hàng năm'} {isCalibrationOverdue && '⚠️ Quá hạn'}
             </p>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 shadow-xs">
+          <div className="p-2.5 rounded-lg bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700/80">
             <span className="text-[11px] text-amber-700 dark:text-amber-300 font-bold flex items-center gap-1">
               <Award className="w-3 h-3 text-amber-500" /> Hạn Cấp Phép & Kiểm Xạ
             </span>
-            <p className={`text-xs font-bold mt-1 ${isRadiationOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100'}`}>
+            <p className={`text-xs font-bold mt-1 ${isRadiationOverdue ? 'text-red-600 dark:text-red-400' : 'text-[#263445] dark:text-slate-100'}`}>
               {radExpirySummary ? `KX: ${formatDateVN(radExpirySummary)}` : (equipment.operatingPermitExpiry ? `GP: ${formatDateVN(equipment.operatingPermitExpiry)}` : 'Đang cập nhật')} {isRadiationOverdue && '⚠️ Quá hạn'}
             </p>
           </div>
         </div>
 
         {/* Navigation Tabs (Always Accessible & Highly Visible) */}
-        <div className="px-4 sm:px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/90 shrink-0">
-          <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar p-1.5 bg-slate-200/80 dark:bg-slate-800/90 rounded-2xl border border-slate-300/80 dark:border-slate-700">
+        <div className="px-4 sm:px-6 py-2.5 border-b border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-900/90 shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar p-1 bg-white dark:bg-slate-800/90 rounded-xl border border-[#DFE7F0] dark:border-slate-700">
             <button
               type="button"
               onClick={() => setActiveTab('profile')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'profile'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]'
-                  : 'bg-white/80 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-xs'
+                  : 'text-[#718096] dark:text-slate-200 hover:text-[#1976D2] dark:hover:text-white hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
-              <FileText className={`w-4 h-4 ${activeTab === 'profile' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
+              <FileText className={`w-4 h-4 ${activeTab === 'profile' ? 'text-white' : 'text-[#1976D2] dark:text-blue-400'}`} />
               <span>Phần 1: Lý Lịch &amp; Thông Tin Cố Định</span>
               {isEditingProfile && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'profile' ? 'bg-amber-300 text-amber-950' : 'bg-amber-100 text-amber-800'}`}>
@@ -826,13 +826,13 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('docs')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'docs'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]'
-                  : 'bg-white/80 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-xs'
+                  : 'text-[#718096] dark:text-slate-200 hover:text-[#1976D2] dark:hover:text-white hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
-              <Award className={`w-4 h-4 ${activeTab === 'docs' ? 'text-white' : 'text-sky-600 dark:text-sky-400'}`} />
+              <Award className={`w-4 h-4 ${activeTab === 'docs' ? 'text-white' : 'text-[#1976D2] dark:text-sky-400'}`} />
               <span>Phần 2: Giấy Phép, Kiểm Định, Kiểm Xạ &amp; Bảo Dưỡng</span>
               {isEditingDocs && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'docs' ? 'bg-amber-300 text-amber-950' : 'bg-amber-100 text-amber-800'}`}>
@@ -844,10 +844,10 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('maintenance')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'maintenance'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]'
-                  : 'bg-white/80 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-xs'
+                  : 'text-[#718096] dark:text-slate-200 hover:text-[#1976D2] dark:hover:text-white hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
               <History className={`w-4 h-4 ${activeTab === 'maintenance' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
@@ -864,10 +864,10 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('repairs')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'repairs'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]'
-                  : 'bg-white/80 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs'
+                  ? 'bg-[#1976D2] text-white shadow-xs'
+                  : 'text-[#718096] dark:text-slate-200 hover:text-[#1976D2] dark:hover:text-white hover:bg-[#EAF4FF] dark:hover:bg-slate-800'
               }`}
             >
               <AlertTriangle className={`w-4 h-4 ${activeTab === 'repairs' ? 'text-white' : 'text-rose-500 dark:text-rose-400'}`} />
@@ -884,16 +884,16 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
         </div>
 
         {/* Tab Content Body (Scrollable) */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-6">
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-5">
 
           {/* =========================================================================
               TAB 1: LÝ LỊCH & HỒ SƠ MÁY (CHO PHÉP CHỈNH SỬA TOÀN BỘ LÝ LỊCH)
               ========================================================================= */}
           {activeTab === 'profile' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/80 dark:bg-indigo-950/40 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/60 shadow-xs">
-                <div className="flex items-center gap-2.5 text-xs text-indigo-950 dark:text-indigo-200">
-                  <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <div className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#EAF4FF] dark:bg-blue-950/40 p-3.5 rounded-xl border border-[#1976D2]/25 dark:border-blue-900/60 shadow-xs">
+                <div className="flex items-center gap-2.5 text-xs text-[#155A9C] dark:text-blue-200">
+                  <FileText className="w-5 h-5 text-[#1976D2] dark:text-blue-400 shrink-0" />
                   <span>
                     Hồ sơ lý lịch kỹ thuật gốc của máy. Áp dụng quyền <strong>Chỉnh Sửa Hồ Sơ</strong> để cập nhật thông tin thiết bị.
                   </span>
@@ -903,7 +903,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsEditingProfile(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 shrink-0"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-[#1976D2] hover:bg-[#155A9C] rounded-lg transition-all shadow-xs shrink-0"
                     >
                       <Edit3 className="w-4 h-4" />
                       <span>Chỉnh Sửa Lý Lịch & Hồ Sơ Máy</span>
@@ -913,14 +913,14 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                       <button
                         type="button"
                         onClick={handleCancelProfile}
-                        className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 shadow-xs"
+                        className="px-4 py-2 text-xs font-bold text-[#263445] dark:text-slate-200 bg-white dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg hover:bg-[#F4F7FB] dark:hover:bg-slate-700 shadow-xs"
                       >
                         Hủy bỏ
                       </button>
                       <button
                         type="button"
                         onClick={handleSaveProfile}
-                        className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/25 active:scale-95"
+                        className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-[#1976D2] hover:bg-[#155A9C] rounded-lg shadow-xs"
                       >
                         <Save className="w-4 h-4" />
                         <span>Lưu Hồ Sơ Máy</span>
@@ -928,7 +928,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                     </div>
                   )
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shrink-0">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shrink-0">
                     <Lock className="w-3.5 h-3.5" /> Chế độ chỉ xem (ngoài phạm vi)
                   </span>
                 )}
@@ -1292,10 +1292,10 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               ========================================================================= */}
           {activeTab === 'maintenance' && (
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/80 dark:bg-indigo-950/40 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/60 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#EAF4FF] dark:bg-blue-950/40 p-3.5 rounded-xl border border-[#1976D2]/25 dark:border-blue-900/60 shadow-xs">
                 <div>
-                  <h4 className="font-bold text-indigo-950 dark:text-indigo-200 text-sm">Lịch Bảo Dưỡng & Hiệu Chuẩn Định Kỳ</h4>
-                  <p className="text-xs text-indigo-800 dark:text-indigo-300 mt-0.5">
+                  <h4 className="font-bold text-[#155A9C] dark:text-blue-200 text-sm">Lịch Bảo Dưỡng & Hiệu Chuẩn Định Kỳ</h4>
+                  <p className="text-xs text-[#263445] dark:text-blue-300 mt-0.5">
                     Chu kỳ quy định: <strong className="font-bold">{equipment.maintenanceIntervalMonths} tháng/lần</strong>. Hạn tiếp theo: <strong className="font-bold">{formatDateVN(equipment.nextMaintenanceDate)}</strong>
                   </p>
                 </div>
@@ -1306,13 +1306,13 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                       setEditingMaintLog(null);
                       setShowAddMaint(!showAddMaint);
                     }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95 shrink-0"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg font-bold text-xs transition-all shadow-xs shrink-0"
                   >
                     <Plus className="w-4 h-4" />
                     <span>{showAddMaint ? 'Đóng Form' : '+ Ghi Thêm Nhật Ký Bảo Trì'}</span>
                   </button>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shrink-0">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-semibold shrink-0">
                     <Lock className="w-3.5 h-3.5" /> Chỉ xem nhật ký bảo trì
                   </span>
                 )}
@@ -2187,16 +2187,16 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
         </div>
 
         {/* Footer Actions contextual to current Tab */}
-        <div className="p-4 sm:px-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            Mã thiết bị: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{equipment.code}</span> • Lần cập nhật cuối: {formatDateVN(equipment.lastMaintenanceDate)}
+        <div className="p-4 sm:px-6 border-t border-[#DFE7F0] dark:border-slate-800 bg-[#F4F7FB] dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+          <div className="text-xs text-[#718096] dark:text-slate-400">
+            Mã thiết bị: <span className="font-mono font-bold text-[#263445] dark:text-slate-200">{equipment.code}</span> • Lần cập nhật cuối: {formatDateVN(equipment.lastMaintenanceDate)}
           </div>
           <div className="flex items-center gap-2.5 justify-end flex-wrap">
             {canEditEq && activeTab === 'profile' && !isEditingProfile && (
               <button
                 type="button"
                 onClick={() => setIsEditingProfile(true)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95"
+                className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-xs"
               >
                 <Edit3 className="w-4 h-4" />
                 <span>Chỉnh Sửa Lý Lịch Máy</span>
@@ -2208,14 +2208,14 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCancelProfile}
-                  className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold transition-all shadow-xs"
+                  className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-[#F4F7FB] text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-bold transition-all shadow-xs"
                 >
                   Hủy Bỏ
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveProfile}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-indigo-600/25 active:scale-95"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-xs"
                 >
                   <Save className="w-4 h-4" />
                   <span>Lưu Hồ Sơ Máy</span>
@@ -2227,7 +2227,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsEditingDocs(true)}
-                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md hover:shadow-lg shadow-sky-600/20 active:scale-95"
+                className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-xs"
               >
                 <Edit3 className="w-4 h-4" />
                 <span>Chỉnh Sửa Giấy Phép & Kiểm Định</span>
@@ -2239,14 +2239,14 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCancelDocs}
-                  className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold transition-all shadow-xs"
+                  className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-[#F4F7FB] text-[#263445] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-bold transition-all shadow-xs"
                 >
                   Hủy Bỏ
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveDocs}
-                  className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-sky-600/25 active:scale-95"
+                  className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-xs"
                 >
                   <Save className="w-4 h-4" />
                   <span>Lưu Giấy Phép & Kiểm Định</span>
@@ -2261,7 +2261,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                   setEditingMaintLog(null);
                   setShowAddMaint(true);
                 }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md hover:shadow-lg shadow-indigo-600/20 active:scale-95"
+                className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>Thêm Nhật Ký Bảo Trì</span>
@@ -2275,7 +2275,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
                   setEditingRepairLog(null);
                   setShowAddRepair(true);
                 }}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md hover:shadow-lg shadow-rose-600/20 active:scale-95"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-xs"
               >
                 <AlertTriangle className="w-4 h-4" />
                 <span>Báo Cáo Sự Cố Mới</span>
@@ -2285,7 +2285,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold transition-all border border-slate-300 dark:border-slate-700 shadow-xs"
+              className="px-5 py-2 bg-white hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] dark:text-slate-100 rounded-lg text-xs font-bold transition-all border border-[#DFE7F0] dark:border-slate-700 shadow-xs"
             >
               Đóng Cửa Sổ
             </button>
