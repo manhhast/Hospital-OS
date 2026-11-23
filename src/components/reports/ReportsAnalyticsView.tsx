@@ -1341,76 +1341,93 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
       });
 
       const srcDayAll = srcDayBH + srcDayND;
-      const srcMonthTotal = sourceMonthItems.reduce((acc, i) => acc + getRowTotal(i), 0);
-      const srcMonthAvgPerDay = srcActiveDays > 0 ? srcMonthTotal / srcActiveDays : 0;
-      const srcDiffVsAvg = srcDayAll - srcMonthAvgPerDay;
 
       let srcPrevDayNum: number | null = null;
       let srcPrevDayTotal = 0;
-      for (let d = selectedReportDay - 1; d >= 1; d--) {
+      if (selectedReportDay > 1) {
+        const prevD = selectedReportDay - 1;
         let daySum = 0;
-        let isPrevLT = false;
         for (const it of sourceMonthItems) {
-          const entry = it.dailyData?.[d];
-          if (entry?.bh === 'LT' || entry?.nd === 'LT') isPrevLT = true;
+          const entry = it.dailyData?.[prevD];
           const bh = typeof entry?.bh === 'number' ? entry.bh : (parseInt(String(entry?.bh || '').replace(/[^0-9]/g, ''), 10) || 0);
           const nd = typeof entry?.nd === 'number' ? entry.nd : (parseInt(String(entry?.nd || '').replace(/[^0-9]/g, ''), 10) || 0);
           daySum += bh + nd;
         }
-        if (!isPrevLT && daySum > 0) {
-          srcPrevDayNum = d;
-          srcPrevDayTotal = daySum;
-          break;
-        }
+        srcPrevDayNum = prevD;
+        srcPrevDayTotal = daySum;
       }
       const srcDiffPrev = srcPrevDayNum !== null ? srcDayAll - srcPrevDayTotal : 0;
       const srcDiffPrevPct = srcPrevDayNum !== null && srcPrevDayTotal > 0 ? (srcDiffPrev / srcPrevDayTotal) * 100 : 0;
 
+      const formatCatHeader = (catName: string): { icon: string; title: string } => {
+        const norm = String(catName || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/đ/g, 'd')
+          .replace(/Đ/g, 'D')
+          .toLowerCase();
+        if (norm.includes('noi soi')) return { icon: '👁️', title: 'NỘI SOI' };
+        if (norm.includes('x quang') || norm.includes('x-quang')) return { icon: '🩻', title: 'X-QUANG & CLVT' };
+        if (norm.includes('dien tim') || norm.includes('lhn')) return { icon: '📈', title: 'ĐIỆN TIM & LHN' };
+        if (norm.includes('xet nghiem')) return { icon: '🧪', title: 'XÉT NGHIỆM' };
+        if (norm.includes('sieu am')) return { icon: '🩺', title: 'SIÊU ÂM' };
+        if (norm.includes('msct')) return { icon: '🖥️', title: 'MSCT' };
+        if (norm.includes('mri')) return { icon: '🧲', title: 'MRI' };
+        return { icon: '📌', title: catName.toUpperCase() };
+      };
+
       const srcAllCatDaily = categories
         .filter((c) => c !== 'Tất cả')
         .map((cat) => {
-          const items = srcStats.filter((i) => i.category === cat);
+          const items = srcStats.filter((i) => i.category === cat && (i.totalDay > 0 || i.dailyData?.[selectedReportDay]?.bh === 'LT'));
           const bh = items.reduce((s, x) => s + x.bhVal, 0);
           const nd = items.reduce((s, x) => s + x.ndVal, 0);
-          return { category: cat, bh, nd, total: bh + nd };
+          return { category: cat, bh, nd, total: bh + nd, items };
         })
         .filter((g) => g.total > 0);
 
-      const srcTriageList = sourceMonthItems.map((item) =>
-        calculateClinicalTriage(item, selectedReportDay, sourceMonthItems, srcActiveDays)
-      );
-      const anomalyLines = srcTriageList
-        .filter((t) => t.severity === 'SURGE_CRITICAL' || t.severity === 'DROP_CRITICAL')
-        .slice(0, 5)
-        .map((t) => `  • ${t.itemName}: ${t.todayCount} ca (TB ${t.mean.toFixed(1)}, Z=${t.zScore > 0 ? `+${t.zScore}` : t.zScore})`);
+      const dateDisplay = `${String(selectedReportDay).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/${selectedYear}`;
+      const prevDateDisplay = srcPrevDayNum !== null
+        ? `${String(srcPrevDayNum).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/${selectedYear}`
+        : null;
 
-      const eqSummary = scanEquipmentExpirations(storageService.getEquipment(), 30);
-      const tskSummary = scanTaskReminders(storageService.getTasks(), 3);
-      const bhPct = srcDayAll > 0 ? ((srcDayBH / srcDayAll) * 100).toFixed(1) : '0.0';
-      const ndPct = srcDayAll > 0 ? ((srcDayND / srcDayAll) * 100).toFixed(1) : '0.0';
+      let pctDeltaLine = '• So với ngày hôm trước: Chưa có dữ liệu đối chiếu';
+      if (prevDateDisplay) {
+        if (srcPrevDayTotal > 0) {
+          const arrow = srcDiffPrev > 0 ? '📈' : srcDiffPrev < 0 ? '📉' : '➖';
+          const sign = srcDiffPrev > 0 ? '+' : '';
+          pctDeltaLine = `• So với ngày hôm trước (${prevDateDisplay}): ${arrow} ${sign}${srcDiffPrevPct.toFixed(1)}% (${sign}${srcDiffPrev.toLocaleString('vi-VN')} ca; hôm trước ${srcPrevDayTotal.toLocaleString('vi-VN')})`;
+        } else if (srcDayAll > 0) {
+          pctDeltaLine = `• So với ngày hôm trước (${prevDateDisplay}): 📈 Mới (+${srcDayAll.toLocaleString('vi-VN')} ca; hôm trước 0)`;
+        } else {
+          pctDeltaLine = `• So với ngày hôm trước (${prevDateDisplay}): ➖ 0% (không phát sinh ca)`;
+        }
+      }
+
+      const categoryBlocks: string[] = [];
+      srcAllCatDaily.forEach((group) => {
+        const { icon, title } = formatCatHeader(group.category);
+        categoryBlocks.push(`${icon} ${title} (Tổng: ${group.total.toLocaleString('vi-VN')} ca)`);
+        group.items.forEach((svc) => {
+          const bhPart = svc.bhVal > 0 ? `BH: ${svc.bhVal.toLocaleString('vi-VN')}` : '';
+          const ndPart = svc.ndVal > 0 ? `ND: ${svc.ndVal.toLocaleString('vi-VN')}` : '';
+          const parts = [bhPart, ndPart].filter(Boolean);
+          const breakdownTxt = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+          categoryBlocks.push(`• ${svc.name}: ${svc.totalDay.toLocaleString('vi-VN')} ca${breakdownTxt}`);
+        });
+      });
 
       const text = [
-        `📊 BÁO CÁO SỐ LIỆU GIAO BAN NGÀY ${String(selectedReportDay).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/${selectedYear} — KHOA CẬN LÂM SÀNG`,
-        `────────────────────────────────────────`,
-        `• Tổng số ca thực hiện: ${srcDayAll.toLocaleString('vi-VN')} ca${srcHolidayLT ? ' (Lễ Tết - LT)' : ''}`,
-        `  - Bảo hiểm (BHYT): ${srcDayBH.toLocaleString('vi-VN')} ca (${bhPct}%)`,
-        `  - Nhân dân (Viện phí): ${srcDayND.toLocaleString('vi-VN')} ca (${ndPct}%)`,
-        srcPrevDayNum !== null
-          ? `  - So với ngày ${srcPrevDayNum}/${mNum}: ${srcDiffPrev >= 0 ? '+' : ''}${srcDiffPrev} ca (${srcDiffPrevPct >= 0 ? '+' : ''}${srcDiffPrevPct.toFixed(1)}%)`
-          : `  - So với TB tháng (${srcMonthAvgPerDay.toFixed(1)} ca/ngày): ${srcDiffVsAvg >= 0 ? '+' : ''}${srcDiffVsAvg.toFixed(1)} ca`,
-        ``,
-        `🏥 CHI TIẾT THEO BỘ PHẬN:`,
-        ...srcAllCatDaily.map((c) => {
-          const pct = srcDayAll > 0 ? ((c.total / srcDayAll) * 100).toFixed(1) : '0.0';
-          return `  • ${c.category}: ${c.total.toLocaleString('vi-VN')} ca (${pct}%) [BH: ${c.bh} | ND: ${c.nd}]`;
-        }),
-        ...(anomalyLines.length > 0 ? [``, `🚨 BIẾN ĐỘNG CHUYÊN MÔN ĐÁNG CHÚ Ý:`, ...anomalyLines] : []),
-        ``,
-        `🛡️ CẢNH BÁO VẬN HÀNH & NHẮC VIỆC:`,
-        `  • Thời hạn thiết bị (≤30 ngày/quá hạn): ${eqSummary.overdueCount} quá hạn, ${eqSummary.critical7Count} khẩn cấp ≤7 ngày, ${eqSummary.warning30Count} sắp hạn.`,
-        `  • Công việc tồn đọng: ${tskSummary.overdueCount} quá hạn, ${tskSummary.dueTodayCount} hạn hôm nay, ${tskSummary.dueSoon3DaysCount} sắp hạn ≤3 ngày.`,
-        `────────────────────────────────────────`,
-        `Người lập báo cáo: ${storageService.getCurrentUser().name}`
+        `📊 BÁO CÁO GIAO BAN SỐ LIỆU SỬ DỤNG AI`,
+        `📅 Ngày báo cáo: ${dateDisplay}${srcHolidayLT ? ' (Nghỉ Lễ Tết - LT)' : ''}`,
+        `👤 Đồng bộ từ: ${storageService.getCurrentUser().name} (Đồng bộ Google Sheet)`,
+        `━━━━━━━━━━━━━━━━━━━━━━`,
+        ...categoryBlocks,
+        `━━━━━━━━━━━━━━━━━━━━━━`,
+        `📈 TỔNG CỘNG TOÀN KHOA: ${srcDayAll.toLocaleString('vi-VN')} ca thực hiện`,
+        pctDeltaLine,
+        `• Bảo hiểm Y tế (BH): ${srcDayBH.toLocaleString('vi-VN')} ca`,
+        `• Ngoài định mức / Dịch vụ (ND): ${srcDayND.toLocaleString('vi-VN')} ca`
       ].join('\n');
 
       return { text, totalCases: srcDayAll, mNum };

@@ -1472,66 +1472,6 @@ function computeMonthAverageToDay(items: ArchivedCaseReportItem[], maxDay: numbe
   };
 }
 
-function formatCompactDelta(
-  current: number,
-  prev: number,
-  hasPrevBaseline: boolean,
-  withPrevLabel = false
-): string {
-  if (!hasPrevBaseline) return "";
-  const diff = current - prev;
-  if (prev === 0 && current === 0) return "";
-  if (prev === 0 && current > 0) {
-    return `📈 Mới (+${current.toLocaleString("vi-VN")} ca${withPrevLabel ? "; hôm trước 0" : ""})`;
-  }
-  const pct = (diff / prev) * 100;
-  const pctFormatted = `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
-  const diffFormatted = `${diff > 0 ? "+" : ""}${diff.toLocaleString("vi-VN")} ca`;
-  if (diff === 0) {
-    return `➡️ 0.0%${withPrevLabel ? ` (bằng hôm trước: ${prev.toLocaleString("vi-VN")})` : ""}`;
-  }
-  const icon = diff > 0 ? "📈" : "📉";
-  return `${icon} ${pctFormatted} (${diffFormatted}${withPrevLabel ? `; hôm trước ${prev.toLocaleString("vi-VN")}` : ""})`;
-}
-
-function getCategoryDisplayMeta(categoryName: string): { icon: string; title: string; order: number } {
-  const lower = String(categoryName || "").trim().toLowerCase();
-  if (lower.includes("nội soi")) {
-    return { icon: "👁️", title: "PHÒNG NỘI SOI", order: 1 };
-  }
-  if (lower.includes("siêu âm")) {
-    return { icon: "🩺", title: "PHÒNG SIÊU ÂM", order: 2 };
-  }
-  if (lower.includes("x quang") || lower.includes("x-quang") || lower.includes("clvt")) {
-    return { icon: "🩻", title: "PHÒNG X-QUANG & CLVT", order: 3 };
-  }
-  if (lower.includes("điện tim") || lower.includes("lhn") || lower.includes("lưu huyết")) {
-    return { icon: "📈", title: "PHÒNG ĐIỆN TIM & LHN", order: 4 };
-  }
-  if (lower.includes("xét nghiệm")) {
-    return { icon: "🧪", title: "PHÒNG XÉT NGHIỆM", order: 5 };
-  }
-  if (lower.includes("msct")) {
-    return { icon: "🩻", title: "PHÒNG MSCT", order: 6 };
-  }
-  if (lower.includes("mri")) {
-    return { icon: "🧲", title: "PHÒNG MRI", order: 7 };
-  }
-  const cleanTitle = String(categoryName || "KHÁC").trim().toUpperCase();
-  const roomTitle = cleanTitle.startsWith("PHÒNG") ? cleanTitle : `PHÒNG ${cleanTitle}`;
-  return { icon: "📌", title: roomTitle, order: 99 };
-}
-
-function formatBhNdParts(bh: number, nd: number): string {
-  const parts: string[] = [];
-  if (bh > 0) parts.push(`BH: ${bh.toLocaleString("vi-VN")}`);
-  if (nd > 0) parts.push(`ND: ${nd.toLocaleString("vi-VN")}`);
-  if (parts.length === 0) return "BH: 0, ND: 0";
-  return parts.join(", ");
-}
-
-const DividerLine = "━━━━━━━━━━━━━━━━━━━━━━";
-
 export async function buildNoonServiceReport(
   data: ResolvedHospitalDataset,
   yesterdayISO: string,
@@ -1571,7 +1511,7 @@ export async function buildNoonServiceReport(
   }
 
   let summary = summarizeMonthDay(primaryMonth.items, yDay);
-  const prevSummary = summarizeMonthDay(prevDayMonthItems, dbDay);
+  let prevSummary = summarizeMonthDay(prevDayMonthItems, dbDay);
   const mtdStats = computeMonthAverageToDay(primaryMonth.items, yDay);
   const notes = [...data.dataSourceNotes, primaryMonth.sourceLabel];
 
@@ -1613,8 +1553,8 @@ export async function buildNoonServiceReport(
   const dateVN = formatDateISOToVN(yesterdayISO);
   const prevDateVN = formatDateISOToVN(dayBeforeISO);
   const prevWeekday = getVNWeekdayLabel(dayBeforeISO);
-  const bhPct = summary.totalCases > 0 ? ((summary.totalBh / summary.totalCases) * 100).toFixed(1) : "0.0";
-  const ndPct = summary.totalCases > 0 ? ((summary.totalNd / summary.totalCases) * 100).toFixed(1) : "0.0";
+  const bhPct = summary.totalCases > 0 ? Math.round((summary.totalBh / summary.totalCases) * 100) : 0;
+  const ndPct = summary.totalCases > 0 ? 100 - bhPct : 0;
   const hasPrevBaseline = prevSummary.totalCases > 0 || prevSummary.ltCount > 0;
 
   // Merge union of categories from yesterday and dayBeforeYesterday
@@ -1624,9 +1564,6 @@ export async function buildNoonServiceReport(
       ...prevSummary.categories.map((c) => c.category),
     ])
   ).sort((a, b) => {
-    const metaA = getCategoryDisplayMeta(a);
-    const metaB = getCategoryDisplayMeta(b);
-    if (metaA.order !== metaB.order) return metaA.order - metaB.order;
     const totA = summary.byCategoryMap.get(a)?.total || 0;
     const totB = summary.byCategoryMap.get(b)?.total || 0;
     return totB - totA;
@@ -1680,14 +1617,34 @@ export async function buildNoonServiceReport(
     (s) => s.curTotal > 0 || s.prevTotal > 0 || s.isLt
   ).length;
 
+  const formatCategoryHeader = (catName: string): { icon: string; title: string } => {
+    const norm = String(catName || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .toLowerCase();
+    if (norm.includes("noi soi")) return { icon: "👁️", title: "NỘI SOI" };
+    if (norm.includes("x quang") || norm.includes("x-quang")) return { icon: "🩻", title: "X-QUANG & CLVT" };
+    if (norm.includes("dien tim") || norm.includes("lhn")) return { icon: "📈", title: "ĐIỆN TIM & LHN" };
+    if (norm.includes("xet nghiem")) return { icon: "🧪", title: "XÉT NGHIỆM" };
+    if (norm.includes("sieu am")) return { icon: "🩺", title: "SIÊU ÂM" };
+    if (norm.includes("msct")) return { icon: "🖥️", title: "MSCT" };
+    if (norm.includes("mri")) return { icon: "🧲", title: "MRI" };
+    return { icon: "📌", title: catName.toUpperCase() };
+  };
+
+  const syncOriginLabel = primaryMonth.sourceLabel.includes("Google Sheet")
+    ? `Hệ thống (Đồng bộ Tự động ${scheduleTimeHHmm} · Google Sheet)`
+    : `Hệ thống (Đồng bộ Tự động ${scheduleTimeHHmm} · ${primaryMonth.sourceLabel})`;
+
   const lines: string[] = [];
-  lines.push(`**BÁO CÁO GIAO BAN SỐ LIỆU SỬ DỤNG AI**`);
-  lines.push(`📅 Ngày báo cáo: **${dateVN}** (${weekday}, đối chiếu ${prevWeekday} ${prevDateVN})`);
-  lines.push(`👤 Đồng bộ từ: Hệ thống (Đồng bộ Tự động ${scheduleTimeHHmm} · _${primaryMonth.sourceLabel}_)`);
-  lines.push(DividerLine);
+  lines.push(`📊 **BÁO CÁO GIAO BAN SỐ LIỆU SỬ DỤNG AI**`);
+  lines.push(`📅 Ngày báo cáo: **${dateVN}** (${weekday})`);
+  lines.push(`👤 Đồng bộ từ: ${syncOriginLabel}`);
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
 
   if (summary.totalCases === 0 && !hasPrevBaseline) {
-    lines.push("");
     lines.push(
       `⚠️ **Chưa ghi nhận số ca nào cho ngày ${dateVN}** (Tháng ${yMonth}/${yYear}).`
     );
@@ -1716,57 +1673,38 @@ export async function buildNoonServiceReport(
         nd: 0,
         total: 0,
       };
-      const meta = getCategoryDisplayMeta(catName);
-      const roomBhNd = curCat.bh > 0 || curCat.nd > 0 ? ` · ${formatBhNdParts(curCat.bh, curCat.nd)}` : "";
-
-      lines.push("");
-      lines.push(
-        `${meta.icon} **${meta.title}** (Tổng: **${curCat.total.toLocaleString("vi-VN")} ca**${roomBhNd})`
-      );
+      const { icon, title } = formatCategoryHeader(catName);
+      lines.push(`${icon} **${title} (Tổng: ${curCat.total.toLocaleString("vi-VN")} ca)**`);
 
       const catServices = allMergedServices.filter(
         (s) => s.category === catName && (s.curTotal > 0 || s.isLt)
       );
 
       catServices.forEach((svc) => {
+        const bhPart = svc.curBh > 0 ? `BH: ${svc.curBh.toLocaleString("vi-VN")}` : "";
+        const ndPart = svc.curNd > 0 ? `ND: ${svc.curNd.toLocaleString("vi-VN")}` : "";
+        const breakdownList = [bhPart, ndPart].filter(Boolean);
+        const breakdownTxt = breakdownList.length > 0 ? ` (${breakdownList.join(", ")})` : "";
         const ltSuffix = svc.isLt ? " [LT]" : "";
-        const bhNdTxt = formatBhNdParts(svc.curBh, svc.curNd);
         lines.push(
-          `  • ${svc.name}${ltSuffix}: **${svc.curTotal.toLocaleString("vi-VN")} ca** (${bhNdTxt})`
+          `• ${svc.name}${ltSuffix}: **${svc.curTotal.toLocaleString("vi-VN")} ca**${breakdownTxt}`
         );
       });
     });
 
-    const totalDeltaText = formatCompactDelta(
+    const totalPctDeltaText = formatComparisonDelta(
       summary.totalCases,
       prevSummary.totalCases,
-      hasPrevBaseline,
-      true
+      hasPrevBaseline
     );
 
-    lines.push("");
-    lines.push(DividerLine);
+    lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
     lines.push(
-      `📈 **TỔNG CỘNG TOÀN KHOA: ${summary.totalCases.toLocaleString("vi-VN")} ca thực hiện**${
-        totalDeltaText ? ` (${totalDeltaText})` : ""
-      }`
+      `📈 **TỔNG CỘNG TOÀN KHOA: ${summary.totalCases.toLocaleString("vi-VN")} ca thực hiện**`
     );
-    lines.push(
-      `  • Bảo hiểm Y tế (BH): **${summary.totalBh.toLocaleString("vi-VN")} ca** (${bhPct}%)`
-    );
-    lines.push(
-      `  • Ngoài định mức / Dịch vụ (ND): **${summary.totalNd.toLocaleString("vi-VN")} ca** (${ndPct}%)`
-    );
-    if (summary.ltCount > 0) {
-      lines.push(`  • Ghi chú LT (Làm thêm / Chờ): ${summary.ltCount} mục kỹ thuật`);
-    }
-    if (mtdStats.avgPerDay > 0) {
-      lines.push(
-        `  • Lũy kế Tháng ${yMonth} (đến ${dateVN}): **${mtdStats.monthTotal.toLocaleString(
-          "vi-VN"
-        )} ca** qua ${mtdStats.activeDays} ngày (TB **${mtdStats.avgPerDay.toLocaleString("vi-VN")} ca/ngày**)`
-      );
-    }
+    lines.push(`• So với ngày hôm trước (${prevDateVN}): ${totalPctDeltaText}`);
+    lines.push(`• Bảo hiểm Y tế (BH): **${summary.totalBh.toLocaleString("vi-VN")} ca**`);
+    lines.push(`• Ngoài định mức / Dịch vụ (ND): **${summary.totalNd.toLocaleString("vi-VN")} ca**`);
   }
 
   const totalDeltaShort = hasPrevBaseline
