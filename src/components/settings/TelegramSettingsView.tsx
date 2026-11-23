@@ -300,6 +300,9 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
   const isConflict = Boolean(telegramStatus?.conflictDetected);
   const isPaused = Boolean(telegramStatus?.pausedByUser);
   const isStandby = Boolean(telegramStatus?.standbyMode);
+  const isReconnecting = Boolean(
+    !isConflict && !isPaused && !isStandby && (telegramStatus?.reconnecting || telegramStatus?.startingPolling)
+  );
   const hasWebhook = Boolean(telegramStatus?.webhookUrl);
   const isBotActive = Boolean(
     telegramStatus?.pollingActive &&
@@ -307,6 +310,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
       !isConflict &&
       !isPaused &&
       !isStandby &&
+      !isReconnecting &&
       !hasWebhook
   );
 
@@ -330,7 +334,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
                       : isConflict
                       ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-                      : isStandby || hasWebhook
+                      : isReconnecting || isStandby || hasWebhook
                       ? 'bg-[#EAF4FF] text-[#155A9C] border-[#1976D2]/30 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
                       : telegramStatus?.configured
                       ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
@@ -341,6 +345,8 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                     ? `Đang hoạt động${telegramStatus?.botUsername ? ` (@${telegramStatus.botUsername})` : ''}`
                     : isConflict
                     ? 'Xung đột kết nối (409)'
+                    : isReconnecting
+                    ? 'Đang kết nối / đồng bộ phiên...'
                     : isStandby
                     ? 'Đang nhường quyền Polling'
                     : hasWebhook
@@ -416,7 +422,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                   ? 'text-emerald-700 dark:text-emerald-400'
                   : isConflict
                   ? 'text-rose-700 dark:text-rose-400'
-                  : isStandby || hasWebhook
+                  : isReconnecting || isStandby || hasWebhook
                   ? 'text-[#1976D2] dark:text-blue-400'
                   : 'text-amber-700 dark:text-amber-400'
               }`}
@@ -425,6 +431,8 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                 ? 'Đang trực 24/7'
                 : isConflict
                 ? 'Tạm dừng (Trùng Token 409)'
+                : isReconnecting
+                ? 'Đang tiếp nhận phiên...'
                 : isStandby
                 ? 'Dự phòng (Bản khác đang trực)'
                 : hasWebhook
@@ -446,6 +454,16 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
           </div>
         </div>
 
+        {isReconnecting && !isConflict && !telegramStatus?.lastError && (
+          <div className="px-5 py-3 bg-[#EAF4FF] dark:bg-blue-950/40 border-t border-[#1976D2]/20 dark:border-blue-900/60 flex items-center gap-2.5 text-xs text-[#155A9C] dark:text-blue-200">
+            <RefreshCw className="w-4 h-4 shrink-0 animate-spin text-[#1976D2] dark:text-blue-400" />
+            <span>
+              {telegramStatus?.reconnectingMessage ||
+                'Đang chờ phiên kết nối cũ đóng hoàn toàn để tiếp nhận quyền lắng nghe Bot...'}
+            </span>
+          </div>
+        )}
+
         {(telegramStatus?.lastError || isConflict) && (
           <div className="px-5 py-4 bg-rose-50 dark:bg-rose-950/40 border-t border-rose-200 dark:border-rose-900/60 space-y-2.5 text-xs text-rose-800 dark:text-rose-200">
             <div className="flex items-start gap-2.5">
@@ -457,7 +475,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                 </div>
                 {isConflict && (
                   <p className="text-[11px] text-rose-700/90 dark:text-rose-300/90 leading-relaxed">
-                    Lưu ý kỹ thuật: Telegram chỉ cho phép <strong>duy nhất 1 máy chủ</strong> nhận tin qua <code className="font-mono">getUpdates</code> cho mỗi Bot Token. Khi cả link Phát triển (Dev) và link Chia sẻ (Shared) cùng chạy với cùng Token, hệ thống sẽ tự tạm dừng tại đây để tránh lỗi lặp.
+                    Lưu ý kỹ thuật: Telegram chỉ cho phép <strong>duy nhất 1 máy chủ</strong> nhận tin qua <code className="font-mono">getUpdates</code> cho mỗi Bot Token. Khi cả link Phát triển (Dev) và link Chia sẻ (Shared) cùng chạy với cùng Token, hệ thống sẽ tạm dừng tại đây để tránh lỗi lặp{telegramStatus?.autoRecovering ? ' và tự động thử kết nối lại mỗi 30 giây khi phiên kia đóng' : ''}.
                   </p>
                 )}
               </div>
@@ -749,7 +767,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
       </form>
 
       {/* 2B. SCHEDULED DAILY TELEGRAM DISPATCHES (EDITABLE TIMES & CHANNELS) */}
-      <ScheduledAlertsPanel onShowToast={onShowToast} showHistory={false} />
+      <ScheduledAlertsPanel onShowToast={onShowToast} showHistory={true} />
 
       {/* 3. SUPPORTED COMMANDS CHEATSHEET */}
       <section className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-slate-800 shadow-xs space-y-4">

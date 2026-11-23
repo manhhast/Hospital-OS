@@ -1083,7 +1083,9 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         onShowToast?.(
           hasAlert
             ? `Phát hiện ${outcome.alertDiscrepancies.length} sai lệch (3 ngày gần nhất)`
-            : 'Đồng bộ 3 ngày gần nhất hoàn tất',
+            : outcome.updatedFromSheetCount > 0
+              ? `Đã ghi đè ${outcome.updatedFromSheetCount} dịch vụ khớp Google Sheet`
+              : 'Đồng bộ 3 ngày gần nhất hoàn tất',
           outcome.entry.summary,
           hasAlert ? 'warning' : 'success'
         );
@@ -1321,30 +1323,85 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
       })
       .filter((g) => g.total > 0);
 
-    const buildHandoverBriefingText = () => {
+    const buildHandoverFromItems = (sourceMonthItems: CaseReportItem[]) => {
       const mNum = getMonthNumber(selectedReportMonth);
-      const eqSummary = scanEquipmentExpirations(storageService.getEquipment(), 30);
-      const tskSummary = scanTaskReminders(storageService.getTasks(), 3);
-      const bhPct = totalDayAll > 0 ? ((totalDayBH / totalDayAll) * 100).toFixed(1) : '0.0';
-      const ndPct = totalDayAll > 0 ? ((totalDayND / totalDayAll) * 100).toFixed(1) : '0.0';
-      const anomalyLines = Object.values(triageMap)
+      const srcActiveDays = getActiveWorkDaysForMonth(selectedReportMonth, sourceMonthItems);
+      let srcDayBH = 0;
+      let srcDayND = 0;
+      let srcHolidayLT = false;
+
+      const srcStats = sourceMonthItems.map((item) => {
+        const dayData = item.dailyData[selectedReportDay] || { bh: 0, nd: 0 };
+        const bhVal = typeof dayData.bh === 'number' ? dayData.bh : 0;
+        const ndVal = typeof dayData.nd === 'number' ? dayData.nd : 0;
+        if (dayData.bh === 'LT' || dayData.nd === 'LT') srcHolidayLT = true;
+        srcDayBH += bhVal;
+        srcDayND += ndVal;
+        return { ...item, bhVal, ndVal, totalDay: bhVal + ndVal };
+      });
+
+      const srcDayAll = srcDayBH + srcDayND;
+      const srcMonthTotal = sourceMonthItems.reduce((acc, i) => acc + getRowTotal(i), 0);
+      const srcMonthAvgPerDay = srcActiveDays > 0 ? srcMonthTotal / srcActiveDays : 0;
+      const srcDiffVsAvg = srcDayAll - srcMonthAvgPerDay;
+
+      let srcPrevDayNum: number | null = null;
+      let srcPrevDayTotal = 0;
+      for (let d = selectedReportDay - 1; d >= 1; d--) {
+        let daySum = 0;
+        let isPrevLT = false;
+        for (const it of sourceMonthItems) {
+          const entry = it.dailyData?.[d];
+          if (entry?.bh === 'LT' || entry?.nd === 'LT') isPrevLT = true;
+          const bh = typeof entry?.bh === 'number' ? entry.bh : (parseInt(String(entry?.bh || '').replace(/[^0-9]/g, ''), 10) || 0);
+          const nd = typeof entry?.nd === 'number' ? entry.nd : (parseInt(String(entry?.nd || '').replace(/[^0-9]/g, ''), 10) || 0);
+          daySum += bh + nd;
+        }
+        if (!isPrevLT && daySum > 0) {
+          srcPrevDayNum = d;
+          srcPrevDayTotal = daySum;
+          break;
+        }
+      }
+      const srcDiffPrev = srcPrevDayNum !== null ? srcDayAll - srcPrevDayTotal : 0;
+      const srcDiffPrevPct = srcPrevDayNum !== null && srcPrevDayTotal > 0 ? (srcDiffPrev / srcPrevDayTotal) * 100 : 0;
+
+      const srcAllCatDaily = categories
+        .filter((c) => c !== 'Tất cả')
+        .map((cat) => {
+          const items = srcStats.filter((i) => i.category === cat);
+          const bh = items.reduce((s, x) => s + x.bhVal, 0);
+          const nd = items.reduce((s, x) => s + x.ndVal, 0);
+          return { category: cat, bh, nd, total: bh + nd };
+        })
+        .filter((g) => g.total > 0);
+
+      const srcTriageList = sourceMonthItems.map((item) =>
+        calculateClinicalTriage(item, selectedReportDay, sourceMonthItems, srcActiveDays)
+      );
+      const anomalyLines = srcTriageList
         .filter((t) => t.severity === 'SURGE_CRITICAL' || t.severity === 'DROP_CRITICAL')
         .slice(0, 5)
         .map((t) => `  • ${t.itemName}: ${t.todayCount} ca (TB ${t.mean.toFixed(1)}, Z=${t.zScore > 0 ? `+${t.zScore}` : t.zScore})`);
 
-      return [
+      const eqSummary = scanEquipmentExpirations(storageService.getEquipment(), 30);
+      const tskSummary = scanTaskReminders(storageService.getTasks(), 3);
+      const bhPct = srcDayAll > 0 ? ((srcDayBH / srcDayAll) * 100).toFixed(1) : '0.0';
+      const ndPct = srcDayAll > 0 ? ((srcDayND / srcDayAll) * 100).toFixed(1) : '0.0';
+
+      const text = [
         `📊 BÁO CÁO SỐ LIỆU GIAO BAN NGÀY ${String(selectedReportDay).padStart(2, '0')}/${String(mNum).padStart(2, '0')}/${selectedYear} — KHOA CẬN LÂM SÀNG`,
         `────────────────────────────────────────`,
-        `• Tổng số ca thực hiện: ${totalDayAll.toLocaleString('vi-VN')} ca${isHolidayLT ? ' (Lễ Tết - LT)' : ''}`,
-        `  - Bảo hiểm (BHYT): ${totalDayBH.toLocaleString('vi-VN')} ca (${bhPct}%)`,
-        `  - Nhân dân (Viện phí): ${totalDayND.toLocaleString('vi-VN')} ca (${ndPct}%)`,
-        prevActiveDayNum !== null
-          ? `  - So với ngày ${prevActiveDayNum}/${mNum}: ${diffVsPrevDay >= 0 ? '+' : ''}${diffVsPrevDay} ca (${diffVsPrevPct >= 0 ? '+' : ''}${diffVsPrevPct.toFixed(1)}%)`
-          : `  - So với TB tháng (${overallMonthAvgPerDay.toFixed(1)} ca/ngày): ${totalDiffVsAvg >= 0 ? '+' : ''}${totalDiffVsAvg.toFixed(1)} ca`,
+        `• Tổng số ca thực hiện: ${srcDayAll.toLocaleString('vi-VN')} ca${srcHolidayLT ? ' (Lễ Tết - LT)' : ''}`,
+        `  - Bảo hiểm (BHYT): ${srcDayBH.toLocaleString('vi-VN')} ca (${bhPct}%)`,
+        `  - Nhân dân (Viện phí): ${srcDayND.toLocaleString('vi-VN')} ca (${ndPct}%)`,
+        srcPrevDayNum !== null
+          ? `  - So với ngày ${srcPrevDayNum}/${mNum}: ${srcDiffPrev >= 0 ? '+' : ''}${srcDiffPrev} ca (${srcDiffPrevPct >= 0 ? '+' : ''}${srcDiffPrevPct.toFixed(1)}%)`
+          : `  - So với TB tháng (${srcMonthAvgPerDay.toFixed(1)} ca/ngày): ${srcDiffVsAvg >= 0 ? '+' : ''}${srcDiffVsAvg.toFixed(1)} ca`,
         ``,
         `🏥 CHI TIẾT THEO BỘ PHẬN:`,
-        ...allCatDaily.map((c) => {
-          const pct = totalDayAll > 0 ? ((c.total / totalDayAll) * 100).toFixed(1) : '0.0';
+        ...srcAllCatDaily.map((c) => {
+          const pct = srcDayAll > 0 ? ((c.total / srcDayAll) * 100).toFixed(1) : '0.0';
           return `  • ${c.category}: ${c.total.toLocaleString('vi-VN')} ca (${pct}%) [BH: ${c.bh} | ND: ${c.nd}]`;
         }),
         ...(anomalyLines.length > 0 ? [``, `🚨 BIẾN ĐỘNG CHUYÊN MÔN ĐÁNG CHÚ Ý:`, ...anomalyLines] : []),
@@ -1355,7 +1412,11 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         `────────────────────────────────────────`,
         `Người lập báo cáo: ${storageService.getCurrentUser().name}`
       ].join('\n');
+
+      return { text, totalCases: srcDayAll, mNum };
     };
+
+    const buildHandoverBriefingText = () => buildHandoverFromItems(monthItems).text;
 
     const handleCopyHandover = () => {
       const text = buildHandoverBriefingText();
@@ -1368,19 +1429,48 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
       }, 3000);
     };
 
-    const handleDispatchHandoverNotification = () => {
-      const text = buildHandoverBriefingText();
-      const mNum = getMonthNumber(selectedReportMonth);
-      storageService.sendNotification({
-        recipient: 'Ban Chủ Nhiệm Khoa CLS',
-        targetAddress: storageService.getSettings().defaultTelegramChatId || '@cls_giaoban',
-        title: `Báo cáo số liệu ngày ${selectedReportDay}/${mNum}/${selectedYear} (${totalDayAll.toLocaleString('vi-VN')} ca)`,
-        content: text,
-        channel: 'Telegram',
-        status: 'Đã gửi'
-      });
-      setSyncToast(`✅ Đã phát Bản tin Giao ban Ngày ${selectedReportDay}/${mNum}/${selectedYear} tới Ban Chủ Nhiệm Khoa!`);
-      setTimeout(() => setSyncToast(null), 3500);
+    const handleDispatchHandoverNotification = async () => {
+      if (isSyncing) return;
+      setIsSyncing(true);
+      setSyncToast('🔄 Đang cập nhật dữ liệu mới nhất từ Google Sheet trước khi gửi giao ban...');
+      try {
+        const outcome = await runThreeDaySmartSync('manual_3d');
+        const refreshed = reportArchiveService.loadYearArchiveSync(selectedYear);
+        setMonthlyDataStore(refreshed);
+        const freshMonthItems =
+          refreshed[selectedReportMonth] && refreshed[selectedReportMonth].length > 0
+            ? refreshed[selectedReportMonth]
+            : monthItems;
+        if (refreshed[selectedReportMonth] && refreshed[selectedReportMonth].length > 0) {
+          setCaseReports(refreshed[selectedReportMonth]);
+        }
+
+        const { text, totalCases, mNum } = buildHandoverFromItems(freshMonthItems);
+        storageService.sendNotification({
+          recipient: 'Ban Chủ Nhiệm Khoa CLS',
+          targetAddress: storageService.getSettings().defaultTelegramChatId || '@cls_giaoban',
+          title: `Báo cáo số liệu ngày ${selectedReportDay}/${mNum}/${selectedYear} (${totalCases.toLocaleString('vi-VN')} ca)`,
+          content: text,
+          channel: 'Telegram',
+          status: 'Đã gửi'
+        });
+
+        const syncNote =
+          outcome.ran && outcome.updatedFromSheetCount > 0
+            ? ` (đã tự động cập nhật & ghi đè ${outcome.updatedFromSheetCount} dịch vụ khớp Google Sheet)`
+            : outcome.ran
+              ? ' (đã rà soát khớp Google Sheet trước khi gửi)'
+              : '';
+        setSyncToast(`✅ Đã phát Bản tin Giao ban Ngày ${selectedReportDay}/${mNum}/${selectedYear} tới Ban Chủ Nhiệm Khoa${syncNote}!`);
+        onShowToast?.(
+          'Đã cập nhật dữ liệu & gửi báo cáo',
+          `Bản tin Giao ban Ngày ${selectedReportDay}/${mNum}/${selectedYear} (${totalCases.toLocaleString('vi-VN')} ca) đã được phát${syncNote}.`,
+          'success'
+        );
+      } finally {
+        setIsSyncing(false);
+        setTimeout(() => setSyncToast(null), 4500);
+      }
     };
 
     const handleOpenDailyEntryModal = () => {
@@ -1436,11 +1526,12 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleDispatchHandoverNotification}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                  disabled={isSyncing}
+                  onClick={() => void handleDispatchHandoverNotification()}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Gửi Giao Ban</span>
+                  <span>{isSyncing ? 'Đang đồng bộ & gửi...' : 'Gửi Giao Ban'}</span>
                 </button>
               </>
             )}

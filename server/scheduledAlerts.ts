@@ -12,6 +12,9 @@ import type {
   ScheduledAlertRuleId,
   ShiftDuty,
   StaffProfile,
+  SyncHistoryAutoWrittenItem,
+  SyncHistoryDiscrepancyItem,
+  SyncHistoryEntry,
   TaskItem,
   User,
   WeeklyMeeting,
@@ -25,10 +28,18 @@ import {
 } from "../src/utils/caseReportParser";
 import {
   appendScheduledAlertHistoryToDb,
+  appendSyncHistoryEntryToDb,
   appendSystemNotificationToDb,
+  clearTodayAlertLocksForRule,
+  isPostgresConfigured,
   loadCloudBucketsForServer,
+  loadCloudBucketsStatusForServer,
   loadReportArchiveMonthForServer,
+  loadReportArchiveMonthStatusForServer,
   loadScheduledAlertHistoryFromDb,
+  loadStoredTelegramSettingsFromDb,
+  mergeSheetConfigIntoSettingsDbIfMissing,
+  releaseDailyAlertLock,
   saveScheduledAlertRulesToDb,
   tryClaimDailyAlertLock,
   upsertReportArchiveMonthFromServer,
@@ -73,6 +84,16 @@ let cachedRulesOverlay: ScheduledAlertRuleConfig[] | null = null;
 let cachedLiveContextSnapshot: any = null;
 let schedulerInterval: NodeJS.Timeout | null = null;
 let isTickRunning = false;
+
+// Catch-up windows (minutes after scheduled HH:mm) so container sleep/scale-to-zero never skips a day's report
+const RULE_CATCHUP_WINDOW_MIN: Record<ScheduledAlertRuleId, number> = {
+  morning_0700: 240, // 07:00 -> 11:00
+  noon_services_1245: 600, // 12:45 -> 22:45
+  evening_1700: 330, // 17:00 -> 22:30
+};
+// When user saves a schedule time already >15 min in the past for today, skip catch-up for that rule today
+const skippedPastEditKeys = new Set<string>();
+const failedRetryTracker = new Map<string, { count: number; nextRetryAtMs: number }>();
 
 export interface VNNowParts {
   year: number;
@@ -224,6 +245,61 @@ interface ResolvedHospitalDataset {
   staffProfiles: StaffProfile[];
   liveContext: any;
   dataSourceNotes: string[];
+  dbConfigured: boolean;
+  dbReachable: boolean;
+}
+
+function pickNonEmptyArray<T>(dbVal: unknown, ctxVal: unknown): T[] {
+  if (Array.isArray(dbVal) && dbVal.length > 0) return dbVal as T[];
+  if (Array.isArray(ctxVal) && ctxVal.length > 0) return ctxVal as T[];
+  return Array.isArray(dbVal) ? (dbVal as T[]) : Array.isArray(ctxVal) ? (ctxVal as T[]) : [];
+}
+
+function mergeSettingsPreservingNonEmpty(
+  ctxSettings: Partial<AppSettings>,
+  dbSettings: Partial<AppSettings>
+): Partial<AppSettings> {
+  const merged: Partial<AppSettings> = {
+    ...ctxSettings,
+    ...dbSettings,
+  };
+  const ctxUrl = String(ctxSettings.googleSheetUrl || "").trim();
+  const dbUrl = String(dbSettings.googleSheetUrl || "").trim();
+  if (dbUrl || ctxUrl) {
+    merged.googleSheetUrl = dbUrl || ctxUrl;
+  }
+  const ctxId = String(ctxSettings.reportGoogleSheetId || "").trim();
+  const dbId = String(dbSettings.reportGoogleSheetId || "").trim();
+  if (dbId || ctxId) {
+    merged.reportGoogleSheetId = dbId || ctxId;
+  }
+  if (!merged.reportSheetYear && ctxSettings.reportSheetYear) {
+    merged.reportSheetYear = ctxSettings.reportSheetYear;
+  }
+  const mergedByYear: Record<string, any> = {
+    ...(ctxSettings.reportGoogleSheetsByYear || {}),
+  };
+  for (const [yr, dbCfg] of Object.entries(dbSettings.reportGoogleSheetsByYear || {})) {
+    const ctxCfg = mergedByYear[yr];
+    const dbHas = Boolean(dbCfg && (String(dbCfg.url || "").trim() || String(dbCfg.sheetId || "").trim()));
+    if (dbHas || !ctxCfg) {
+      mergedByYear[yr] = dbCfg;
+    }
+  }
+  if (Object.keys(mergedByYear).length > 0) {
+    merged.reportGoogleSheetsByYear = mergedByYear;
+  }
+  const ctxToken = String(ctxSettings.telegramBotToken || "").trim();
+  const dbToken = String(dbSettings.telegramBotToken || "").trim();
+  if (dbToken || ctxToken) {
+    merged.telegramBotToken = dbToken || ctxToken;
+  }
+  const ctxChat = String(ctxSettings.defaultTelegramChatId || "").trim();
+  const dbChat = String(dbSettings.defaultTelegramChatId || "").trim();
+  if (dbChat || ctxChat) {
+    merged.defaultTelegramChatId = dbChat || ctxChat;
+  }
+  return merged;
 }
 
 async function resolveHospitalDataset(liveContextOverride?: any): Promise<ResolvedHospitalDataset> {
@@ -233,7 +309,7 @@ async function resolveHospitalDataset(liveContextOverride?: any): Promise<Resolv
   }
   const liveCtx = liveContextOverride || telegramManager.getLiveContext() || cachedLiveContextSnapshot;
 
-  const buckets = await loadCloudBucketsForServer([
+  const dbRes = await loadCloudBucketsStatusForServer([
     "settings",
     "tasks",
     "equipment",
@@ -244,6 +320,7 @@ async function resolveHospitalDataset(liveContextOverride?: any): Promise<Resolv
     "users",
     "staff_profiles",
   ]);
+  const buckets = dbRes.buckets;
 
   const dataSourceNotes: string[] = [];
   const hasDbBuckets = Object.keys(buckets).length > 0;
@@ -261,54 +338,46 @@ async function resolveHospitalDataset(liveContextOverride?: any): Promise<Resolv
     liveCtx?.settings && typeof liveCtx.settings === "object"
       ? (liveCtx.settings as Partial<AppSettings>)
       : {};
-  const mergedSettings: Partial<AppSettings> = {
-    ...settingsFromCtx,
-    ...settingsFromDb,
-  };
+  const mergedSettings = mergeSettingsPreservingNonEmpty(settingsFromCtx, settingsFromDb);
 
-  const tasks = Array.isArray(buckets.tasks)
-    ? (buckets.tasks as unknown as TaskItem[])
-    : Array.isArray(liveCtx?.tasks?.items)
-    ? (liveCtx.tasks.items as TaskItem[])
-    : [];
+  const tasks = pickNonEmptyArray<TaskItem>(
+    buckets.tasks,
+    liveCtx?.tasks?.activeItems ?? liveCtx?.tasks?.items
+  );
 
-  const equipment = Array.isArray(buckets.equipment)
-    ? (buckets.equipment as unknown as EquipmentItem[])
-    : Array.isArray(liveCtx?.equipment?.items)
-    ? (liveCtx.equipment.items as EquipmentItem[])
-    : [];
+  const equipment = pickNonEmptyArray<EquipmentItem>(
+    buckets.equipment,
+    liveCtx?.equipment?.items
+  );
 
-  const shifts = Array.isArray(buckets.shifts)
-    ? (buckets.shifts as unknown as ShiftDuty[])
-    : Array.isArray(liveCtx?.shifts?.items)
-    ? (liveCtx.shifts.items as ShiftDuty[])
-    : [];
+  const shifts = pickNonEmptyArray<ShiftDuty>(
+    buckets.shifts,
+    liveCtx?.shifts?.todayAndUpcoming ?? liveCtx?.shifts?.items
+  );
 
-  const leaveRequests = Array.isArray(buckets.leave_requests)
-    ? (buckets.leave_requests as unknown as LeaveRequest[])
-    : Array.isArray(liveCtx?.hr?.leaveRequests)
-    ? (liveCtx.hr.leaveRequests as LeaveRequest[])
-    : [];
+  const leaveRequests = pickNonEmptyArray<LeaveRequest>(
+    buckets.leave_requests,
+    liveCtx?.staff?.leaveRequests ?? liveCtx?.hr?.leaveRequests
+  );
 
-  const meetings = Array.isArray(buckets.meetings)
-    ? (buckets.meetings as unknown as WeeklyMeeting[])
-    : Array.isArray(liveCtx?.meetings?.weeklyMeetings)
-    ? (liveCtx.meetings.weeklyMeetings as WeeklyMeeting[])
-    : [];
+  const meetings = pickNonEmptyArray<WeeklyMeeting>(
+    buckets.meetings,
+    liveCtx?.meetings?.weeklyPlans ?? liveCtx?.meetings?.weeklyMeetings
+  );
 
-  const meetingItems = Array.isArray(buckets.meeting_items)
-    ? (buckets.meeting_items as unknown as MeetingItem[])
-    : Array.isArray(liveCtx?.meetings?.items)
-    ? (liveCtx.meetings.items as MeetingItem[])
-    : [];
+  const meetingItems = pickNonEmptyArray<MeetingItem>(
+    buckets.meeting_items,
+    liveCtx?.meetings?.items
+  );
 
   const users = Array.isArray(buckets.users)
     ? (buckets.users as unknown as User[])
     : [];
 
-  const staffProfiles = Array.isArray(buckets.staff_profiles)
-    ? (buckets.staff_profiles as unknown as StaffProfile[])
-    : [];
+  const staffProfiles = pickNonEmptyArray<StaffProfile>(
+    buckets.staff_profiles,
+    liveCtx?.staff?.items
+  );
 
   return {
     settings: mergedSettings,
@@ -322,6 +391,8 @@ async function resolveHospitalDataset(liveContextOverride?: any): Promise<Resolv
     staffProfiles,
     liveContext: liveCtx,
     dataSourceNotes,
+    dbConfigured: dbRes.configured,
+    dbReachable: dbRes.reachable,
   };
 }
 
@@ -695,89 +766,509 @@ function toIntSafe(v: number | string | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function mergeSheetIntoArchiveSafe(
-  existingItems: ArchivedCaseReportItem[],
-  sheetItems: ArchivedCaseReportItem[]
-): {
-  merged: ArchivedCaseReportItem[];
-  filledCells: number;
+function normCellPartServer(v: number | string | undefined): string {
+  if (v === undefined || v === null || v === "") return "0";
+  if (String(v).trim().toUpperCase() === "LT") return "LT";
+  const n =
+    typeof v === "number"
+      ? v
+      : parseInt(String(v).replace(/[^0-9]/g, ""), 10) || 0;
+  return String(n);
+}
+
+function toCleanCaseCellServer(val?: { bh?: number | string; nd?: number | string }): {
+  bh: number | "LT";
+  nd: number | "LT";
 } {
+  if (!val) return { bh: 0, nd: 0 };
+  const bhStr = normCellPartServer(val.bh);
+  const ndStr = normCellPartServer(val.nd);
+  return {
+    bh: bhStr === "LT" ? "LT" : parseInt(bhStr, 10) || 0,
+    nd: ndStr === "LT" ? "LT" : parseInt(ndStr, 10) || 0,
+  };
+}
+
+function hasRecordedCellValueServer(val?: { bh?: number | string; nd?: number | string }): boolean {
+  if (!val) return false;
+  const bhStr = String(val.bh ?? "").trim().toUpperCase();
+  const ndStr = String(val.nd ?? "").trim().toUpperCase();
+  if (bhStr === "LT" || ndStr === "LT") return true;
+  return toIntSafe(val.bh) > 0 || toIntSafe(val.nd) > 0;
+}
+
+function isSameCaseCellServer(
+  a?: { bh?: number | string; nd?: number | string },
+  b?: { bh?: number | string; nd?: number | string }
+): boolean {
+  return (
+    normCellPartServer(a?.bh) === normCellPartServer(b?.bh) &&
+    normCellPartServer(a?.nd) === normCellPartServer(b?.nd)
+  );
+}
+
+function normalizeSvcKeyServer(category: string, name: string): string {
+  return `${String(category || "").trim().toLowerCase()}__${String(name || "").trim().toLowerCase()}`;
+}
+
+/**
+ * Full-match overwrite of Google Sheet data into stored archive within specified day windows.
+ * Records both newly filled empty cells AND detailed original -> replacement data for every overwritten service.
+ */
+function overwriteArchiveDaysFromSheet(params: {
+  year: number;
+  monthNum: number;
+  monthKey: string;
+  existingItems: ArchivedCaseReportItem[];
+  sheetItems: ArchivedCaseReportItem[];
+  targetDays: number[];
+  actorLabel: string;
+  resolvedAtDisplay: string;
+}): {
+  merged: ArchivedCaseReportItem[];
+  checkedCellsCount: number;
+  autoWrittenCount: number;
+  updatedFromSheetCount: number;
+  autoWrittenSamples: SyncHistoryAutoWrittenItem[];
+  overwrittenDiscrepancies: SyncHistoryDiscrepancyItem[];
+} {
+  const {
+    year,
+    monthNum,
+    monthKey,
+    existingItems,
+    sheetItems,
+    targetDays,
+    actorLabel,
+    resolvedAtDisplay,
+  } = params;
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const nowIso = new Date().toISOString();
+  const uniqueDays = Array.from(
+    new Set(targetDays.filter((d) => Number.isInteger(d) && d >= 1 && d <= 31))
+  ).sort((a, b) => a - b);
+
   if (sheetItems.length === 0) {
-    return { merged: existingItems, filledCells: 0 };
-  }
-  if (existingItems.length === 0) {
-    return { merged: sheetItems, filledCells: sheetItems.length };
-  }
-
-  let filledCells = 0;
-  const byKey = new Map<string, ArchivedCaseReportItem>();
-  const cloned = existingItems.map((it) => {
-    const copy: ArchivedCaseReportItem = {
-      ...it,
-      dailyData: { ...(it.dailyData || {}) },
-      manualDays: it.manualDays ? { ...it.manualDays } : undefined,
+    return {
+      merged: existingItems,
+      checkedCellsCount: 0,
+      autoWrittenCount: 0,
+      updatedFromSheetCount: 0,
+      autoWrittenSamples: [],
+      overwrittenDiscrepancies: [],
     };
-    const key = `${String(it.category || "").toLowerCase()}__${String(it.name || "").trim().toLowerCase()}`;
-    byKey.set(key, copy);
-    return copy;
-  });
+  }
 
-  for (const sItem of sheetItems) {
-    const key = `${String(sItem.category || "").toLowerCase()}__${String(sItem.name || "").trim().toLowerCase()}`;
-    const target = byKey.get(key);
-    if (!target) {
-      cloned.push(sItem);
-      byKey.set(key, sItem);
-      filledCells += Object.keys(sItem.dailyData || {}).length;
-      continue;
+  const nextItems: ArchivedCaseReportItem[] = existingItems.map((it) => ({
+    ...it,
+    dailyData: { ...(it.dailyData || {}) },
+    manualDays: it.manualDays ? { ...it.manualDays } : undefined,
+  }));
+
+  const incomingByFullKey = new Map<string, ArchivedCaseReportItem>();
+  const incomingByName = new Map<string, ArchivedCaseReportItem>();
+  for (const inc of sheetItems) {
+    incomingByFullKey.set(normalizeSvcKeyServer(inc.category, inc.name), inc);
+    incomingByName.set(String(inc.name || "").trim().toLowerCase(), inc);
+  }
+
+  const matchedIncomingKeys = new Set<string>();
+  let checkedCellsCount = 0;
+  let autoWrittenCount = 0;
+  let updatedFromSheetCount = 0;
+  const autoWrittenSamples: SyncHistoryAutoWrittenItem[] = [];
+  const overwrittenDiscrepancies: SyncHistoryDiscrepancyItem[] = [];
+
+  for (const existing of nextItems) {
+    const fullKey = normalizeSvcKeyServer(existing.category, existing.name);
+    const nameKey = String(existing.name || "").trim().toLowerCase();
+    const matchedIncoming = incomingByFullKey.get(fullKey) || incomingByName.get(nameKey);
+    if (matchedIncoming) {
+      matchedIncomingKeys.add(
+        normalizeSvcKeyServer(matchedIncoming.category, matchedIncoming.name)
+      );
     }
 
-    for (const [dayStr, cell] of Object.entries(sItem.dailyData || {})) {
-      const dayNum = parseInt(dayStr, 10);
-      if (!Number.isInteger(dayNum)) continue;
-      if (target.manualDays?.[dayNum]) continue; // never overwrite manual locks
+    for (const d of uniqueDays) {
+      checkedCellsCount += 1;
+      const sysVal = existing.dailyData?.[d];
+      const shtVal = matchedIncoming?.dailyData?.[d];
+      if (isSameCaseCellServer(sysVal, shtVal)) continue;
 
-      const cur = target.dailyData[dayNum];
-      const curBh = toIntSafe(cur?.bh);
-      const curNd = toIntSafe(cur?.nd);
-      const curHas = cur && (curBh > 0 || curNd > 0 || String(cur.bh).toUpperCase() === "LT" || String(cur.nd).toUpperCase() === "LT");
+      const hasSys = hasRecordedCellValueServer(sysVal);
+      const hasSht = hasRecordedCellValueServer(shtVal);
+      if (!hasSys && !hasSht) continue;
 
-      if (!curHas && cell) {
-        const incBh = toIntSafe(cell.bh);
-        const incNd = toIntSafe(cell.nd);
-        const incHas = incBh > 0 || incNd > 0 || String(cell.bh).toUpperCase() === "LT" || String(cell.nd).toUpperCase() === "LT";
-        if (incHas) {
-          target.dailyData[dayNum] = { bh: cell.bh, nd: cell.nd };
-          filledCells += 1;
+      const sysClean = toCleanCaseCellServer(sysVal);
+      const shtClean = toCleanCaseCellServer(shtVal);
+      const isManualLocked = Boolean(existing.manualDays?.[d]);
+      const dateLabel = `${pad2(d)}/${pad2(monthNum)}/${year}`;
+
+      // Overwrite unconditionally so System === Google Sheet
+      existing.dailyData[d] = { bh: shtClean.bh, nd: shtClean.nd };
+      if (existing.manualDays && existing.manualDays[d]) {
+        delete existing.manualDays[d];
+        if (Object.keys(existing.manualDays).length === 0) {
+          existing.manualDays = undefined;
         }
+      }
+      existing.lastSyncedAt = nowIso;
+
+      if (!hasSys && hasSht && !isManualLocked) {
+        autoWrittenCount += 1;
+        autoWrittenSamples.push({
+          dateLabel,
+          category: existing.category,
+          serviceName: existing.name,
+          bh: shtClean.bh,
+          nd: shtClean.nd,
+        });
+      } else {
+        updatedFromSheetCount += 1;
+        const type: SyncHistoryDiscrepancyItem["type"] = !hasSys && hasSht
+          ? "new_from_sheet"
+          : hasSys && !hasSht
+            ? "cleared_on_sheet"
+            : "value_changed";
+        overwrittenDiscrepancies.push({
+          id: `${year}_${monthNum}_${d}_${fullKey}`,
+          year,
+          monthKey,
+          day: d,
+          dateLabel,
+          category: existing.category,
+          serviceName: existing.name,
+          type,
+          systemBh: sysClean.bh,
+          systemNd: sysClean.nd,
+          sheetBh: shtClean.bh,
+          sheetNd: shtClean.nd,
+          isManualLocked,
+          resolutionStatus: "updated_from_sheet",
+          resolvedAt: resolvedAtDisplay,
+          resolvedBy: actorLabel,
+        });
       }
     }
   }
 
-  return { merged: cloned, filledCells };
+  for (const inc of sheetItems) {
+    const fullKey = normalizeSvcKeyServer(inc.category, inc.name);
+    if (matchedIncomingKeys.has(fullKey)) continue;
+    const existsByName = nextItems.some(
+      (m) => String(m.name || "").trim().toLowerCase() === String(inc.name || "").trim().toLowerCase()
+    );
+    if (existsByName) continue;
+
+    const newDailyData: Record<number, { bh: number | "LT"; nd: number | "LT" }> = {};
+    let serviceHasAnyNew = false;
+
+    for (const d of uniqueDays) {
+      checkedCellsCount += 1;
+      const shtVal = inc.dailyData?.[d];
+      if (!hasRecordedCellValueServer(shtVal)) continue;
+
+      const shtClean = toCleanCaseCellServer(shtVal);
+      const dateLabel = `${pad2(d)}/${pad2(monthNum)}/${year}`;
+      newDailyData[d] = { bh: shtClean.bh, nd: shtClean.nd };
+      serviceHasAnyNew = true;
+      autoWrittenCount += 1;
+      autoWrittenSamples.push({
+        dateLabel,
+        category: inc.category,
+        serviceName: inc.name,
+        bh: shtClean.bh,
+        nd: shtClean.nd,
+      });
+    }
+
+    if (serviceHasAnyNew || existingItems.length === 0) {
+      // When archive is completely empty, initialize full month rows from sheet
+      const seededDaily =
+        existingItems.length === 0 ? { ...(inc.dailyData || {}) } : newDailyData;
+      nextItems.push({
+        ...inc,
+        dailyData: seededDaily,
+        lastSyncedAt: nowIso,
+      });
+    }
+  }
+
+  return {
+    merged: nextItems,
+    checkedCellsCount,
+    autoWrittenCount,
+    updatedFromSheetCount,
+    autoWrittenSamples,
+    overwrittenDiscrepancies,
+  };
 }
 
 function resolveSheetUrlForYear(settings: Partial<AppSettings>, year: number): string {
   const byYear = settings.reportGoogleSheetsByYear?.[String(year)];
-  if (byYear?.url) return byYear.url;
-  if (byYear?.sheetId) return byYear.sheetId;
-  if (settings.googleSheetUrl) return settings.googleSheetUrl;
-  if (settings.reportGoogleSheetId) return settings.reportGoogleSheetId;
+  if (byYear?.url && String(byYear.url).trim()) return String(byYear.url).trim();
+  if (byYear?.sheetId && String(byYear.sheetId).trim()) return String(byYear.sheetId).trim();
+  if (settings.googleSheetUrl && String(settings.googleSheetUrl).trim()) {
+    return String(settings.googleSheetUrl).trim();
+  }
+  if (settings.reportGoogleSheetId && String(settings.reportGoogleSheetId).trim()) {
+    return String(settings.reportGoogleSheetId).trim();
+  }
   return "";
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} (timeout ${ms}ms)`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (err) => {
+        clearTimeout(t);
+        reject(err);
+      }
+    );
+  });
+}
+
+interface ServerPreSendSyncSummary {
+  ran: boolean;
+  sheetConfigured: boolean;
+  sheetReachable: boolean;
+  autoWrittenCount: number;
+  updatedFromSheetCount: number;
+  syncedMonthsCount: number;
+}
+
+async function syncRecentThreeDaysFromSheetForServer(
+  settings: Partial<AppSettings>,
+  options?: {
+    extraDateISO?: string;
+    actorLabel?: string;
+    recordHistoryAlways?: boolean;
+  }
+): Promise<ServerPreSendSyncSummary> {
+  const vnNow = getVNNowParts();
+  const targetISOs = [
+    offsetDateISO(vnNow.dateISO, -2),
+    offsetDateISO(vnNow.dateISO, -1),
+    vnNow.dateISO,
+  ];
+  if (
+    options?.extraDateISO &&
+    /^\d{4}-\d{2}-\d{2}$/.test(options.extraDateISO) &&
+    !targetISOs.includes(options.extraDateISO)
+  ) {
+    targetISOs.push(options.extraDateISO);
+  }
+
+  const sliceMap = new Map<
+    string,
+    { year: number; monthNum: number; monthKey: string; days: number[] }
+  >();
+  for (const iso of targetISOs) {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) continue;
+    const year = parseInt(m[1], 10);
+    const monthNum = parseInt(m[2], 10);
+    const day = parseInt(m[3], 10);
+    const monthKey = `Tháng ${monthNum}`;
+    const mapKey = `${year}__${monthNum}`;
+    const existing = sliceMap.get(mapKey);
+    if (!existing) {
+      sliceMap.set(mapKey, { year, monthNum, monthKey, days: [day] });
+    } else if (!existing.days.includes(day)) {
+      existing.days.push(day);
+    }
+  }
+
+  const slices = Array.from(sliceMap.values());
+  const hasAnySheet = slices.some((s) =>
+    Boolean(resolveSpreadsheetId(resolveSheetUrlForYear(settings, s.year)))
+  );
+  if (!hasAnySheet) {
+    return {
+      ran: false,
+      sheetConfigured: false,
+      sheetReachable: false,
+      autoWrittenCount: 0,
+      updatedFromSheetCount: 0,
+      syncedMonthsCount: 0,
+    };
+  }
+
+  const actorLabel =
+    options?.actorLabel || "Hệ thống Tự động Đồng bộ (Trước khi gửi báo cáo)";
+  const displayTime = vnNow.dateTimeLog;
+  const startDateIso = targetISOs[0];
+  const endDateIso = targetISOs[2];
+  const dateRangeLabel = `${formatDateISOToVN(startDateIso)} – ${formatDateISOToVN(endDateIso)}`;
+
+  let checkedCellsCount = 0;
+  let autoWrittenCount = 0;
+  let updatedFromSheetCount = 0;
+  let syncedMonthsCount = 0;
+  const autoWrittenSamples: SyncHistoryAutoWrittenItem[] = [];
+  const overwrittenDiscrepancies: SyncHistoryDiscrepancyItem[] = [];
+  const unreachableTabs: string[] = [];
+
+  try {
+    const slicesByYear = new Map<number, typeof slices>();
+    for (const s of slices) {
+      const arr = slicesByYear.get(s.year) || [];
+      arr.push(s);
+      slicesByYear.set(s.year, arr);
+    }
+
+    for (const [year, yearSlices] of slicesByYear.entries()) {
+      const sheetUrl = resolveSheetUrlForYear(settings, year);
+      const sheetId = resolveSpreadsheetId(sheetUrl);
+      if (!sheetId) {
+        yearSlices.forEach((s) => unreachableTabs.push(`${s.monthKey}/${year}`));
+        continue;
+      }
+
+      const probeCsv = await withTimeout(
+        fetchRawTabCsv(sheetId, "__cls_probe_nonexistent__"),
+        10000,
+        "Google Sheet probe"
+      );
+
+      for (const slice of yearSlices) {
+        const sheetItems = await withTimeout(
+          fetchSingleSheetTab(sheetUrl, slice.monthKey, probeCsv, year),
+          12000,
+          `Google Sheet ${slice.monthKey}/${year}`
+        );
+
+        if (!sheetItems || sheetItems.length === 0) {
+          unreachableTabs.push(`${slice.monthKey}/${year}`);
+          continue;
+        }
+
+        syncedMonthsCount += 1;
+        const dbRaw = await loadReportArchiveMonthForServer(year, slice.monthNum);
+        const existingItems = dbRaw as unknown as ArchivedCaseReportItem[];
+
+        const diffRes = overwriteArchiveDaysFromSheet({
+          year,
+          monthNum: slice.monthNum,
+          monthKey: slice.monthKey,
+          existingItems,
+          sheetItems,
+          targetDays: slice.days,
+          actorLabel,
+          resolvedAtDisplay: displayTime,
+        });
+
+        checkedCellsCount += diffRes.checkedCellsCount;
+        autoWrittenCount += diffRes.autoWrittenCount;
+        updatedFromSheetCount += diffRes.updatedFromSheetCount;
+        autoWrittenSamples.push(...diffRes.autoWrittenSamples);
+        overwrittenDiscrepancies.push(...diffRes.overwrittenDiscrepancies);
+
+        const changedInMonth =
+          diffRes.autoWrittenCount > 0 ||
+          diffRes.updatedFromSheetCount > 0 ||
+          existingItems.length === 0;
+        if (changedInMonth) {
+          await upsertReportArchiveMonthFromServer(
+            year,
+            slice.monthNum,
+            slice.monthKey,
+            diffRes.merged
+          );
+        }
+      }
+    }
+
+    const totalChanges = autoWrittenCount + updatedFromSheetCount;
+    const shouldLog =
+      Boolean(options?.recordHistoryAlways) || totalChanges > 0 || syncedMonthsCount === 0;
+
+    if (shouldLog) {
+      const status: SyncHistoryEntry["status"] =
+        syncedMonthsCount === 0
+          ? "error"
+          : totalChanges > 0
+            ? "success"
+            : "no_change";
+
+      let summary = "";
+      if (syncedMonthsCount === 0) {
+        summary = `Cập nhật trước khi gửi báo cáo (${dateRangeLabel}): không đọc được tab Google Sheet (${unreachableTabs.join(", ")}).`;
+      } else if (updatedFromSheetCount > 0 && autoWrittenCount > 0) {
+        summary = `Cập nhật 3 ngày gần nhất trước khi gửi báo cáo (${dateRangeLabel}): đã ghi đè ${updatedFromSheetCount} dịch vụ khác biệt (kèm dữ liệu gốc & thay thế) và ghi mới ${autoWrittenCount} ô để khớp 100% Google Sheet.`;
+      } else if (updatedFromSheetCount > 0) {
+        summary = `Cập nhật 3 ngày gần nhất trước khi gửi báo cáo (${dateRangeLabel}): đã ghi đè ${updatedFromSheetCount} dịch vụ khác biệt theo Google Sheet (đã lưu chi tiết dữ liệu gốc & thay thế).`;
+      } else if (autoWrittenCount > 0) {
+        summary = `Cập nhật 3 ngày gần nhất trước khi gửi báo cáo (${dateRangeLabel}): đã tự động ghi mới ${autoWrittenCount} ô từ Google Sheet vào PostgreSQL.`;
+      } else {
+        summary = `Cập nhật trước khi gửi báo cáo (${dateRangeLabel}): đã đối chiếu ${checkedCellsCount} ô, số liệu hoàn toàn khớp Google Sheet.`;
+      }
+
+      const historyEntry: SyncHistoryEntry = {
+        id: `SRV-SYNC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        timestamp: new Date().toISOString(),
+        displayTime,
+        trigger: "startup_3d_auto",
+        dateRangeLabel,
+        startDate: startDateIso,
+        endDate: endDateIso,
+        status,
+        checkedCellsCount,
+        autoWrittenCount,
+        discrepancyCount: overwrittenDiscrepancies.length,
+        updatedFromSheetCount,
+        savedToDatabase: true,
+        databaseNote: "Đã cập nhật & lưu cố định trên PostgreSQL trước khi gửi báo cáo",
+        performedBy: actorLabel,
+        summary,
+        autoWrittenSamples: autoWrittenSamples.slice(0, 80),
+        discrepancies: overwrittenDiscrepancies.slice(0, 250),
+      };
+
+      await appendSyncHistoryEntryToDb(historyEntry);
+    }
+
+    return {
+      ran: true,
+      sheetConfigured: true,
+      sheetReachable: syncedMonthsCount > 0,
+      autoWrittenCount,
+      updatedFromSheetCount,
+      syncedMonthsCount,
+    };
+  } catch (err: any) {
+    console.warn("[ScheduledAlerts] Pre-send 3-day sync warning:", err?.message || err);
+    return {
+      ran: true,
+      sheetConfigured: true,
+      sheetReachable: syncedMonthsCount > 0,
+      autoWrittenCount,
+      updatedFromSheetCount,
+      syncedMonthsCount,
+    };
+  }
 }
 
 async function loadArchiveMonthWithSheetSync(
   year: number,
   monthNum: number,
   settings: Partial<AppSettings>,
-  allowPersist: boolean
+  allowPersist: boolean,
+  focusDay?: number
 ): Promise<{
   items: ArchivedCaseReportItem[];
   sourceLabel: string;
+  dbReachable: boolean;
+  sheetConfigured: boolean;
 }> {
   const monthKey = `Tháng ${monthNum}`;
-  const dbRaw = await loadReportArchiveMonthForServer(year, monthNum);
-  const dbItems = dbRaw as unknown as ArchivedCaseReportItem[];
+  const dbStatus = await loadReportArchiveMonthStatusForServer(year, monthNum);
+  const dbItems = dbStatus.items as unknown as ArchivedCaseReportItem[];
 
   const sheetUrl = resolveSheetUrlForYear(settings, year);
   const sheetId = resolveSpreadsheetId(sheetUrl);
@@ -786,27 +1277,56 @@ async function loadArchiveMonthWithSheetSync(
     return {
       items: dbItems,
       sourceLabel: dbItems.length > 0 ? "Kho báo cáo PostgreSQL" : "Chưa cấu hình Google Sheet",
+      dbReachable: dbStatus.reachable,
+      sheetConfigured: false,
     };
   }
 
-  try {
-    const probeCsv = await fetchRawTabCsv(sheetId, "__cls_probe_nonexistent__");
-    const sheetItems = await fetchSingleSheetTab(sheetUrl, monthKey, probeCsv, year);
-    if (sheetItems && sheetItems.length > 0) {
-      const { merged, filledCells } = mergeSheetIntoArchiveSafe(dbItems, sheetItems);
-      if (allowPersist && filledCells > 0) {
-        await upsertReportArchiveMonthFromServer(year, monthNum, monthKey, merged);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const sheetItems = await withTimeout(
+        (async () => {
+          const probeCsv = await fetchRawTabCsv(sheetId, "__cls_probe_nonexistent__");
+          return fetchSingleSheetTab(sheetUrl, monthKey, probeCsv, year);
+        })(),
+        12000,
+        "Google Sheet sync"
+      );
+      if (sheetItems && sheetItems.length > 0) {
+        const targetDays = focusDay
+          ? [Math.max(1, focusDay - 1), focusDay]
+          : Array.from({ length: 31 }, (_, i) => i + 1);
+        const vnNow = getVNNowParts();
+        const res = overwriteArchiveDaysFromSheet({
+          year,
+          monthNum,
+          monthKey,
+          existingItems: dbItems,
+          sheetItems,
+          targetDays,
+          actorLabel: "Hệ thống Báo cáo Dịch vụ (Khớp Google Sheet)",
+          resolvedAtDisplay: vnNow.dateTimeLog,
+        });
+        const changed = res.autoWrittenCount > 0 || res.updatedFromSheetCount > 0 || dbItems.length === 0;
+        if (allowPersist && changed) {
+          await upsertReportArchiveMonthFromServer(year, monthNum, monthKey, res.merged);
+        }
+        return {
+          items: res.merged,
+          sourceLabel:
+            res.updatedFromSheetCount > 0 || res.autoWrittenCount > 0
+              ? "Google Sheet (đã cập nhật mới & khớp 100%) + PostgreSQL"
+              : "Google Sheet + Kho báo cáo PostgreSQL",
+          dbReachable: dbStatus.reachable,
+          sheetConfigured: true,
+        };
       }
-      return {
-        items: merged,
-        sourceLabel:
-          filledCells > 0
-            ? "Google Sheet (tự đồng bộ mới) + Kho báo cáo"
-            : "Google Sheet + Kho báo cáo PostgreSQL",
-      };
+    } catch (err: any) {
+      console.warn(`[ScheduledAlerts] Google Sheet fetch warning (attempt ${attempt + 1}/2):`, err?.message);
     }
-  } catch (err: any) {
-    console.warn("[ScheduledAlerts] Google Sheet fetch warning:", err?.message);
+    if (attempt === 0) {
+      await new Promise((r) => setTimeout(r, 1500));
+    }
   }
 
   return {
@@ -815,6 +1335,8 @@ async function loadArchiveMonthWithSheetSync(
       dbItems.length > 0
         ? "Kho báo cáo PostgreSQL (Sheet không phản hồi)"
         : "Không truy cập được Google Sheet",
+    dbReachable: dbStatus.reachable,
+    sheetConfigured: true,
   };
 }
 
@@ -950,6 +1472,64 @@ function computeMonthAverageToDay(items: ArchivedCaseReportItem[], maxDay: numbe
   };
 }
 
+function formatCompactDelta(
+  current: number,
+  prev: number,
+  hasPrevBaseline: boolean,
+  withPrevLabel = false
+): string {
+  if (!hasPrevBaseline) return "";
+  const diff = current - prev;
+  if (prev === 0 && current === 0) return "";
+  if (prev === 0 && current > 0) {
+    return `📈 Mới (+${current.toLocaleString("vi-VN")} ca${withPrevLabel ? "; hôm trước 0" : ""})`;
+  }
+  const pct = (diff / prev) * 100;
+  const pctFormatted = `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
+  const diffFormatted = `${diff > 0 ? "+" : ""}${diff.toLocaleString("vi-VN")} ca`;
+  if (diff === 0) {
+    return `➡️ 0.0%${withPrevLabel ? ` (bằng hôm trước: ${prev.toLocaleString("vi-VN")})` : ""}`;
+  }
+  const icon = diff > 0 ? "📈" : "📉";
+  return `${icon} ${pctFormatted} (${diffFormatted}${withPrevLabel ? `; hôm trước ${prev.toLocaleString("vi-VN")}` : ""})`;
+}
+
+function getCategoryDisplayMeta(categoryName: string): { icon: string; title: string; order: number } {
+  const lower = String(categoryName || "").trim().toLowerCase();
+  if (lower.includes("nội soi")) {
+    return { icon: "👁️", title: "NỘI SOI", order: 1 };
+  }
+  if (lower.includes("siêu âm")) {
+    return { icon: "🩺", title: "SIÊU ÂM", order: 2 };
+  }
+  if (lower.includes("x quang") || lower.includes("x-quang") || lower.includes("clvt")) {
+    return { icon: "🩻", title: "X-QUANG & CLVT", order: 3 };
+  }
+  if (lower.includes("điện tim") || lower.includes("lhn") || lower.includes("lưu huyết")) {
+    return { icon: "📈", title: "ĐIỆN TIM & LHN", order: 4 };
+  }
+  if (lower.includes("xét nghiệm")) {
+    return { icon: "🧪", title: "XÉT NGHIỆM", order: 5 };
+  }
+  if (lower.includes("msct")) {
+    return { icon: "🩻", title: "MSCT", order: 6 };
+  }
+  if (lower.includes("mri")) {
+    return { icon: "🧲", title: "MRI", order: 7 };
+  }
+  return { icon: "📌", title: String(categoryName || "KHÁC").toUpperCase(), order: 99 };
+}
+
+function formatBhNdParts(bh: number, nd: number): string {
+  const parts: string[] = [];
+  if (bh > 0) parts.push(`BH: ${bh.toLocaleString("vi-VN")}`);
+  if (nd > 0) parts.push(`ND: ${nd.toLocaleString("vi-VN")}`);
+  if (parts.length === 0) return "BH: 0, ND: 0";
+  return parts.join(", ");
+}
+
+const DividerLine = "━━━━━━━━━━━━━━━━━━━━━━";
+
 export async function buildNoonServiceReport(
   data: ResolvedHospitalDataset,
   yesterdayISO: string,
@@ -972,7 +1552,8 @@ export async function buildNoonServiceReport(
     yYear,
     yMonth,
     data.settings,
-    allowPersistSync
+    allowPersistSync,
+    yDay
   );
 
   let prevDayMonthItems = primaryMonth.items;
@@ -981,13 +1562,14 @@ export async function buildNoonServiceReport(
       dbYear,
       dbMonth,
       data.settings,
-      false
+      false,
+      dbDay
     );
     prevDayMonthItems = prevMonth.items;
   }
 
   let summary = summarizeMonthDay(primaryMonth.items, yDay);
-  let prevSummary = summarizeMonthDay(prevDayMonthItems, dbDay);
+  const prevSummary = summarizeMonthDay(prevDayMonthItems, dbDay);
   const mtdStats = computeMonthAverageToDay(primaryMonth.items, yDay);
   const notes = [...data.dataSourceNotes, primaryMonth.sourceLabel];
 
@@ -1029,8 +1611,8 @@ export async function buildNoonServiceReport(
   const dateVN = formatDateISOToVN(yesterdayISO);
   const prevDateVN = formatDateISOToVN(dayBeforeISO);
   const prevWeekday = getVNWeekdayLabel(dayBeforeISO);
-  const bhPct = summary.totalCases > 0 ? Math.round((summary.totalBh / summary.totalCases) * 100) : 0;
-  const ndPct = summary.totalCases > 0 ? 100 - bhPct : 0;
+  const bhPct = summary.totalCases > 0 ? ((summary.totalBh / summary.totalCases) * 100).toFixed(1) : "0.0";
+  const ndPct = summary.totalCases > 0 ? ((summary.totalNd / summary.totalCases) * 100).toFixed(1) : "0.0";
   const hasPrevBaseline = prevSummary.totalCases > 0 || prevSummary.ltCount > 0;
 
   // Merge union of categories from yesterday and dayBeforeYesterday
@@ -1040,6 +1622,9 @@ export async function buildNoonServiceReport(
       ...prevSummary.categories.map((c) => c.category),
     ])
   ).sort((a, b) => {
+    const metaA = getCategoryDisplayMeta(a);
+    const metaB = getCategoryDisplayMeta(b);
+    if (metaA.order !== metaB.order) return metaA.order - metaB.order;
     const totA = summary.byCategoryMap.get(a)?.total || 0;
     const totB = summary.byCategoryMap.get(b)?.total || 0;
     return totB - totA;
@@ -1094,12 +1679,13 @@ export async function buildNoonServiceReport(
   ).length;
 
   const lines: string[] = [];
-  lines.push(`📊 **BÁO CÁO CHI TIẾT SỐ LIỆU DỊCH VỤ KỸ THUẬT HẰNG NGÀY**`);
-  lines.push(`📅 Ngày báo cáo: **${weekday}, ${dateVN}** (đối chiếu ${prevWeekday}, ${prevDateVN})`);
-  lines.push(`⏰ Giờ phát: **${scheduleTimeHHmm}** · 📂 Nguồn: _${primaryMonth.sourceLabel}_`);
-  lines.push("");
+  lines.push(`**BÁO CÁO GIAO BAN SỐ LIỆU SỬ DỤNG AI**`);
+  lines.push(`📅 Ngày báo cáo: **${dateVN}** (${weekday}, đối chiếu ${prevWeekday} ${prevDateVN})`);
+  lines.push(`👤 Đồng bộ từ: Hệ thống (Đồng bộ Tự động ${scheduleTimeHHmm} · _${primaryMonth.sourceLabel}_)`);
+  lines.push(DividerLine);
 
   if (summary.totalCases === 0 && !hasPrevBaseline) {
+    lines.push("");
     lines.push(
       `⚠️ **Chưa ghi nhận số ca nào cho ngày ${dateVN}** (Tháng ${yMonth}/${yYear}).`
     );
@@ -1116,51 +1702,12 @@ export async function buildNoonServiceReport(
       );
     }
   } else {
-    lines.push(`🔹 **1. TỔNG HỢP TOÀN KHOA (${dateVN})**`);
-    lines.push(
-      `   • **Tổng số ca thực hiện:** **${summary.totalCases.toLocaleString("vi-VN")} ca** (${formatComparisonDelta(
-        summary.totalCases,
-        prevSummary.totalCases,
-        hasPrevBaseline
-      )})`
-    );
-    lines.push(
-      `   • **BHYT:** **${summary.totalBh.toLocaleString("vi-VN")} ca** (${bhPct}%) — ${formatComparisonDelta(
-        summary.totalBh,
-        prevSummary.totalBh,
-        hasPrevBaseline
-      )}`
-    );
-    lines.push(
-      `   • **Nhân dân / Viện phí:** **${summary.totalNd.toLocaleString("vi-VN")} ca** (${ndPct}%) — ${formatComparisonDelta(
-        summary.totalNd,
-        prevSummary.totalNd,
-        hasPrevBaseline
-      )}`
-    );
-    if (summary.ltCount > 0) {
-      lines.push(`   • **Ghi chú LT (Làm thêm / Chờ):** ${summary.ltCount} mục kỹ thuật`);
-    }
-    if (mtdStats.avgPerDay > 0) {
-      lines.push(
-        `   • **Lũy kế Tháng ${yMonth} (đến ${dateVN}):** **${mtdStats.monthTotal.toLocaleString(
-          "vi-VN"
-        )} ca** qua ${mtdStats.activeDays} ngày (TB **${mtdStats.avgPerDay.toLocaleString("vi-VN")} ca/ngày**)`
-      );
-    }
-    lines.push("");
-
     const activeCategories = categoryNames.filter((catName) => {
       const curCat = summary.byCategoryMap.get(catName);
-      const prevCat = prevSummary.byCategoryMap.get(catName);
-      return (curCat?.total || 0) > 0 || (prevCat?.total || 0) > 0;
+      return (curCat?.total || 0) > 0;
     });
 
-    lines.push(
-      `🧪 **2. CHI TIẾT ĐẦY ĐỦ THEO TỪNG NHÓM & DỊCH VỤ KỸ THUẬT (${activeCategories.length} nhóm · ${allMergedServices.length} dịch vụ):**`
-    );
-
-    activeCategories.forEach((catName, catIdx) => {
+    activeCategories.forEach((catName) => {
       const curCat = summary.byCategoryMap.get(catName) || {
         category: catName,
         bh: 0,
@@ -1173,46 +1720,68 @@ export async function buildNoonServiceReport(
         nd: 0,
         total: 0,
       };
-      const share =
-        summary.totalCases > 0 ? ((curCat.total / summary.totalCases) * 100).toFixed(1) : "0.0";
-      const catDeltaText = formatComparisonDelta(curCat.total, prevCat.total, hasPrevBaseline);
+      const meta = getCategoryDisplayMeta(catName);
+      const catDelta = formatCompactDelta(curCat.total, prevCat.total, hasPrevBaseline);
 
       lines.push("");
       lines.push(
-        `📌 **${catIdx + 1}. ${catName.toUpperCase()}**: **${curCat.total.toLocaleString(
-          "vi-VN"
-        )} ca** (${share}% · BHYT ${curCat.bh.toLocaleString("vi-VN")} | ND ${curCat.nd.toLocaleString(
-          "vi-VN"
-        )}) — ${catDeltaText}`
+        `${meta.icon} **${meta.title}** (Tổng: **${curCat.total.toLocaleString("vi-VN")} ca**${
+          catDelta ? ` · ${catDelta}` : ""
+        })`
       );
 
-      const catServices = allMergedServices
-        .filter((s) => s.category === catName)
-        .sort((a, b) => b.curTotal - a.curTotal || b.prevTotal - a.prevTotal);
+      const catServices = allMergedServices.filter(
+        (s) => s.category === catName && (s.curTotal > 0 || s.isLt)
+      );
 
-      const zeroBothNames: string[] = [];
       catServices.forEach((svc) => {
-        if (svc.curTotal === 0 && svc.prevTotal === 0 && !svc.isLt) {
-          zeroBothNames.push(svc.name);
-          return;
-        }
-        const deltaText = formatComparisonDelta(svc.curTotal, svc.prevTotal, hasPrevBaseline);
         const ltSuffix = svc.isLt ? " [LT]" : "";
+        const bhNdTxt = formatBhNdParts(svc.curBh, svc.curNd);
+        const svcDelta = formatCompactDelta(svc.curTotal, svc.prevTotal, hasPrevBaseline);
         lines.push(
-          `   • **${svc.name}${ltSuffix}**: **${svc.curTotal.toLocaleString(
+          `  • **${svc.name}${ltSuffix}**: **${svc.curTotal.toLocaleString(
             "vi-VN"
-          )} ca** (BHYT ${svc.curBh.toLocaleString("vi-VN")} | ND ${svc.curNd.toLocaleString(
-            "vi-VN"
-          )}) — ${deltaText}`
+          )} ca** (${bhNdTxt})${svcDelta ? ` · ${svcDelta}` : ""}`
         );
       });
-
-      if (zeroBothNames.length > 0) {
-        lines.push(
-          `   • _Chưa phát sinh (0 ca cả 2 ngày):_ ${zeroBothNames.join(", ")}`
-        );
-      }
     });
+
+    const totalDeltaText = formatCompactDelta(
+      summary.totalCases,
+      prevSummary.totalCases,
+      hasPrevBaseline,
+      true
+    );
+    const bhDeltaText = formatCompactDelta(summary.totalBh, prevSummary.totalBh, hasPrevBaseline);
+    const ndDeltaText = formatCompactDelta(summary.totalNd, prevSummary.totalNd, hasPrevBaseline);
+
+    lines.push("");
+    lines.push(DividerLine);
+    lines.push(
+      `📈 **TỔNG CỘNG TOÀN KHOA: ${summary.totalCases.toLocaleString("vi-VN")} ca thực hiện**${
+        totalDeltaText ? ` (${totalDeltaText})` : ""
+      }`
+    );
+    lines.push(
+      `  • Bảo hiểm Y tế (BH): **${summary.totalBh.toLocaleString("vi-VN")} ca** (${bhPct}%${
+        bhDeltaText ? ` · ${bhDeltaText}` : ""
+      })`
+    );
+    lines.push(
+      `  • Ngoài định mức / Dịch vụ (ND): **${summary.totalNd.toLocaleString("vi-VN")} ca** (${ndPct}%${
+        ndDeltaText ? ` · ${ndDeltaText}` : ""
+      })`
+    );
+    if (summary.ltCount > 0) {
+      lines.push(`  • Ghi chú LT (Làm thêm / Chờ): ${summary.ltCount} mục kỹ thuật`);
+    }
+    if (mtdStats.avgPerDay > 0) {
+      lines.push(
+        `  • Lũy kế Tháng ${yMonth} (đến ${dateVN}): **${mtdStats.monthTotal.toLocaleString(
+          "vi-VN"
+        )} ca** qua ${mtdStats.activeDays} ngày (TB **${mtdStats.avgPerDay.toLocaleString("vi-VN")} ca/ngày**)`
+      );
+    }
   }
 
   const totalDeltaShort = hasPrevBaseline
@@ -1535,6 +2104,101 @@ export async function executeScheduledAlertRule(params: {
   preview: ScheduledAlertPreviewResult;
 }> {
   const vnNow = getVNNowParts();
+  if (params.liveContext?.settings && typeof params.liveContext.settings === "object") {
+    await mergeSheetConfigIntoSettingsDbIfMissing(params.liveContext.settings);
+  }
+
+  // Step 1: ALWAYS update & sync data from PostgreSQL + Google Sheet BEFORE building and sending report
+  const initialData = await resolveHospitalDataset(params.liveContext);
+  const deliveryCfgInit = telegramManager.getDeliveryConfig();
+
+  // Guard 1: On auto_schedule, NEVER dispatch empty/false-alarm Telegram reports when PostgreSQL failed or instance is unlinked
+  if (params.triggerMode === "auto_schedule") {
+    if (initialData.dbConfigured && !initialData.dbReachable) {
+      const errMsg =
+        "PostgreSQL tạm thời không phản hồi khi chuẩn bị gửi báo cáo tự động; hủy gửi tin rỗng và tự động thử lại sau 2 phút.";
+      console.warn(`[ScheduledAlerts] ${errMsg}`);
+      const failedPreview: ScheduledAlertPreviewResult = {
+        ruleId: params.rule.id,
+        ruleName: params.rule.name,
+        targetDateVN: params.targetDateVN || vnNow.dateISO,
+        generatedAtVN: vnNow.dateTimeVN,
+        title: params.rule.name,
+        telegramMarkdown: "",
+        inAppSummary: errMsg,
+        stats: [],
+        dataSourceNotes: [],
+      };
+      const historyItem: ScheduledAlertHistoryItem = {
+        id: `RUN-${params.rule.id}-${Date.now().toString().slice(-6)}`,
+        ruleId: params.rule.id,
+        ruleName: params.rule.name,
+        targetDateVN: failedPreview.targetDateVN,
+        triggeredAt: vnNow.dateTimeVN,
+        triggerMode: params.triggerMode,
+        status: "error",
+        telegramSent: false,
+        inAppSaved: false,
+        summary: errMsg,
+        errorMessage: errMsg,
+        hostLabel: deliveryCfgInit.hostLabel,
+      };
+      return { historyItem, preview: failedPreview };
+    }
+
+    const hasAnyHospitalState =
+      initialData.dbConfigured ||
+      Boolean(initialData.liveContext?.settings) ||
+      initialData.equipment.length > 0 ||
+      initialData.tasks.length > 0;
+    if (!hasAnyHospitalState) {
+      const errMsg =
+        "Phiên bản máy chủ chưa liên kết PostgreSQL (EXTERNAL_DATABASE_URL) và chưa có dữ liệu trình duyệt nên không tự phát báo cáo.";
+      console.warn(`[ScheduledAlerts] ${errMsg}`);
+      const skippedPreview: ScheduledAlertPreviewResult = {
+        ruleId: params.rule.id,
+        ruleName: params.rule.name,
+        targetDateVN: params.targetDateVN || vnNow.dateISO,
+        generatedAtVN: vnNow.dateTimeVN,
+        title: params.rule.name,
+        telegramMarkdown: "",
+        inAppSummary: errMsg,
+        stats: [],
+        dataSourceNotes: [],
+      };
+      const historyItem: ScheduledAlertHistoryItem = {
+        id: `RUN-${params.rule.id}-${Date.now().toString().slice(-6)}`,
+        ruleId: params.rule.id,
+        ruleName: params.rule.name,
+        targetDateVN: skippedPreview.targetDateVN,
+        triggeredAt: vnNow.dateTimeVN,
+        triggerMode: params.triggerMode,
+        status: "error",
+        telegramSent: false,
+        inAppSaved: false,
+        summary: errMsg,
+        errorMessage: errMsg,
+        hostLabel: deliveryCfgInit.hostLabel,
+      };
+      return { historyItem, preview: skippedPreview };
+    }
+  }
+
+  const preSendExtraIso =
+    params.rule.id === "noon_services_1245"
+      ? params.targetDateVN || offsetDateISO(vnNow.dateISO, -1)
+      : undefined;
+
+  const preSyncSummary = await syncRecentThreeDaysFromSheetForServer(initialData.settings, {
+    extraDateISO: preSendExtraIso,
+    actorLabel:
+      params.triggerMode === "auto_schedule"
+        ? `Tự động cập nhật trước giờ phát ${params.rule.timeHHmm}`
+        : `Cập nhật trước khi gửi báo cáo (${params.rule.name})`,
+    recordHistoryAlways: params.rule.id === "noon_services_1245",
+  });
+
+  // Reload fresh dataset after sync so any updated DB/Sheet numbers reflect immediately
   const data = await resolveHospitalDataset(params.liveContext);
   const channel = params.channelOverride || params.rule.channel;
 
@@ -1544,10 +2208,59 @@ export async function executeScheduledAlertRule(params: {
     equipmentWarningDays: params.rule.equipmentWarningDays,
     timeHHmmOverride: params.rule.timeHHmm,
     liveContext: params.liveContext,
-    allowPersistSheetSync: true,
+    // For noon_services_1245, preSyncSummary just persisted 3-day & targetDateVN updates cleanly
+    allowPersistSheetSync: params.rule.id !== "noon_services_1245" || !preSyncSummary.sheetReachable,
   });
 
-  const deliveryCfg = telegramManager.getDeliveryConfig();
+  // Guard 2: If noon_services_1245 auto_schedule still sees "Chưa cấu hình Google Sheet" (no sheet URL AND 0 archive cases), abort send & retry later
+  if (
+    params.triggerMode === "auto_schedule" &&
+    params.rule.id === "noon_services_1245" &&
+    preview.dataSourceNotes.includes("Chưa cấu hình Google Sheet")
+  ) {
+    const errMsg =
+      "Chưa đọc được cấu hình Google Sheet hoặc kho lưu trữ từ PostgreSQL; tạm hoãn gửi tự động để tránh báo nhầm 'Chưa cấu hình Google Sheet'.";
+    console.warn(`[ScheduledAlerts] ${errMsg}`);
+    const historyItem: ScheduledAlertHistoryItem = {
+      id: `RUN-${params.rule.id}-${Date.now().toString().slice(-6)}`,
+      ruleId: params.rule.id,
+      ruleName: params.rule.name,
+      targetDateVN: preview.targetDateVN,
+      triggeredAt: vnNow.dateTimeVN,
+      triggerMode: params.triggerMode,
+      status: "error",
+      telegramSent: false,
+      inAppSaved: false,
+      summary: errMsg,
+      errorMessage: errMsg,
+      hostLabel: deliveryCfgInit.hostLabel,
+    };
+    await appendScheduledAlertHistoryToDb(historyItem);
+    return { historyItem, preview };
+  }
+
+  if (
+    preSyncSummary.sheetConfigured &&
+    (preSyncSummary.updatedFromSheetCount > 0 || preSyncSummary.autoWrittenCount > 0)
+  ) {
+    preview.dataSourceNotes = Array.from(
+      new Set([
+        ...preview.dataSourceNotes,
+        `Đã đồng bộ trước khi gửi: ghi đè ${preSyncSummary.updatedFromSheetCount} mục & ghi mới ${preSyncSummary.autoWrittenCount} ô từ Google Sheet`,
+      ])
+    );
+  }
+
+  // Hydrate Telegram delivery config from Postgres on cold boot if needed
+  let deliveryCfg = telegramManager.getDeliveryConfig();
+  if (!deliveryCfg.botToken) {
+    const storedTg = await loadStoredTelegramSettingsFromDb().catch(() => null);
+    if (storedTg?.botToken) {
+      telegramManager.configure(storedTg, false);
+      deliveryCfg = telegramManager.getDeliveryConfig();
+    }
+  }
+
   const effectiveToken =
     String(data.settings.telegramBotToken || "").trim() || deliveryCfg.botToken;
   const effectiveChatId =
@@ -1621,6 +2334,19 @@ async function runSchedulerTick() {
   isTickRunning = true;
 
   try {
+    // Do not auto-dispatch scheduled reports from unlinked containers that have neither Postgres DB nor browser context
+    if (!isPostgresConfigured() && !telegramManager.getLiveContext() && !cachedLiveContextSnapshot) {
+      return;
+    }
+
+    // Ensure Telegram settings from Postgres are loaded before auto-dispatching
+    if (!telegramManager.getDeliveryConfig().botToken) {
+      const storedTg = await loadStoredTelegramSettingsFromDb().catch(() => null);
+      if (storedTg?.botToken && storedTg.enabled) {
+        telegramManager.configure(storedTg, false);
+      }
+    }
+
     const vnNow = getVNNowParts();
     const rules = await getActiveAlertRules();
     const deliveryCfg = telegramManager.getDeliveryConfig();
@@ -1630,26 +2356,49 @@ async function runSchedulerTick() {
       const targetMin = parseTimeHHmmToMinutes(rule.timeHHmm);
       if (targetMin === null) continue;
 
-      // Trigger strictly inside [targetMin .. targetMin + 15 minutes] in Asia/Ho_Chi_Minh
-      // Atomic PostgreSQL lock guarantees only ONE instance triggers per rule per VN day
+      const maxWindow = RULE_CATCHUP_WINDOW_MIN[rule.id] ?? 240;
       const diffMin = vnNow.minuteOfDay - targetMin;
-      if (diffMin < 0 || diffMin > 15) continue;
+      if (diffMin < 0 || diffMin > maxWindow) continue;
+
+      const editSkipKey = `${rule.id}_${vnNow.dateISO}_${rule.timeHHmm}`;
+      if (skippedPastEditKeys.has(editSkipKey)) continue;
+
+      const retryKey = `${rule.id}_${vnNow.dateISO}_${rule.timeHHmm}`;
+      const retryInfo = failedRetryTracker.get(retryKey);
+      if (retryInfo) {
+        if (retryInfo.count >= 3 || Date.now() < retryInfo.nextRetryAtMs) {
+          continue;
+        }
+      }
 
       const lockKeyDate = vnNow.dateISO;
       const claimed = await tryClaimDailyAlertLock(
         rule.id,
         lockKeyDate,
+        rule.timeHHmm,
         deliveryCfg.hostLabel || "cls-server"
       );
       if (!claimed) continue;
 
       console.log(
-        `[ScheduledAlerts] Triggering rule "${rule.id}" (${rule.timeHHmm} VN, now=${vnNow.timeHHmm})...`
+        `[ScheduledAlerts] Triggering rule "${rule.id}" (${rule.timeHHmm} VN, now=${vnNow.timeHHmm}, lag=${diffMin}m)...`
       );
-      await executeScheduledAlertRule({
+      const result = await executeScheduledAlertRule({
         rule,
         triggerMode: "auto_schedule",
       });
+
+      if (result.historyItem.status === "error") {
+        // Release today's lock on hard failure and back off 2 minutes (up to 3 retries)
+        await releaseDailyAlertLock(rule.id, lockKeyDate, rule.timeHHmm);
+        const prevCount = retryInfo?.count || 0;
+        failedRetryTracker.set(retryKey, {
+          count: prevCount + 1,
+          nextRetryAtMs: Date.now() + 2 * 60 * 1000,
+        });
+      } else {
+        failedRetryTracker.delete(retryKey);
+      }
     }
   } catch (err: any) {
     console.error("[ScheduledAlerts] Tick error:", err?.message || err);
@@ -1658,16 +2407,20 @@ async function runSchedulerTick() {
   }
 }
 
+export function triggerScheduledAlertsCatchUp() {
+  void runSchedulerTick();
+}
+
 export function startScheduledAlertsEngine() {
   if (schedulerInterval) return;
   const vnNow = getVNNowParts();
   console.log(
     `[ScheduledAlerts] Engine started (VN time: ${vnNow.dateTimeVN} | Schedules: 07:00, 12:45, 17:00)`
   );
-  // Check 5 seconds after boot (to catch right-on-the-minute restarts), then every 20 seconds
+  // Allow startup Postgres & Telegram hydration to complete, then run catch-up check every 20 seconds
   setTimeout(() => {
     void runSchedulerTick();
-  }, 5000).unref();
+  }, 10000).unref();
   schedulerInterval = setInterval(() => {
     void runSchedulerTick();
   }, 20000);
@@ -1688,9 +2441,34 @@ function getReqHost(req: Request): string {
 }
 
 export function registerScheduledAlertRoutes(app: Express) {
+  app.post("/api/alerts/heartbeat", async (req, res) => {
+    try {
+      telegramManager.updateHostLabel(getReqHost(req));
+      const { liveContext } = req.body || {};
+      if (liveContext && typeof liveContext === "object") {
+        cachedLiveContextSnapshot = liveContext;
+        telegramManager.updateLiveContext(liveContext);
+        if (liveContext.settings && typeof liveContext.settings === "object") {
+          void mergeSheetConfigIntoSettingsDbIfMissing(liveContext.settings);
+        }
+      }
+      triggerScheduledAlertsCatchUp();
+      res.json({
+        success: true,
+        vnNow: getVNNowParts(),
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Heartbeat failed",
+      });
+    }
+  });
+
   app.get("/api/alerts/schedule-status", async (req, res) => {
     try {
       telegramManager.updateHostLabel(getReqHost(req));
+      triggerScheduledAlertsCatchUp();
       const vnNow = getVNNowParts();
       const [rules, history, buckets] = await Promise.all([
         getActiveAlertRules(),
@@ -1742,11 +2520,34 @@ export function registerScheduledAlertRoutes(app: Express) {
       if (liveContext) {
         cachedLiveContextSnapshot = liveContext;
         telegramManager.updateLiveContext(liveContext);
+        if (liveContext.settings && typeof liveContext.settings === "object") {
+          await mergeSheetConfigIntoSettingsDbIfMissing(liveContext.settings);
+        }
       }
 
+      const prevRules = await getActiveAlertRules();
       const normalized = normalizeScheduledRules(rules);
+      const vnNow = getVNNowParts();
+
+      for (const nextRule of normalized) {
+        const prevRule = prevRules.find((p) => p.id === nextRule.id);
+        if (prevRule && prevRule.timeHHmm !== nextRule.timeHHmm) {
+          // Clear previous time locks for today so edited times can run cleanly
+          await clearTodayAlertLocksForRule(nextRule.id, vnNow.dateISO);
+          const editKey = `${nextRule.id}_${vnNow.dateISO}_${nextRule.timeHHmm}`;
+          failedRetryTracker.delete(editKey);
+          const targetMin = parseTimeHHmmToMinutes(nextRule.timeHHmm);
+          if (targetMin !== null && vnNow.minuteOfDay - targetMin > 15) {
+            skippedPastEditKeys.add(editKey);
+          } else {
+            skippedPastEditKeys.delete(editKey);
+          }
+        }
+      }
+
       cachedRulesOverlay = normalized;
       const savedDb = await saveScheduledAlertRulesToDb(normalized);
+      triggerScheduledAlertsCatchUp();
 
       res.json({
         success: true,

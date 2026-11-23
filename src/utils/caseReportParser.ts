@@ -40,7 +40,9 @@ export function isValidServiceName(rawName: string): boolean {
     u.startsWith('THANG') ||
     u.startsWith('TÊN KỸ') ||
     u.startsWith('KỸ THUẬT') ||
-    u.startsWith('DỊCH VỤ') ||
+    u === 'DỊCH VỤ' ||
+    u.startsWith('DỊCH VỤ KỸ THUẬT') ||
+    u.startsWith('DỊCH VỤ Y TẾ') ||
     u.startsWith('STT') ||
     u.startsWith('TỔNG') ||
     u.startsWith('CỘNG') ||

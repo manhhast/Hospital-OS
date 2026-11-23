@@ -192,6 +192,9 @@ export interface TelegramBotStatus {
   configured: boolean;
   enabled: boolean;
   pollingActive: boolean;
+  startingPolling?: boolean;
+  reconnecting?: boolean;
+  reconnectingMessage?: string;
   conflictDetected?: boolean;
   pausedByUser?: boolean;
   standbyMode?: boolean;
@@ -207,6 +210,8 @@ export interface TelegramBotStatus {
   hasLiveContext: boolean;
   contextUpdatedAt?: string;
   lastError?: string;
+  nextConflictRetryAt?: string;
+  autoRecovering?: boolean;
 }
 
 export interface TelegramExclusivityReport {

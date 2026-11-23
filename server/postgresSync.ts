@@ -2,6 +2,7 @@ import crypto from "crypto";
 import type { Express, Request, Response, NextFunction } from "express";
 import { Pool, type PoolClient } from "pg";
 import type {
+  AppSettings,
   DepartmentUnit,
   EquipmentItem,
   NotificationLog,
@@ -10,6 +11,7 @@ import type {
   ScheduledAlertHistoryItem,
   ScheduledAlertRuleConfig,
   StaffProfile,
+  SyncHistoryEntry,
   User,
 } from "../src/types/hospital";
 import {
@@ -91,15 +93,19 @@ let schemaReadyPromise: Promise<void> | null = null;
 let cachedSessionSecret: string | null = null;
 
 interface PostgresLiveChangeEvent {
-  type: "bucket" | "report_archive" | "bulk";
+  type: "bucket" | "report_archive" | "bulk" | "telegram_takeover";
   key: string;
   updatedAtMs: number;
   actorId: string;
   emitterId?: string;
+  meta?: Record<string, string>;
 }
 
 const SERVER_EMITTER_ID = crypto.randomUUID().slice(0, 8);
 const syncStreamClients = new Set<(evt: PostgresLiveChangeEvent) => void>();
+const telegramTakeoverSubscribers = new Set<
+  (evt: { tokenHash: string; winnerInstanceId: string; winnerHost?: string }) => void
+>();
 let notifyListenerClient: PoolClient | null = null;
 let notifyListenerStarting = false;
 
@@ -113,6 +119,16 @@ async function ensurePgNotifyListener(pool: Pool): Promise<void> {
       try {
         const parsed = JSON.parse(msg.payload) as PostgresLiveChangeEvent;
         if (parsed.emitterId && parsed.emitterId === SERVER_EMITTER_ID) return;
+        if (parsed.type === "telegram_takeover") {
+          telegramTakeoverSubscribers.forEach((cb) =>
+            cb({
+              tokenHash: parsed.key,
+              winnerInstanceId: parsed.actorId,
+              winnerHost: parsed.meta?.winnerHost,
+            })
+          );
+          return;
+        }
         syncStreamClients.forEach((cb) => cb(parsed));
       } catch {
         // ignore malformed notification payload
@@ -142,9 +158,24 @@ async function ensurePgNotifyListener(pool: Pool): Promise<void> {
   }
 }
 
+export function subscribeTelegramTakeover(
+  cb: (evt: { tokenHash: string; winnerInstanceId: string; winnerHost?: string }) => void
+): () => void {
+  telegramTakeoverSubscribers.add(cb);
+  const pool = getPool();
+  if (pool) {
+    void ensurePgNotifyListener(pool);
+  }
+  return () => {
+    telegramTakeoverSubscribers.delete(cb);
+  };
+}
+
 function broadcastPostgresChange(pool: Pool, evt: PostgresLiveChangeEvent): void {
   const fullEvent: PostgresLiveChangeEvent = { ...evt, emitterId: SERVER_EMITTER_ID };
-  syncStreamClients.forEach((cb) => cb(fullEvent));
+  if (evt.type !== "telegram_takeover") {
+    syncStreamClients.forEach((cb) => cb(fullEvent));
+  }
   const payload = JSON.stringify(fullEvent).slice(0, 7000);
   void pool.query(`SELECT pg_notify('cls_bucket_changes', $1)`, [payload]).catch(() => {});
 }
@@ -244,6 +275,8 @@ export interface TelegramPollLeaseResult {
   acquired: boolean;
   holderInstanceId?: string;
   holderLabel?: string;
+  tookOverFromInstanceId?: string;
+  tookOverFromHost?: string;
 }
 
 export async function acquireTelegramPollLease(
@@ -252,6 +285,129 @@ export async function acquireTelegramPollLease(
   hostLabel: string,
   ttlMs = 45000,
   forceTakeover = false
+): Promise<TelegramPollLeaseResult> {
+  const pool = getPool();
+  if (!pool || !tokenHash) {
+    return { supported: false, acquired: true, holderInstanceId: instanceId, holderLabel: hostLabel };
+  }
+
+  try {
+    await ensureSchema(pool);
+    void ensurePgNotifyListener(pool);
+    const metaKey = `telegram_poll_lease_${tokenHash}`;
+    const now = Date.now();
+    const expiresAtMs = now + Math.max(15000, ttlMs);
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+      const existingRes = await client.query<{ meta_value: string }>(
+        `SELECT meta_value FROM app_meta WHERE meta_key = $1 FOR UPDATE`,
+        [metaKey]
+      );
+
+      let current: {
+        instanceId?: string;
+        hostLabel?: string;
+        updatedAtMs?: number;
+        expiresAtMs?: number;
+      } | null = null;
+      if (existingRes.rows[0]?.meta_value) {
+        try {
+          current = JSON.parse(existingRes.rows[0].meta_value);
+        } catch {
+          current = null;
+        }
+      }
+
+      const isExpired =
+        typeof current?.expiresAtMs !== "number" || current.expiresAtMs <= now;
+      // Active holders heartbeat every 5s; >10s stale on the exact same explicit domain means container restarted
+      const isSameExplicitHostRestart =
+        Boolean(hostLabel && current?.hostLabel) &&
+        current!.hostLabel === hostLabel &&
+        !/^(localhost|127\.0\.0\.1|0\.0\.0\.0|server)$/i.test(hostLabel) &&
+        typeof current?.updatedAtMs === "number" &&
+        now - current.updatedAtMs > 10000;
+
+      const isActiveOtherHolder =
+        Boolean(current?.instanceId) &&
+        current!.instanceId !== instanceId &&
+        !isExpired &&
+        !isSameExplicitHostRestart;
+
+      if (isActiveOtherHolder && !forceTakeover) {
+        await client.query("COMMIT");
+        return {
+          supported: true,
+          acquired: false,
+          holderInstanceId: current!.instanceId,
+          holderLabel: current!.hostLabel || "Phiên bản máy chủ khác",
+        };
+      }
+
+      const tookOverFromInstanceId =
+        isActiveOtherHolder && forceTakeover ? current!.instanceId : undefined;
+      const tookOverFromHost =
+        isActiveOtherHolder && forceTakeover ? current!.hostLabel : undefined;
+
+      const nextPayload = JSON.stringify({
+        instanceId,
+        hostLabel: hostLabel || "server",
+        updatedAtMs: now,
+        expiresAtMs,
+      });
+
+      await client.query(
+        `INSERT INTO app_meta (meta_key, meta_value, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (meta_key)
+         DO UPDATE SET meta_value = EXCLUDED.meta_value, updated_at = NOW()`,
+        [metaKey, nextPayload]
+      );
+
+      await client.query("COMMIT");
+
+      if (tookOverFromInstanceId) {
+        broadcastPostgresChange(pool, {
+          type: "telegram_takeover",
+          key: tokenHash,
+          updatedAtMs: now,
+          actorId: instanceId,
+          meta: {
+            winnerHost: hostLabel || "server",
+          },
+        });
+      }
+
+      return {
+        supported: true,
+        acquired: true,
+        holderInstanceId: instanceId,
+        holderLabel: hostLabel,
+        tookOverFromInstanceId,
+        tookOverFromHost,
+      };
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.warn("[PostgresSync] Telegram poll lease check fallback:", (err as Error)?.message);
+    return { supported: false, acquired: true, holderInstanceId: instanceId, holderLabel: hostLabel };
+  }
+}
+
+/**
+ * Strictly renews an already-held lease without stealing if another instance forcibly took over.
+ */
+export async function renewTelegramPollLease(
+  tokenHash: string,
+  instanceId: string,
+  hostLabel: string,
+  ttlMs = 45000
 ): Promise<TelegramPollLeaseResult> {
   const pool = getPool();
   if (!pool || !tokenHash) {
@@ -272,7 +428,12 @@ export async function acquireTelegramPollLease(
         [metaKey]
       );
 
-      let current: { instanceId?: string; hostLabel?: string; expiresAtMs?: number } | null = null;
+      let current: {
+        instanceId?: string;
+        hostLabel?: string;
+        updatedAtMs?: number;
+        expiresAtMs?: number;
+      } | null = null;
       if (existingRes.rows[0]?.meta_value) {
         try {
           current = JSON.parse(existingRes.rows[0].meta_value);
@@ -281,13 +442,13 @@ export async function acquireTelegramPollLease(
         }
       }
 
-      const isActiveOtherHolder =
-        Boolean(current?.instanceId) &&
-        current!.instanceId !== instanceId &&
-        typeof current!.expiresAtMs === "number" &&
-        current!.expiresAtMs > now;
+      const isExpired =
+        !current ||
+        !current.instanceId ||
+        typeof current.expiresAtMs !== "number" ||
+        current.expiresAtMs <= now;
 
-      if (isActiveOtherHolder && !forceTakeover) {
+      if (!isExpired && current!.instanceId !== instanceId) {
         await client.query("COMMIT");
         return {
           supported: true,
@@ -299,7 +460,7 @@ export async function acquireTelegramPollLease(
 
       const nextPayload = JSON.stringify({
         instanceId,
-        hostLabel: hostLabel || "server",
+        hostLabel: hostLabel || current?.hostLabel || "server",
         updatedAtMs: now,
         expiresAtMs,
       });
@@ -325,8 +486,7 @@ export async function acquireTelegramPollLease(
     } finally {
       client.release();
     }
-  } catch (err) {
-    console.warn("[PostgresSync] Telegram poll lease check fallback:", (err as Error)?.message);
+  } catch {
     return { supported: false, acquired: true, holderInstanceId: instanceId, holderLabel: hostLabel };
   }
 }
@@ -414,6 +574,41 @@ export async function releaseTelegramPollLease(tokenHash: string, instanceId: st
     }
   } catch {
     // ignore release errors on shutdown
+  }
+}
+
+export async function loadTelegramUpdateOffsetFromDb(tokenHash: string): Promise<number> {
+  const pool = getPool();
+  if (!pool || !tokenHash) return 0;
+  try {
+    await ensureSchema(pool);
+    const metaKey = `telegram_update_offset_${tokenHash}`;
+    const res = await pool.query<{ meta_value: string }>(
+      `SELECT meta_value FROM app_meta WHERE meta_key = $1 LIMIT 1`,
+      [metaKey]
+    );
+    const parsed = parseInt(res.rows[0]?.meta_value || "0", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function saveTelegramUpdateOffsetToDb(tokenHash: string, offset: number): Promise<void> {
+  const pool = getPool();
+  if (!pool || !tokenHash || !Number.isFinite(offset) || offset <= 0) return;
+  try {
+    await ensureSchema(pool);
+    const metaKey = `telegram_update_offset_${tokenHash}`;
+    await pool.query(
+      `INSERT INTO app_meta (meta_key, meta_value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (meta_key)
+       DO UPDATE SET meta_value = EXCLUDED.meta_value, updated_at = NOW()`,
+      [metaKey, String(Math.floor(offset))]
+    );
+  } catch {
+    // non-fatal
   }
 }
 
@@ -1814,33 +2009,111 @@ export function isPostgresConfigured(): boolean {
   return Boolean(getPool());
 }
 
-export async function loadCloudBucketsForServer(
-  bucketKeys: string[]
-): Promise<Record<string, Record<string, unknown>[]>> {
+async function withServerDbRetry<T>(fn: () => Promise<T>, attempts = 2, delayMs = 1200): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i + 1 < attempts) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+export async function loadCloudBucketsStatusForServer(bucketKeys: string[]): Promise<{
+  configured: boolean;
+  reachable: boolean;
+  buckets: Record<string, Record<string, unknown>[]>;
+  error?: string;
+}> {
   const pool = getPool();
-  if (!pool || bucketKeys.length === 0) return {};
+  if (!pool) {
+    return { configured: false, reachable: false, buckets: {} };
+  }
+  if (bucketKeys.length === 0) {
+    return { configured: true, reachable: true, buckets: {} };
+  }
 
   try {
-    await ensureSchema(pool);
     const validKeys = bucketKeys.filter((k) => ALLOWED_CLOUD_BUCKETS.has(k));
-    if (validKeys.length === 0) return {};
+    if (validKeys.length === 0) {
+      return { configured: true, reachable: true, buckets: {} };
+    }
 
-    const res = await pool.query<{
-      bucket_key: string;
-      items: Record<string, unknown>[];
-    }>(
-      `SELECT bucket_key, items FROM app_buckets WHERE bucket_key = ANY($1::text[])`,
-      [validKeys]
-    );
+    const res = await withServerDbRetry(async () => {
+      await ensureSchema(pool);
+      return pool.query<{
+        bucket_key: string;
+        items: Record<string, unknown>[];
+      }>(
+        `SELECT bucket_key, items FROM app_buckets WHERE bucket_key = ANY($1::text[])`,
+        [validKeys]
+      );
+    });
 
     const out: Record<string, Record<string, unknown>[]> = {};
     for (const row of res.rows) {
       out[row.bucket_key] = Array.isArray(row.items) ? row.items : [];
     }
-    return out;
+    return { configured: true, reachable: true, buckets: out };
   } catch (err: any) {
-    console.error("[PostgresSync] loadCloudBucketsForServer error:", err?.message);
-    return {};
+    console.error("[PostgresSync] loadCloudBucketsStatusForServer error:", err?.message);
+    return {
+      configured: true,
+      reachable: false,
+      buckets: {},
+      error: err?.message || "Database read failed",
+    };
+  }
+}
+
+export async function loadCloudBucketsForServer(
+  bucketKeys: string[]
+): Promise<Record<string, Record<string, unknown>[]>> {
+  const res = await loadCloudBucketsStatusForServer(bucketKeys);
+  return res.buckets;
+}
+
+export async function loadReportArchiveMonthStatusForServer(
+  year: number,
+  monthNum: number
+): Promise<{
+  configured: boolean;
+  reachable: boolean;
+  items: Record<string, unknown>[];
+  error?: string;
+}> {
+  const pool = getPool();
+  if (!pool) {
+    return { configured: false, reachable: false, items: [] };
+  }
+  const archiveKey = `${year}_m${String(Math.min(12, Math.max(1, monthNum))).padStart(2, "0")}`;
+  try {
+    const res = await withServerDbRetry(async () => {
+      await ensureSchema(pool);
+      return pool.query<{ items: Record<string, unknown>[] }>(
+        `SELECT items FROM app_report_archives WHERE archive_key = $1`,
+        [archiveKey]
+      );
+    });
+    const items = res.rows[0]?.items;
+    return {
+      configured: true,
+      reachable: true,
+      items: Array.isArray(items) ? items : [],
+    };
+  } catch (err: any) {
+    console.error("[PostgresSync] loadReportArchiveMonthStatusForServer error:", err?.message);
+    return {
+      configured: true,
+      reachable: false,
+      items: [],
+      error: err?.message || "Archive read failed",
+    };
   }
 }
 
@@ -1848,21 +2121,8 @@ export async function loadReportArchiveMonthForServer(
   year: number,
   monthNum: number
 ): Promise<Record<string, unknown>[]> {
-  const pool = getPool();
-  if (!pool) return [];
-  const archiveKey = `${year}_m${String(Math.min(12, Math.max(1, monthNum))).padStart(2, "0")}`;
-  try {
-    await ensureSchema(pool);
-    const res = await pool.query<{ items: Record<string, unknown>[] }>(
-      `SELECT items FROM app_report_archives WHERE archive_key = $1`,
-      [archiveKey]
-    );
-    const items = res.rows[0]?.items;
-    return Array.isArray(items) ? items : [];
-  } catch (err: any) {
-    console.error("[PostgresSync] loadReportArchiveMonthForServer error:", err?.message);
-    return [];
-  }
+  const res = await loadReportArchiveMonthStatusForServer(year, monthNum);
+  return res.items;
 }
 
 export async function upsertReportArchiveMonthFromServer(
@@ -2004,14 +2264,172 @@ export async function saveScheduledAlertRulesToDb(
   }
 }
 
+export async function appendSyncHistoryEntryToDb(
+  entry: SyncHistoryEntry
+): Promise<boolean> {
+  const pool = getPool();
+  if (!pool) return false;
+
+  try {
+    await ensureSchema(pool);
+    const res = await pool.query<{ items: Record<string, unknown>[] }>(
+      `SELECT items FROM app_buckets WHERE bucket_key = 'sync_history'`
+    );
+    const existing = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+    const trimmedEntry: SyncHistoryEntry = {
+      ...entry,
+      autoWrittenSamples: entry.autoWrittenSamples?.slice(0, 80),
+      discrepancies: entry.discrepancies?.slice(0, 250),
+    };
+    const next = [
+      trimmedEntry,
+      ...existing.filter((e: any) => e && e.id !== entry.id),
+    ].slice(0, 80);
+    const nowMs = Date.now();
+
+    await pool.query(
+      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+       VALUES ('sync_history', $1::jsonb, $2, 'SYS-SCHEDULER', 'Hệ thống Đồng bộ Tự động', $3, NOW())
+       ON CONFLICT (bucket_key)
+       DO UPDATE SET
+         items = EXCLUDED.items,
+         item_count = EXCLUDED.item_count,
+         updated_by_id = EXCLUDED.updated_by_id,
+         updated_by_name = EXCLUDED.updated_by_name,
+         updated_at_ms = EXCLUDED.updated_at_ms,
+         updated_at = NOW()`,
+      [JSON.stringify(next), next.length, nowMs]
+    );
+
+    broadcastPostgresChange(pool, {
+      type: "bucket",
+      key: "sync_history",
+      updatedAtMs: nowMs,
+      actorId: "SYS-SCHEDULER",
+    });
+    return true;
+  } catch (err: any) {
+    console.error("[PostgresSync] appendSyncHistoryEntryToDb error:", err?.message);
+    return false;
+  }
+}
+
+export async function mergeSheetConfigIntoSettingsDbIfMissing(
+  incomingSettings?: Partial<AppSettings> | null
+): Promise<boolean> {
+  if (!incomingSettings || typeof incomingSettings !== "object") return false;
+  const incomingUrl = String(incomingSettings.googleSheetUrl || "").trim();
+  const incomingSheetId = String(incomingSettings.reportGoogleSheetId || "").trim();
+  const incomingByYear =
+    incomingSettings.reportGoogleSheetsByYear &&
+    typeof incomingSettings.reportGoogleSheetsByYear === "object"
+      ? incomingSettings.reportGoogleSheetsByYear
+      : null;
+
+  const hasIncomingByYear = Boolean(
+    incomingByYear &&
+      Object.values(incomingByYear).some(
+        (cfg) => cfg && (String(cfg.url || "").trim() || String(cfg.sheetId || "").trim())
+      )
+  );
+  if (!incomingUrl && !incomingSheetId && !hasIncomingByYear) {
+    return false;
+  }
+
+  const pool = getPool();
+  if (!pool) return false;
+
+  try {
+    await ensureSchema(pool);
+    const res = await pool.query<{ items: Record<string, unknown>[] }>(
+      `SELECT items FROM app_buckets WHERE bucket_key = 'settings'`
+    );
+    const currentList = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+    const baseSettings =
+      currentList[0] && typeof currentList[0] === "object"
+        ? ({ ...currentList[0] } as Partial<AppSettings>)
+        : ({} as Partial<AppSettings>);
+
+    let changed = false;
+
+    if (!String(baseSettings.googleSheetUrl || "").trim() && incomingUrl) {
+      baseSettings.googleSheetUrl = incomingUrl;
+      changed = true;
+    }
+    if (!String(baseSettings.reportGoogleSheetId || "").trim() && incomingSheetId) {
+      baseSettings.reportGoogleSheetId = incomingSheetId;
+      changed = true;
+    }
+    if (!baseSettings.reportSheetYear && incomingSettings.reportSheetYear) {
+      baseSettings.reportSheetYear = incomingSettings.reportSheetYear;
+      changed = true;
+    }
+
+    if (incomingByYear) {
+      const mergedByYear = { ...(baseSettings.reportGoogleSheetsByYear || {}) };
+      for (const [yr, cfg] of Object.entries(incomingByYear)) {
+        if (!cfg || (!String(cfg.url || "").trim() && !String(cfg.sheetId || "").trim())) {
+          continue;
+        }
+        const existingCfg = mergedByYear[yr];
+        const existingHas = Boolean(
+          existingCfg && (String(existingCfg.url || "").trim() || String(existingCfg.sheetId || "").trim())
+        );
+        if (!existingHas) {
+          mergedByYear[yr] = cfg;
+          changed = true;
+        }
+      }
+      if (changed) {
+        baseSettings.reportGoogleSheetsByYear = mergedByYear;
+      }
+    }
+
+    if (!changed) return false;
+
+    const nowMs = Date.now();
+    await pool.query(
+      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+       VALUES ('settings', $1::jsonb, 1, 'SYS-SCHEDULER', 'Đồng bộ Cấu hình Sheet', $2, NOW())
+       ON CONFLICT (bucket_key)
+       DO UPDATE SET
+         items = EXCLUDED.items,
+         item_count = EXCLUDED.item_count,
+         updated_by_id = EXCLUDED.updated_by_id,
+         updated_by_name = EXCLUDED.updated_by_name,
+         updated_at_ms = EXCLUDED.updated_at_ms,
+         updated_at = NOW()`,
+      [JSON.stringify([baseSettings]), nowMs]
+    );
+
+    broadcastPostgresChange(pool, {
+      type: "bucket",
+      key: "settings",
+      updatedAtMs: nowMs,
+      actorId: "SYS-SCHEDULER",
+    });
+    return true;
+  } catch (err: any) {
+    console.error("[PostgresSync] mergeSheetConfigIntoSettingsDbIfMissing error:", err?.message);
+    return false;
+  }
+}
+
 const inMemoryDailyAlertClaims = new Set<string>();
+
+function buildDailyAlertLockKey(ruleId: string, dateVN: string, timeHHmm?: string): string {
+  const timeSuffix = timeHHmm ? `_${String(timeHHmm).replace(/[^0-9]/g, "")}` : "";
+  return `scheduled_alert_lock_${ruleId}_${dateVN}${timeSuffix}`;
+}
 
 export async function tryClaimDailyAlertLock(
   ruleId: string,
   dateVN: string,
+  timeHHmm: string,
   hostLabel: string
 ): Promise<boolean> {
-  const lockKey = `scheduled_alert_lock_${ruleId}_${dateVN}`;
+  const lockKey = buildDailyAlertLockKey(ruleId, dateVN, timeHHmm);
+  const legacyKey = buildDailyAlertLockKey(ruleId, dateVN);
   const pool = getPool();
   if (!pool) {
     if (inMemoryDailyAlertClaims.has(lockKey)) return false;
@@ -2021,8 +2439,18 @@ export async function tryClaimDailyAlertLock(
 
   try {
     await ensureSchema(pool);
+    // Respect legacy key too if exact default time hasn't changed
+    const legacyRes = await pool.query<{ meta_key: string }>(
+      `SELECT meta_key FROM app_meta WHERE meta_key = $1 LIMIT 1`,
+      [legacyKey]
+    );
+    if (legacyRes.rows.length > 0) {
+      return false;
+    }
+
     const payload = JSON.stringify({
       claimedAt: new Date().toISOString(),
+      timeHHmm,
       hostLabel: hostLabel || "cls-server",
     });
     const res = await pool.query<{ meta_key: string }>(
@@ -2038,6 +2466,44 @@ export async function tryClaimDailyAlertLock(
     if (inMemoryDailyAlertClaims.has(lockKey)) return false;
     inMemoryDailyAlertClaims.add(lockKey);
     return true;
+  }
+}
+
+export async function releaseDailyAlertLock(
+  ruleId: string,
+  dateVN: string,
+  timeHHmm: string
+): Promise<void> {
+  const lockKey = buildDailyAlertLockKey(ruleId, dateVN, timeHHmm);
+  const legacyKey = buildDailyAlertLockKey(ruleId, dateVN);
+  inMemoryDailyAlertClaims.delete(lockKey);
+  inMemoryDailyAlertClaims.delete(legacyKey);
+  const pool = getPool();
+  if (!pool) return;
+
+  try {
+    await ensureSchema(pool);
+    await pool.query(`DELETE FROM app_meta WHERE meta_key = ANY($1::text[])`, [
+      [lockKey, legacyKey],
+    ]);
+  } catch {
+    // ignore cleanup error
+  }
+}
+
+export async function clearTodayAlertLocksForRule(ruleId: string, dateVN: string): Promise<void> {
+  const prefix = `scheduled_alert_lock_${ruleId}_${dateVN}`;
+  for (const k of Array.from(inMemoryDailyAlertClaims)) {
+    if (k.startsWith(prefix)) inMemoryDailyAlertClaims.delete(k);
+  }
+  const pool = getPool();
+  if (!pool) return;
+
+  try {
+    await ensureSchema(pool);
+    await pool.query(`DELETE FROM app_meta WHERE meta_key LIKE $1`, [`${prefix}%`]);
+  } catch {
+    // ignore
   }
 }
 

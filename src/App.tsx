@@ -187,6 +187,8 @@ export default function App() {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    let lastHeartbeatAtMs = 0;
+
     const verifyAndResyncBridge = async () => {
       const settings = storageService.getSettings();
       const hasToken = (settings.telegramBotToken || '').trim().length > 10;
@@ -199,11 +201,22 @@ export default function App() {
         if (!st) return;
         const needsContext = !st.hasLiveContext;
         const blockedByGuard = Boolean(
-          st.conflictDetected || st.pausedByUser || st.standbyMode || st.webhookUrl
+          st.conflictDetected ||
+            st.pausedByUser ||
+            st.standbyMode ||
+            st.webhookUrl ||
+            st.startingPolling ||
+            st.reconnecting
         );
         const needsBot = hasToken && qaEnabled && (!st.configured || (!st.pollingActive && !blockedByGuard));
         if (needsContext || needsBot) {
           await syncLiveContextToServer(true);
+        }
+
+        const nowMs = Date.now();
+        if (nowMs - lastHeartbeatAtMs >= 50000) {
+          lastHeartbeatAtMs = nowMs;
+          await fetch('/api/alerts/heartbeat', { method: 'POST' }).catch(() => {});
         }
       } catch {
         // ignore transient offline checks
@@ -239,17 +252,24 @@ export default function App() {
       const outcome = await runThreeDaySmartSync('startup_3d_auto');
       if (cancelled || !outcome.ran) return;
 
-      if (outcome.alertDiscrepancies.length > 0) {
-        showToast(
-          'Cảnh báo sai lệch 3 ngày gần nhất',
-          `Phát hiện ${outcome.alertDiscrepancies.length} mục sai lệch giữa Hệ thống và Google Sheet (đã giữ nguyên dữ liệu & lưu vào Lịch sử đồng bộ).`,
-          'warning'
-        );
-      } else if (outcome.autoWrittenCount > 0) {
+      if (outcome.updatedFromSheetCount > 0 || outcome.autoWrittenCount > 0) {
+        const parts: string[] = [];
+        if (outcome.updatedFromSheetCount > 0) {
+          parts.push(`ghi đè ${outcome.updatedFromSheetCount} mục dịch vụ khớp Google Sheet (đã lưu lịch sử dữ liệu gốc & thay thế)`);
+        }
+        if (outcome.autoWrittenCount > 0) {
+          parts.push(`ghi mới ${outcome.autoWrittenCount} ô trống`);
+        }
         showToast(
           'Đồng bộ tự động 3 ngày gần nhất',
-          `Đã rà soát và tự động ghi mới ${outcome.autoWrittenCount} ô từ Google Sheet vào Hệ thống.`,
+          `Đã rà soát và ${parts.join(', ')}.`,
           'success'
+        );
+      } else if (outcome.alertDiscrepancies.length > 0) {
+        showToast(
+          'Cảnh báo sai lệch 3 ngày gần nhất',
+          `Phát hiện ${outcome.alertDiscrepancies.length} mục sai lệch giữa Hệ thống và Google Sheet.`,
+          'warning'
         );
       }
     };

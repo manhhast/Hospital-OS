@@ -12,12 +12,14 @@ import {
 import { telegramManager } from "./server/telegramBot";
 import {
   loadStoredTelegramSettingsFromDb,
+  mergeSheetConfigIntoSettingsDbIfMissing,
   registerPostgresSyncRoutes,
 } from "./server/postgresSync";
 import {
   registerScheduledAlertRoutes,
   startScheduledAlertsEngine,
   stopScheduledAlertsEngine,
+  triggerScheduledAlertsCatchUp,
 } from "./server/scheduledAlerts";
 
 function getRequestHostLabel(req: express.Request): string {
@@ -54,6 +56,9 @@ app.post("/api/assistant/sync-context", (req, res) => {
     const { liveContext, telegramConfig } = req.body || {};
     if (liveContext) {
       telegramManager.updateLiveContext(liveContext);
+      if (liveContext.settings && typeof liveContext.settings === "object") {
+        void mergeSheetConfigIntoSettingsDbIfMissing(liveContext.settings);
+      }
     }
     if (telegramConfig && typeof telegramConfig === "object") {
       telegramManager.configure({
@@ -62,6 +67,7 @@ app.post("/api/assistant/sync-context", (req, res) => {
         enabled: Boolean(telegramConfig.enabled),
       });
     }
+    triggerScheduledAlertsCatchUp();
     res.json({
       success: true,
       telegram: telegramManager.getStatus(),
@@ -100,7 +106,7 @@ app.post("/api/telegram/test", async (req, res) => {
         },
         true
       );
-      await new Promise((r) => setTimeout(r, 850));
+      await telegramManager.waitForPollSettled(3200);
     }
     res.json({
       success: true,
@@ -148,7 +154,7 @@ app.post("/api/telegram/retry", async (req, res) => {
         },
         true
       );
-      await new Promise((r) => setTimeout(r, 900));
+      await telegramManager.waitForPollSettled(3200);
     } else {
       await telegramManager.retryPolling(true);
     }
@@ -749,7 +755,6 @@ async function startServer() {
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[CLS WorkHub Full-Stack Server] running on http://0.0.0.0:${PORT}`);
-    startScheduledAlertsEngine();
     void (async () => {
       try {
         const storedTg = await loadStoredTelegramSettingsFromDb();
@@ -758,6 +763,8 @@ async function startServer() {
         }
       } catch {
         // ignore startup Telegram autoload error
+      } finally {
+        startScheduledAlertsEngine();
       }
     })();
   });

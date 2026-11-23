@@ -20,6 +20,8 @@ import type {
   ScheduledAlertRuleId
 } from '../../types/hospital';
 import { aiService } from '../../services/aiService';
+import { postgresSyncService } from '../../services/postgresSyncService';
+import { REPORT_ARCHIVE_UPDATED_EVENT } from '../../services/reportArchiveService';
 import { storageService } from '../../services/storageService';
 import { DEFAULT_SCHEDULED_ALERT_RULES } from '../../utils/scheduledAlertDefaults';
 
@@ -261,11 +263,16 @@ export const ScheduledAlertsPanel: React.FC<ScheduledAlertsPanelProps> = ({
         });
       }
       onNotificationsUpdated?.();
+      void postgresSyncService.pollChanges().then(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(REPORT_ARCHIVE_UPDATED_EVENT, { detail: { fromScheduledAlert: true } }));
+        }
+      });
 
       if (historyItem.status === 'success') {
         onShowToast(
-          'Đã phát bản tin thành công',
-          `${rule.name} đã gửi qua ${historyItem.telegramSent ? 'Telegram' : ''}${
+          'Đã cập nhật dữ liệu & phát bản tin',
+          `${rule.name} đã tự động đồng bộ dữ liệu mới nhất trước khi gửi qua ${historyItem.telegramSent ? 'Telegram' : ''}${
             historyItem.telegramSent && historyItem.inAppSaved ? ' & ' : ''
           }${historyItem.inAppSaved ? 'In-App' : ''}.`,
           'success'
@@ -357,6 +364,13 @@ export const ScheduledAlertsPanel: React.FC<ScheduledAlertsPanelProps> = ({
           const draftTime = timeDrafts[rule.id] ?? rule.timeHHmm;
           const timeErr = timeErrors[rule.id];
 
+          const todayVNPrefix = vnNowText ? vnNowText.slice(0, 10) : '';
+          const todayRuns = todayVNPrefix
+            ? history.filter((h) => h.ruleId === rule.id && String(h.triggeredAt || '').startsWith(todayVNPrefix))
+            : [];
+          const latestTodayAuto = todayRuns.find((h) => h.triggerMode === 'auto_schedule') || todayRuns[0];
+          const sentTimeOnly = latestTodayAuto?.triggeredAt?.slice(11, 16) || '';
+
           return (
             <div
               key={rule.id}
@@ -377,6 +391,29 @@ export const ScheduledAlertsPanel: React.FC<ScheduledAlertsPanelProps> = ({
                     <span className="text-[11px] font-semibold text-[#718096] dark:text-slate-500">
                       {rule.enabled ? 'Đang bật' : 'Đang tắt'}
                     </span>
+                    {latestTodayAuto && (
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border tabular-nums ${
+                          latestTodayAuto.status === 'success'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+                            : latestTodayAuto.status === 'partial'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
+                            : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800'
+                        }`}
+                        title={latestTodayAuto.errorMessage || latestTodayAuto.summary}
+                      >
+                        {latestTodayAuto.status === 'success'
+                          ? `Đã phát hôm nay${sentTimeOnly ? ` (${sentTimeOnly})` : ''}`
+                          : latestTodayAuto.status === 'partial'
+                          ? `Phát một phần (${sentTimeOnly || 'hôm nay'})`
+                          : 'Lỗi phát hôm nay (đang tự thử lại)'}
+                      </span>
+                    )}
+                    {!latestTodayAuto && rule.enabled && todayVNPrefix && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-[#F4F7FB] text-[#718096] border-[#DFE7F0] dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+                        Chờ phát hôm nay ({rule.timeHHmm})
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-[#718096] dark:text-slate-400 leading-relaxed">
                     {rule.description}

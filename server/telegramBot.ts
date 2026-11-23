@@ -7,7 +7,11 @@ import {
 import {
   acquireTelegramPollLease,
   getTelegramPollLeaseInfo,
+  loadTelegramUpdateOffsetFromDb,
   releaseTelegramPollLease,
+  renewTelegramPollLease,
+  saveTelegramUpdateOffsetToDb,
+  subscribeTelegramTakeover,
 } from "./postgresSync";
 
 export interface TelegramExclusivityReport {
@@ -44,6 +48,9 @@ export interface TelegramBotStatusSnapshot {
   configured: boolean;
   enabled: boolean;
   pollingActive: boolean;
+  startingPolling?: boolean;
+  reconnecting?: boolean;
+  reconnectingMessage?: string;
   conflictDetected?: boolean;
   pausedByUser?: boolean;
   standbyMode?: boolean;
@@ -59,16 +66,32 @@ export interface TelegramBotStatusSnapshot {
   hasLiveContext: boolean;
   contextUpdatedAt?: string;
   lastError?: string;
+  nextConflictRetryAt?: string;
+  autoRecovering?: boolean;
+}
+
+function resolveInitialHostLabel(): string {
+  const appUrl = (process.env.APP_URL || "").trim();
+  if (appUrl) {
+    try {
+      const host = new URL(appUrl).host;
+      if (host) return host.slice(0, 120);
+    } catch {
+      // ignore invalid APP_URL
+    }
+  }
+  return os.hostname() || "server";
 }
 
 class TelegramAssistantManager {
   private readonly instanceId = crypto.randomUUID();
-  private instanceHost = os.hostname() || "server";
+  private instanceHost = resolveInitialHostLabel();
 
   private botToken = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
   private defaultChatId = (process.env.TELEGRAM_DEFAULT_CHAT_ID || "").trim();
   private enabled = Boolean(this.botToken);
   private pollingActive = false;
+  private startingPolling = false;
   private conflictDetected = false;
   private pausedByUser = false;
   private standbyMode = false;
@@ -77,6 +100,9 @@ class TelegramAssistantManager {
 
   private pollAbortController: AbortController | null = null;
   private standbyTimer: NodeJS.Timeout | null = null;
+  private conflictRecoveryTimer: NodeJS.Timeout | null = null;
+  private leaseHeartbeatTimer: NodeJS.Timeout | null = null;
+  private nextConflictRetryAt: string | undefined;
   private sleepCancel: (() => void) | null = null;
   private pollLoopGeneration = 0;
   private lastUpdateOffset = 0;
@@ -87,16 +113,32 @@ class TelegramAssistantManager {
   private lastMessageAt: string | undefined;
   private totalAnswered = 0;
   private lastError: string | undefined;
+  private reconnectingNotice: string | undefined;
 
   private liveContext: any = null;
   private contextUpdatedAt: string | undefined;
   private chatHistories = new Map<string, Array<{ sender: "user" | "assistant"; content: string }>>();
+  private chatWorkerChains = new Map<string, Promise<void>>();
   private telegramLearnedMemories: LearnedMemoryEntry[] = [];
   private processedUpdateIds = new Set<number>();
   private recentChats = new Map<
     string,
     { chatId: string; title: string; type: string; username?: string; lastSeenAt: string }
   >();
+  private unsubscribeTakeover: (() => void) | null = null;
+
+  constructor() {
+    this.unsubscribeTakeover = subscribeTelegramTakeover((evt) => {
+      if (
+        evt.winnerInstanceId !== this.instanceId &&
+        evt.tokenHash &&
+        evt.tokenHash === this.getTokenFingerprint() &&
+        (this.pollingActive || this.startingPolling)
+      ) {
+        this.yieldToRemoteWinner(evt.winnerHost);
+      }
+    });
+  }
 
   private getTokenFingerprint(token = this.botToken): string {
     if (!token) return "";
@@ -106,10 +148,14 @@ class TelegramAssistantManager {
   public updateHostLabel(rawHost?: string) {
     const clean = String(rawHost || "").trim().slice(0, 120);
     if (!clean) return;
-    // Prefer external domain host over bare localhost if already known
     const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(clean);
     if (!isLocal || !this.instanceHost || this.instanceHost === os.hostname()) {
+      const changed = this.instanceHost !== clean;
       this.instanceHost = clean;
+      if (changed && !isLocal && this.standbyMode && this.standbyHolder === clean) {
+        // Container restarted on the same explicit domain: reclaim stale lease within 1s instead of waiting 20s
+        this.scheduleStandbyCheck(this.pollLoopGeneration, 1000);
+      }
     }
   }
 
@@ -211,6 +257,7 @@ class TelegramAssistantManager {
       this.botFirstName = undefined;
       this.lastUpdateOffset = 0;
       this.lastError = undefined;
+      this.reconnectingNotice = undefined;
       this.conflictDetected = false;
       this.pausedByUser = false;
       this.standbyMode = false;
@@ -222,6 +269,7 @@ class TelegramAssistantManager {
     if (enabledChanged && nextEnabled) {
       this.pausedByUser = false;
       this.conflictDetected = false;
+      this.reconnectingNotice = undefined;
       this.lastError = undefined;
     }
 
@@ -230,6 +278,7 @@ class TelegramAssistantManager {
       this.conflictDetected = false;
       this.standbyMode = false;
       this.standbyHolder = undefined;
+      this.reconnectingNotice = undefined;
       const fp = this.getTokenFingerprint();
       if (fp) {
         void releaseTelegramPollLease(fp, this.instanceId);
@@ -237,15 +286,26 @@ class TelegramAssistantManager {
       return;
     }
 
+    // Never interrupt an active or starting poll loop on routine sync-context / heartbeat calls
+    if (!forceTakeover && !tokenChanged && !(enabledChanged && nextEnabled) && (this.pollingActive || this.startingPolling)) {
+      return;
+    }
+
     const blockedByGuard =
       this.pausedByUser || this.conflictDetected || this.standbyMode || Boolean(this.webhookUrl);
 
-    if (forceTakeover || tokenChanged || (enabledChanged && nextEnabled) || (!this.pollingActive && !blockedByGuard)) {
+    if (
+      forceTakeover ||
+      tokenChanged ||
+      (enabledChanged && nextEnabled) ||
+      (!this.pollingActive && !this.startingPolling && !blockedByGuard)
+    ) {
       this.pausedByUser = false;
       this.conflictDetected = false;
       this.standbyMode = false;
       this.standbyHolder = undefined;
       this.webhookUrl = undefined;
+      this.reconnectingNotice = undefined;
       this.lastError = undefined;
       this.startPolling(forceTakeover);
     }
@@ -257,7 +317,7 @@ class TelegramAssistantManager {
     if (this.pausedByUser || !this.enabled) return "paused";
     if (this.webhookUrl) return "webhook";
     if (this.standbyMode) return "standby";
-    if (this.pollingActive) return "polling";
+    if (this.pollingActive || this.startingPolling) return "polling";
     return "paused";
   }
 
@@ -266,6 +326,9 @@ class TelegramAssistantManager {
       configured: Boolean(this.botToken),
       enabled: this.enabled,
       pollingActive: this.pollingActive && !this.conflictDetected && !this.pausedByUser,
+      startingPolling: this.startingPolling,
+      reconnecting: Boolean(this.reconnectingNotice),
+      reconnectingMessage: this.reconnectingNotice,
       conflictDetected: this.conflictDetected,
       pausedByUser: this.pausedByUser,
       standbyMode: this.standbyMode,
@@ -281,7 +344,19 @@ class TelegramAssistantManager {
       hasLiveContext: Boolean(this.liveContext),
       contextUpdatedAt: this.contextUpdatedAt,
       lastError: this.lastError,
+      nextConflictRetryAt: this.nextConflictRetryAt,
+      autoRecovering: Boolean(
+        this.conflictDetected && !this.pausedByUser && this.conflictRecoveryTimer
+      ),
     };
+  }
+
+  public async waitForPollSettled(timeoutMs = 2600): Promise<TelegramBotStatusSnapshot> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.startingPolling && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return this.getStatus();
   }
 
   public getDeliveryConfig() {
@@ -335,10 +410,11 @@ class TelegramAssistantManager {
     );
 
     let formatted = this.escapeHtml(withLinkTokens)
-      .replace(/^###\s+(.+)$/gm, "<b>$1</b>")
-      .replace(/^##\s+(.+)$/gm, "<b>$1</b>")
+      .replace(/^#{1,4}\s+(.+)$/gm, "<b>$1</b>")
+      .replace(/^(\s*)-\s+/gm, "$1• ")
       .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
-      .replace(/`([^`\n]+)`/g, "<code>$1</code>");
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/(^|\s)_([^_\n]+?)_(?=\s|[.,;:!?)]|$)/gm, "$1<i>$2</i>");
 
     for (const lp of linkPlaceholders) {
       formatted = formatted.replace(lp.token, lp.html);
@@ -346,45 +422,60 @@ class TelegramAssistantManager {
     return formatted;
   }
 
-  private splitTelegramMessage(text: string, maxLen = 3800): string[] {
-    if (text.length <= maxLen) return [text];
+  private splitTelegramMessage(text: string, maxLen = 3200): string[] {
+    const clean = String(text || "");
+    if (clean.length <= maxLen) return [clean];
     const chunks: string[] = [];
-    let remaining = text;
+    let remaining = clean;
     while (remaining.length > 0) {
       if (remaining.length <= maxLen) {
         chunks.push(remaining);
         break;
       }
-      let splitAt = remaining.lastIndexOf("\n", maxLen);
-      if (splitAt < maxLen * 0.5) splitAt = maxLen;
-      chunks.push(remaining.slice(0, splitAt));
+      let splitAt = remaining.lastIndexOf("\n\n", maxLen);
+      if (splitAt < maxLen * 0.45) {
+        splitAt = remaining.lastIndexOf("\n", maxLen);
+      }
+      if (splitAt < maxLen * 0.45) {
+        splitAt = remaining.lastIndexOf(" ", maxLen);
+      }
+      if (splitAt < maxLen * 0.35) {
+        splitAt = maxLen;
+      }
+      chunks.push(remaining.slice(0, splitAt).trimEnd());
       remaining = remaining.slice(splitAt).trimStart();
     }
-    return chunks;
+    return chunks.filter((c) => c.length > 0);
   }
 
   public async sendMessage(chatId: string | number, rawText: string, tokenOverride?: string) {
     const token = tokenOverride || this.botToken;
     if (!token) throw new Error("Thiếu Telegram Bot Token");
 
-    const htmlBody = this.formatMarkdownToTelegramHtml(rawText);
-    const chunks = this.splitTelegramMessage(htmlBody, 3800);
+    // Chunk raw markdown FIRST along natural line/section boundaries so HTML tags never split mid-tag
+    const rawChunks = this.splitTelegramMessage(rawText, 3200);
 
-    for (const chunk of chunks) {
-      try {
-        await this.telegramApiCall(token, "sendMessage", {
-          chat_id: chatId,
-          text: chunk,
-          parse_mode: "HTML",
-          disable_web_page_preview: true,
-        });
-      } catch {
-        // Fallback plain text if any HTML tag spans chunk boundary
-        await this.telegramApiCall(token, "sendMessage", {
-          chat_id: chatId,
-          text: chunk.replace(/<\/?(b|i|code|a)[^>]*>/g, ""),
-          disable_web_page_preview: true,
-        });
+    for (const rawChunk of rawChunks) {
+      const htmlBody = this.formatMarkdownToTelegramHtml(rawChunk);
+      const safeHtmlChunks =
+        htmlBody.length > 4000 ? this.splitTelegramMessage(rawChunk, 2400).map((c) => this.formatMarkdownToTelegramHtml(c)) : [htmlBody];
+
+      for (const chunk of safeHtmlChunks) {
+        try {
+          await this.telegramApiCall(token, "sendMessage", {
+            chat_id: chatId,
+            text: chunk,
+            parse_mode: "HTML",
+            disable_web_page_preview: true,
+          });
+        } catch {
+          // Fallback plain text if Telegram rejects any HTML formatting
+          await this.telegramApiCall(token, "sendMessage", {
+            chat_id: chatId,
+            text: chunk.replace(/<\/?(b|i|code|a|pre|u|s)[^>]*>/g, ""),
+            disable_web_page_preview: true,
+          });
+        }
       }
     }
   }
@@ -445,6 +536,16 @@ class TelegramAssistantManager {
         b.lastSeenAt.localeCompare(a.lastSeenAt)
       );
     }
+    if (isSameConfiguredBot && this.standbyMode) {
+      if (this.recentChats.size > 0) {
+        return Array.from(this.recentChats.values()).sort((a, b) =>
+          b.lastSeenAt.localeCompare(a.lastSeenAt)
+        );
+      }
+      throw new Error(
+        `Phiên bản khác (${this.standbyHolder || "máy chủ chính"}) đang giữ quyền lắng nghe Bot. Hãy bấm "Chuyển quyền Polling về đây" hoặc thao tác trên phiên bản chính để dò Chat ID mà không gây trùng lặp.`
+      );
+    }
 
     try {
       const me = await this.telegramApiCall(token, "getMe");
@@ -462,7 +563,7 @@ class TelegramAssistantManager {
       throw new Error(`Không thể kết nối Telegram với Bot Token này: ${err?.message || "Lỗi mạng"}`);
     }
 
-    const wasPollingSameToken = isSameConfiguredBot && this.pollingActive;
+    const wasPollingSameToken = isSameConfiguredBot && (this.pollingActive || this.startingPolling);
     if (wasPollingSameToken) {
       this.stopPolling();
       await new Promise((r) => setTimeout(r, 1200));
@@ -572,7 +673,35 @@ class TelegramAssistantManager {
       };
     }
 
-    const wasPollingSameToken = isSameConfiguredBot && this.pollingActive;
+    if (
+      this.standbyMode &&
+      leaseInfo.active &&
+      !leaseHeldByThisInstance &&
+      leaseInfo.holderLabel &&
+      leaseInfo.holderLabel !== this.instanceHost
+    ) {
+      return {
+        checkedAt: new Date().toISOString(),
+        botId: me.id,
+        botUsername: me.username,
+        botFirstName: me.first_name,
+        isExclusive: false,
+        statusCode: "EXTERNAL_POLLING",
+        summary: `Phiên bản khác (${leaseInfo.holderLabel}) đang giữ quyền lắng nghe Bot @${me.username}. Nếu muốn dùng tại đây, hãy bấm "Chiếm quyền & Kết nối lại tại đây".`,
+        webhookUrl: "",
+        pendingUpdateCount,
+        externalListenerDetected: true,
+        leaseSupported: leaseInfo.supported,
+        leaseHolderHost: leaseInfo.holderLabel,
+        leaseHeldByThisInstance: false,
+      };
+    }
+
+    const wasPollingSameToken = isSameConfiguredBot && (this.pollingActive || this.startingPolling);
+    const wasSameHostStandby =
+      isSameConfiguredBot &&
+      this.standbyMode &&
+      (!this.standbyHolder || this.standbyHolder === this.instanceHost);
     if (wasPollingSameToken) {
       this.stopPolling();
       if (tokenHash) {
@@ -583,7 +712,7 @@ class TelegramAssistantManager {
 
     let externalListenerDetected = false;
     let transientClearedOwnSocket = false;
-    const waitSteps = wasPollingSameToken ? [0, 4000, 6000] : [0, 2500];
+    const waitSteps = wasPollingSameToken ? [0, 3500, 5500] : [0, 2500];
 
     try {
       for (let i = 0; i < waitSteps.length; i++) {
@@ -594,7 +723,7 @@ class TelegramAssistantManager {
           await this.telegramApiCall(token, "getUpdates", {
             offset: this.lastUpdateOffset || undefined,
             limit: 1,
-            timeout: 3,
+            timeout: 2,
             allowed_updates: ["message", "edited_message", "channel_post", "my_chat_member"],
           });
           externalListenerDetected = false;
@@ -614,11 +743,16 @@ class TelegramAssistantManager {
         this.enabled &&
         this.botToken &&
         !this.pausedByUser &&
-        (wasPollingSameToken || (this.conflictDetected && !externalListenerDetected && transientClearedOwnSocket))
+        (wasPollingSameToken ||
+          ((this.conflictDetected || wasSameHostStandby) && !externalListenerDetected && transientClearedOwnSocket))
       ) {
         this.conflictDetected = false;
+        this.standbyMode = false;
+        this.standbyHolder = undefined;
+        this.reconnectingNotice = undefined;
         this.lastError = undefined;
         this.startPolling(true);
+        await this.waitForPollSettled(2500);
       }
     }
 
@@ -687,7 +821,8 @@ class TelegramAssistantManager {
     }
 
     const message = update.message || update.edited_message;
-    if (!message || !message.text || message.from?.is_bot) return;
+    const rawBody = message?.text ?? message?.caption;
+    if (!message || !rawBody || message.from?.is_bot) return;
 
     const chatId = message.chat?.id;
     const chatType = message.chat?.type || "private";
@@ -695,7 +830,7 @@ class TelegramAssistantManager {
       [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ") ||
       message.from?.username ||
       "Cán bộ CLS";
-    const rawText = String(message.text || "").trim();
+    const rawText = String(rawBody || "").trim();
     if (!chatId || !rawText) return;
 
     const isCommand = rawText.startsWith("/");
@@ -713,19 +848,24 @@ class TelegramAssistantManager {
 
     this.lastMessageAt = new Date().toISOString();
 
+    let typingTimer: NodeJS.Timeout | null = null;
     try {
-      await this.telegramApiCall(this.botToken, "sendChatAction", {
-        chat_id: chatId,
-        action: "typing",
-      }).catch(() => {});
+      const sendTyping = () =>
+        this.telegramApiCall(this.botToken, "sendChatAction", {
+          chat_id: chatId,
+          action: "typing",
+        }).catch(() => {});
+
+      await sendTyping();
+      typingTimer = setInterval(() => {
+        void sendTyping();
+      }, 4500);
 
       const cleanText = botMention
         ? rawText.replace(new RegExp(`@${this.botUsername}`, "ig"), "").trim()
         : rawText;
 
-      const lower = cleanText.toLowerCase();
-
-      if (lower.startsWith("/start") || lower.startsWith("/help")) {
+      if (/^\/(start|help)(?:@\S+)?(?:\s|$)/i.test(cleanText)) {
         const helpMsg =
           `🏥 **Trợ Lý Ảo Thông Minh Khoa Cận Lâm Sàng (CLS WorkHub)**\n` +
           `Tôi kết nối trực tiếp dữ liệu khoa (số ca, máy móc, lịch trực, nhân sự, SOP) **và tra cứu Internet trực tiếp**, đồng thời ghi nhớ các quy ước bạn dạy.\n\n` +
@@ -736,14 +876,15 @@ class TelegramAssistantManager {
           `💬 **Hoặc nhắn tự nhiên (chat riêng):**\n` +
           `• "Báo cáo chi tiết số liệu ngày 16"\n` +
           `• "Máy nào sắp đến hạn bảo trì hoặc kiểm chuẩn?"\n` +
-          `• "Hướng dẫn mới của Bộ Y tế về kiểm chuẩn xét nghiệm?"`;
+          `• "Ai đang nghỉ phép tuần này?"`;
         await this.sendMessage(chatId, helpMsg);
         this.totalAnswered += 1;
         return;
       }
 
-      if (lower.startsWith("/nho ") || lower.startsWith("/remember ")) {
-        const memo = cleanText.replace(/^\/(nho|remember)\s+/i, "").trim();
+      const nhoMatch = cleanText.match(/^\/(nho|remember)(?:@\S+)?(?:\s+([\s\S]+))?$/i);
+      if (nhoMatch) {
+        const memo = (nhoMatch[2] || "").trim();
         if (!memo) {
           await this.sendMessage(
             chatId,
@@ -761,13 +902,12 @@ class TelegramAssistantManager {
       }
 
       let question = cleanText;
-      if (lower.startsWith("/tomtat") || lower.startsWith("/giaoban")) {
+      const askMatch = cleanText.match(/^\/(hoi|ask|web)(?:@\S+)?(?:\s+([\s\S]+))?$/i);
+      if (/^\/(tomtat|giaoban)(?:@\S+)?(?:\s|$)/i.test(cleanText)) {
         question =
           "Hãy tóm tắt nhanh tình hình toàn khoa hiện tại: số liệu ca gần nhất, tình trạng thiết bị cảnh báo, phòng quá tải, lịch trực hôm nay và công việc cần xử lý.";
-      } else if (lower.startsWith("/hoi ") || lower.startsWith("/ask ") || lower.startsWith("/web ")) {
-        question = cleanText.replace(/^\/(hoi|ask|web)\s+/i, "").trim();
-      } else if (lower.startsWith("/hoi@") || lower.startsWith("/ask@") || lower.startsWith("/web@")) {
-        question = cleanText.replace(/^\/(hoi|ask|web)@\S+\s*/i, "").trim();
+      } else if (askMatch) {
+        question = (askMatch[2] || "").trim();
       }
 
       if (!question) {
@@ -830,6 +970,8 @@ class TelegramAssistantManager {
         chatId,
         `Xin lỗi ${senderName}, tôi vừa gặp sự cố kỹ thuật tạm thời khi xử lý yêu cầu (${this.lastError}). Bạn vui lòng thử gửi lại câu hỏi sau ít giây nhé.`
       ).catch(() => {});
+    } finally {
+      if (typingTimer) clearInterval(typingTimer);
     }
   }
 
@@ -840,9 +982,98 @@ class TelegramAssistantManager {
     }
   }
 
-  private scheduleStandbyCheck(gen: number) {
+  private clearConflictRecoveryTimer() {
+    if (this.conflictRecoveryTimer) {
+      clearTimeout(this.conflictRecoveryTimer);
+      this.conflictRecoveryTimer = null;
+    }
+    this.nextConflictRetryAt = undefined;
+  }
+
+  private clearLeaseHeartbeatTimer() {
+    if (this.leaseHeartbeatTimer) {
+      clearInterval(this.leaseHeartbeatTimer);
+      this.leaseHeartbeatTimer = null;
+    }
+  }
+
+  private yieldToRemoteWinner(holderLabel?: string) {
+    this.stopPolling();
+    this.conflictDetected = false;
+    this.standbyMode = true;
+    this.standbyHolder = holderLabel || "Phiên bản máy chủ khác";
+    this.reconnectingNotice = undefined;
+    this.lastError = undefined;
+    this.scheduleStandbyCheck(this.pollLoopGeneration);
+  }
+
+  private startLeaseHeartbeat(gen: number, tokenHash: string) {
+    this.clearLeaseHeartbeatTimer();
+    if (!tokenHash) return;
+
+    this.leaseHeartbeatTimer = setInterval(() => {
+      if (gen !== this.pollLoopGeneration || !this.enabled || !this.botToken || this.pausedByUser) {
+        this.clearLeaseHeartbeatTimer();
+        return;
+      }
+      void renewTelegramPollLease(tokenHash, this.instanceId, this.instanceHost, 45000).then(
+        (res) => {
+          if (gen !== this.pollLoopGeneration) return;
+          if (!res.acquired) {
+            this.yieldToRemoteWinner(res.holderLabel);
+          }
+        }
+      );
+    }, 5000);
+    this.leaseHeartbeatTimer.unref?.();
+  }
+
+  private enqueueChatUpdate(update: any) {
+    const chatId = String(
+      update?.message?.chat?.id ||
+        update?.edited_message?.chat?.id ||
+        update?.channel_post?.chat?.id ||
+        "global"
+    );
+    const prev = this.chatWorkerChains.get(chatId) || Promise.resolve();
+    const next = prev
+      .then(() => this.handleIncomingUpdate(update))
+      .catch((err) => {
+        console.error("[TelegramBot] Async chat worker error:", err);
+      })
+      .finally(() => {
+        if (this.chatWorkerChains.get(chatId) === next) {
+          this.chatWorkerChains.delete(chatId);
+        }
+      });
+    this.chatWorkerChains.set(chatId, next);
+  }
+
+  private scheduleConflictRecovery(gen: number, delayMs = 30000) {
+    this.clearConflictRecoveryTimer();
+    if (!this.enabled || !this.botToken || this.pausedByUser) return;
+
+    this.nextConflictRetryAt = new Date(Date.now() + delayMs).toISOString();
+    this.conflictRecoveryTimer = setTimeout(() => {
+      this.conflictRecoveryTimer = null;
+      this.nextConflictRetryAt = undefined;
+      if (gen !== this.pollLoopGeneration || !this.enabled || !this.botToken || this.pausedByUser) {
+        return;
+      }
+      this.conflictDetected = false;
+      this.reconnectingNotice = "Đang tự động thử kết nối lại Telegram polling...";
+      this.lastError = undefined;
+      this.startPolling(false);
+    }, delayMs);
+    this.conflictRecoveryTimer.unref?.();
+  }
+
+  private scheduleStandbyCheck(gen: number, delayMs?: number) {
     this.clearStandbyTimer();
     if (!this.enabled || !this.botToken || this.pausedByUser) return;
+
+    const isSameHostStale = Boolean(this.standbyHolder && this.standbyHolder === this.instanceHost);
+    const effectiveDelay = typeof delayMs === "number" ? delayMs : isSameHostStale ? 3500 : 20000;
 
     this.standbyTimer = setTimeout(async () => {
       if (gen !== this.pollLoopGeneration || !this.enabled || !this.botToken || this.pausedByUser) {
@@ -861,7 +1092,8 @@ class TelegramAssistantManager {
         this.standbyHolder = lease.holderLabel || this.standbyHolder;
         this.scheduleStandbyCheck(gen);
       }
-    }, 30000);
+    }, effectiveDelay);
+    this.standbyTimer.unref?.();
   }
 
   private async abortableSleep(ms: number, gen: number): Promise<boolean> {
@@ -882,7 +1114,10 @@ class TelegramAssistantManager {
   private stopPolling() {
     this.pollLoopGeneration += 1;
     this.pollingActive = false;
+    this.startingPolling = false;
     this.clearStandbyTimer();
+    this.clearConflictRecoveryTimer();
+    this.clearLeaseHeartbeatTimer();
     if (this.sleepCancel) {
       this.sleepCancel();
       this.sleepCancel = null;
@@ -898,6 +1133,7 @@ class TelegramAssistantManager {
     this.conflictDetected = false;
     this.standbyMode = false;
     this.standbyHolder = undefined;
+    this.reconnectingNotice = undefined;
     this.lastError = undefined;
     this.stopPolling();
     const fp = this.getTokenFingerprint();
@@ -917,16 +1153,19 @@ class TelegramAssistantManager {
     this.standbyMode = false;
     this.standbyHolder = undefined;
     this.webhookUrl = undefined;
+    this.reconnectingNotice = undefined;
     this.lastError = undefined;
 
     this.startPolling(forceTakeover);
-    // Briefly wait for initial getMe/webhook/first probe so immediate feedback reflects reality
-    await new Promise((r) => setTimeout(r, 900));
-    return this.getStatus();
+    return this.waitForPollSettled(3200);
   }
 
   public async shutdown(): Promise<void> {
     this.stopPolling();
+    if (this.unsubscribeTakeover) {
+      this.unsubscribeTakeover();
+      this.unsubscribeTakeover = null;
+    }
     const fp = this.getTokenFingerprint();
     if (fp) {
       await releaseTelegramPollLease(fp, this.instanceId);
@@ -940,6 +1179,7 @@ class TelegramAssistantManager {
     const myGen = ++this.pollLoopGeneration;
     const tokenSnapshot = this.botToken;
     const tokenHash = this.getTokenFingerprint(tokenSnapshot);
+    this.startingPolling = true;
 
     const runLoop = async () => {
       try {
@@ -954,13 +1194,34 @@ class TelegramAssistantManager {
         if (myGen !== this.pollLoopGeneration) return;
 
         if (!lease.acquired) {
+          this.startingPolling = false;
           this.pollingActive = false;
           this.standbyMode = true;
           this.standbyHolder = lease.holderLabel || "Phiên bản máy chủ khác";
           this.conflictDetected = false;
+          this.reconnectingNotice = undefined;
           this.lastError = undefined;
           this.scheduleStandbyCheck(myGen);
           return;
+        }
+
+        // Start 5s independent heartbeat immediately so slow Gemini responses NEVER let the lease expire
+        this.startLeaseHeartbeat(myGen, tokenHash);
+
+        // Give the displaced peer instance a brief moment to abort its getUpdates socket via pg_notify
+        if (lease.tookOverFromInstanceId) {
+          this.reconnectingNotice = `Đang chuyển quyền lắng nghe từ ${lease.tookOverFromHost || "phiên bản khác"} về máy chủ này...`;
+          const ok = await this.abortableSleep(1500, myGen);
+          if (!ok || myGen !== this.pollLoopGeneration) return;
+        }
+
+        // Hydrate persisted update offset so restarts never drop or duplicate messages
+        if (this.lastUpdateOffset === 0 && tokenHash) {
+          const savedOffset = await loadTelegramUpdateOffsetFromDb(tokenHash);
+          if (myGen !== this.pollLoopGeneration) return;
+          if (savedOffset > this.lastUpdateOffset) {
+            this.lastUpdateOffset = savedOffset;
+          }
         }
 
         // 2. Verify token & check webhook status
@@ -974,11 +1235,14 @@ class TelegramAssistantManager {
 
         const activeWebhookUrl = typeof webhookInfo?.url === "string" ? webhookInfo.url.trim() : "";
         if (activeWebhookUrl && !forceTakeover) {
+          this.startingPolling = false;
           this.webhookUrl = activeWebhookUrl;
           this.pollingActive = false;
           this.conflictDetected = false;
           this.standbyMode = false;
+          this.reconnectingNotice = undefined;
           this.lastError = undefined;
+          this.clearLeaseHeartbeatTimer();
           await releaseTelegramPollLease(tokenHash, this.instanceId);
           return;
         }
@@ -994,48 +1258,35 @@ class TelegramAssistantManager {
         this.standbyMode = false;
         this.standbyHolder = undefined;
         this.conflictDetected = false;
+        this.clearConflictRecoveryTimer();
+        this.reconnectingNotice = undefined;
         this.lastError = undefined;
+        this.startingPolling = false;
         this.pollingActive = true;
       } catch (err: any) {
         if (myGen !== this.pollLoopGeneration) return;
-        this.lastError = `Token không hợp lệ hoặc mất kết nối Telegram: ${err?.message || "Unknown"}`;
+        this.startingPolling = false;
         this.pollingActive = false;
+        this.reconnectingNotice = undefined;
+        this.lastError = `Token không hợp lệ hoặc mất kết nối Telegram: ${err?.message || "Unknown"}`;
+        this.clearLeaseHeartbeatTimer();
         await releaseTelegramPollLease(tokenHash, this.instanceId);
+        // Retry automatically on transient network glitches
+        this.scheduleConflictRecovery(myGen, 25000);
         return;
       }
 
       let consecutiveConflicts = 0;
       let isFirstProbe = true;
-      const CONFLICT_BACKOFF_MS = [2000, 3000, 4000, 5000, 6000];
+      const CONFLICT_BACKOFF_MS = [1500, 2500, 3500, 4500, 6000, 7000];
       const MAX_TRANSIENT_CONFLICTS = CONFLICT_BACKOFF_MS.length;
 
       while (myGen === this.pollLoopGeneration && this.enabled && this.botToken === tokenSnapshot && !this.pausedByUser) {
         try {
-          // Renew distributed Postgres lease before opening getUpdates long-poll
-          if (!isFirstProbe) {
-            const renew = await acquireTelegramPollLease(
-              tokenHash,
-              this.instanceId,
-              this.instanceHost,
-              45000,
-              false
-            );
-            if (myGen !== this.pollLoopGeneration) break;
-            if (!renew.acquired) {
-              this.pollingActive = false;
-              this.standbyMode = true;
-              this.standbyHolder = renew.holderLabel || "Phiên bản máy chủ khác";
-              this.conflictDetected = false;
-              this.lastError = undefined;
-              this.scheduleStandbyCheck(myGen);
-              break;
-            }
-          }
-
           this.pollAbortController = new AbortController();
           this.lastPollAt = new Date().toISOString();
 
-          const pollTimeoutSec = isFirstProbe ? 1 : 10;
+          const pollTimeoutSec = isFirstProbe ? 1 : 8;
           isFirstProbe = false;
 
           const url = `https://api.telegram.org/bot${tokenSnapshot}/getUpdates?offset=${
@@ -1053,29 +1304,43 @@ class TelegramAssistantManager {
             const errCode = payload?.error_code || res.status;
 
             if (errCode === 409) {
+              // Confirm immediately whether another instance legitimately holds the DB lease
+              const currentLease = await getTelegramPollLeaseInfo(tokenHash);
+              if (myGen !== this.pollLoopGeneration) break;
+              if (currentLease.active && currentLease.holderInstanceId !== this.instanceId) {
+                this.yieldToRemoteWinner(currentLease.holderLabel);
+                break;
+              }
+
               consecutiveConflicts += 1;
               if (consecutiveConflicts <= MAX_TRANSIENT_CONFLICTS) {
-                this.lastError = `Đang đợi phiên getUpdates cũ đóng hoàn toàn (thử kết nối lại lần ${consecutiveConflicts}/${MAX_TRANSIENT_CONFLICTS})...`;
+                this.reconnectingNotice = `Đang chờ phiên getUpdates cũ đóng hoàn toàn (${consecutiveConflicts}/${MAX_TRANSIENT_CONFLICTS})...`;
+                this.lastError = undefined;
                 const waitMs = CONFLICT_BACKOFF_MS[consecutiveConflicts - 1] || 5000;
                 const shouldContinue = await this.abortableSleep(waitMs, myGen);
                 if (!shouldContinue) break;
                 continue;
               }
 
-              // Persistent external 409 Conflict -> halt polling cleanly instead of infinite loop
+              // Persistent external 409 Conflict -> halt polling cleanly AND schedule automatic retry
               this.pollingActive = false;
               this.conflictDetected = true;
               this.standbyMode = false;
-              this.lastError = `Phát hiện phiên getUpdates khác đang dùng chung Token${
+              this.reconnectingNotice = undefined;
+              this.lastError = `Phát hiện một ứng dụng/tiến trình bên ngoài khác đang gọi getUpdates bằng chung Token${
                 this.botUsername ? ` (@${this.botUsername})` : ""
-              } (ví dụ: bản Shared App đã chia sẻ, tab/máy chủ khác hoặc công cụ ngoài). Đã tự động tạm dừng polling tại đây để tránh xung đột 409.`;
+              }. Hệ thống đã tạm dừng để tránh xung đột 409 và tự động kiểm tra lại sau 30 giây.`;
+              this.clearLeaseHeartbeatTimer();
               await releaseTelegramPollLease(tokenHash, this.instanceId);
+              this.scheduleConflictRecovery(myGen, 30000);
               break;
             }
 
             if (errCode === 401 || errCode === 404) {
               this.pollingActive = false;
+              this.reconnectingNotice = undefined;
               this.lastError = "Telegram Bot Token không hợp lệ hoặc đã bị thu hồi (401/404).";
+              this.clearLeaseHeartbeatTimer();
               await releaseTelegramPollLease(tokenHash, this.instanceId);
               break;
             }
@@ -1088,14 +1353,18 @@ class TelegramAssistantManager {
 
           consecutiveConflicts = 0;
           this.conflictDetected = false;
+          this.clearConflictRecoveryTimer();
+          this.reconnectingNotice = undefined;
           this.pollingActive = true;
           this.lastError = undefined;
           const updates = Array.isArray(payload.result) ? payload.result : [];
           for (const upd of updates) {
             if (upd.update_id >= this.lastUpdateOffset) {
               this.lastUpdateOffset = upd.update_id + 1;
+              void saveTelegramUpdateOffsetToDb(tokenHash, this.lastUpdateOffset);
             }
-            await this.handleIncomingUpdate(upd);
+            // Run AI replies in non-blocking per-chat workers so poll loop & lease heartbeat never stall
+            this.enqueueChatUpdate(upd);
           }
         } catch (err: any) {
           if (err?.name === "AbortError" || myGen !== this.pollLoopGeneration) {
@@ -1108,7 +1377,9 @@ class TelegramAssistantManager {
       }
 
       if (myGen === this.pollLoopGeneration) {
+        this.startingPolling = false;
         this.pollingActive = false;
+        this.clearLeaseHeartbeatTimer();
       }
     };
 

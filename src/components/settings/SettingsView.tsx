@@ -880,6 +880,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           ? `Đang hoạt động${telegramStatus.botUsername ? ` (@${telegramStatus.botUsername})` : ''}`
                           : telegramStatus.conflictDetected
                           ? 'Xung đột Token (409)'
+                          : telegramStatus.reconnecting || telegramStatus.startingPolling
+                          ? 'Đang kết nối...'
                           : telegramStatus.standbyMode
                           ? 'Đang nhường Polling'
                           : telegramStatus.pausedByUser

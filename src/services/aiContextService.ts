@@ -292,6 +292,12 @@ export interface LiveHospitalContextSnapshot {
     webSearchEnabled: boolean;
     memories: AssistantMemoryItem[];
   };
+  settings?: {
+    reportSheetYear?: number;
+    googleSheetUrl?: string;
+    reportGoogleSheetId?: string;
+    reportGoogleSheetsByYear?: Record<string, { url: string; sheetId: string; updatedAt?: string }>;
+  };
 }
 
 const WEEKDAY_NAMES_VI = [
@@ -878,6 +884,12 @@ export function buildLiveHospitalContext(): LiveHospitalContextSnapshot {
     assistantMemory: {
       webSearchEnabled: storageService.getSettings().aiWebSearchEnabled !== false,
       memories: storageService.getAssistantMemories().slice(0, 60)
+    },
+    settings: {
+      reportSheetYear: settings.reportSheetYear,
+      googleSheetUrl: settings.googleSheetUrl || '',
+      reportGoogleSheetId: settings.reportGoogleSheetId || '',
+      reportGoogleSheetsByYear: settings.reportGoogleSheetsByYear || {}
     }
   };
 }
@@ -917,6 +929,7 @@ export async function syncLiveContextToServer(force = false): Promise<boolean> {
       sy: liveContext.syncHistory.pendingDiscrepanciesCount,
       mem: (liveContext.assistantMemory?.memories || []).map(m => m.id).join(','),
       web: liveContext.assistantMemory?.webSearchEnabled !== false,
+      gs: `${settings.reportSheetYear || ''}:${settings.googleSheetUrl || ''}:${settings.reportGoogleSheetId || ''}:${Object.entries(settings.reportGoogleSheetsByYear || {}).map(([y, c]) => `${y}=${c?.sheetId || c?.url || ''}`).join(',')}`,
       tg: botToken ? `${botToken.slice(-6)}_${enabled}_${defaultChatId}` : 'none'
     });
 

@@ -5,6 +5,7 @@ import {
   type ArchivedCaseReportItem,
   type RangeAuditDiscrepancy
 } from './reportArchiveService';
+import { syncLiveContextToServer } from './aiContextService';
 import { postgresSyncService } from './postgresSyncService';
 import { storageService } from './storageService';
 import type {
@@ -94,15 +95,27 @@ export interface ThreeDaySmartSyncOutcome {
   reason?: 'no_sheet_configured' | 'sheet_unreachable';
   entry?: SyncHistoryEntry;
   autoWrittenCount: number;
+  updatedFromSheetCount: number;
+  overwrittenItems: SyncHistoryDiscrepancyItem[];
   alertDiscrepancies: SyncHistoryDiscrepancyItem[];
 }
 
+function isEmptyNumericCell(val?: { bh?: number | string; nd?: number | string }): boolean {
+  if (!val) return true;
+  const bhStr = String(val.bh ?? '').trim().toUpperCase();
+  const ndStr = String(val.nd ?? '').trim().toUpperCase();
+  if (bhStr === 'LT' || ndStr === 'LT') return false;
+  const bhNum = parseInt(bhStr.replace(/[^0-9]/g, ''), 10) || 0;
+  const ndNum = parseInt(ndStr.replace(/[^0-9]/g, ''), 10) || 0;
+  return bhNum === 0 && ndNum === 0;
+}
+
 /**
- * 3-Day Smart Sync (runs on startup or via manual 3-day check):
- * - Audits the 3 most recent calendar days BEFORE writing anything.
- * - Rule 1: If System database is empty for a service day & Google Sheet has data -> auto-writes to System/PostgreSQL.
- * - Rule 2: If System has data & Google Sheet is empty/missing OR both have differing values -> DO NOT overwrite;
- *   raise notification/toast and persist full result into Sync History (`buckets/sync_history`).
+ * 3-Day Smart Sync (runs on startup, before report dispatch, or via manual 3-day check):
+ * - Audits the 3 most recent calendar days against Google Sheet.
+ * - ALWAYS allows overwriting ALL differing cells (empty->filled, value_changed, cleared_on_sheet,
+ *   including previously manual-locked cells within the 3-day window) so System & PostgreSQL 100% match Google Sheet.
+ * - Records detailed per-service original data (systemBh/Nd) & replacement data (sheetBh/Nd) in Sync History.
  */
 export async function runThreeDaySmartSync(
   trigger: 'startup_3d_auto' | 'manual_3d'
@@ -124,6 +137,8 @@ export async function runThreeDaySmartSync(
       ran: false,
       reason: 'no_sheet_configured',
       autoWrittenCount: 0,
+      updatedFromSheetCount: 0,
+      overwrittenItems: [],
       alertDiscrepancies: []
     };
   }
@@ -135,11 +150,11 @@ export async function runThreeDaySmartSync(
 
   const autoWrittenSamples: SyncHistoryAutoWrittenItem[] = [];
   let autoWrittenCount = 0;
-  const alertDiscrepancies: SyncHistoryDiscrepancyItem[] = [];
+  let updatedFromSheetCount = 0;
+  const overwrittenItems: SyncHistoryDiscrepancyItem[] = [];
   const unreachableTabs: string[] = [];
 
   try {
-    // Group slices by year so we only probe once per spreadsheet
     const slicesByYear = new Map<number, ThreeDaySlice[]>();
     for (const s of window3d.slices) {
       const list = slicesByYear.get(s.year) || [];
@@ -182,13 +197,15 @@ export async function runThreeDaySmartSync(
 
         totalCheckedCells += auditRes.checkedCellsCount;
 
-        const autoFillItems: RangeAuditDiscrepancy[] = [];
+        const allOverwriteItems: RangeAuditDiscrepancy[] = [];
         for (const disc of auditRes.discrepancies) {
+          allOverwriteItems.push(disc);
+
           if (
             (disc.type === 'new_from_sheet' || disc.type === 'new_service') &&
-            !disc.isManualLocked
+            !disc.isManualLocked &&
+            isEmptyNumericCell(disc.systemValue)
           ) {
-            autoFillItems.push(disc);
             autoWrittenCount += 1;
             autoWrittenSamples.push({
               dateLabel: disc.dateLabel,
@@ -198,8 +215,8 @@ export async function runThreeDaySmartSync(
               nd: disc.sheetValue.nd
             });
           } else {
-            // System has data & Sheet missing OR both differ OR manual lock -> Alert & log, DO NOT overwrite
-            alertDiscrepancies.push({
+            updatedFromSheetCount += 1;
+            overwrittenItems.push({
               id: disc.id,
               year: disc.year,
               monthKey: disc.monthKey,
@@ -213,16 +230,18 @@ export async function runThreeDaySmartSync(
               sheetBh: disc.sheetValue.bh,
               sheetNd: disc.sheetValue.nd,
               isManualLocked: disc.isManualLocked,
-              resolutionStatus: 'pending'
+              resolutionStatus: 'updated_from_sheet',
+              resolvedAt: displayTime,
+              resolvedBy: performedBy
             });
           }
         }
 
-        if (autoFillItems.length > 0) {
+        if (allOverwriteItems.length > 0) {
           const updatedMonthItems = reportArchiveService.applyAuditDiscrepanciesForMonth(
             sliceYear,
             slice.monthKey,
-            autoFillItems
+            allOverwriteItems
           );
           const dbRes = await postgresSyncService.forceSaveReportMonthToServer(
             sliceYear,
@@ -246,29 +265,32 @@ export async function runThreeDaySmartSync(
       }
     }
 
+    const totalChanges = autoWrittenCount + updatedFromSheetCount;
+    if (totalChanges > 0) {
+      void syncLiveContextToServer(true);
+    }
+
     const pgState = postgresSyncService.getState();
     const pgConnected = pgState.configured && pgState.authenticated;
     const savedToDatabase =
-      autoWrittenCount > 0 ? dbSavedMonths > 0 : pgConnected;
+      totalChanges > 0 ? dbSavedMonths > 0 : pgConnected;
 
     const status =
       processedSlices === 0
         ? 'error'
-        : alertDiscrepancies.length > 0
-          ? 'discrepancy_alert'
-          : autoWrittenCount > 0
-            ? 'success'
-            : 'no_change';
+        : totalChanges > 0
+          ? 'success'
+          : 'no_change';
 
     let summary = '';
     if (processedSlices === 0) {
       summary = `Không đọc được tab Google Sheet trong 3 ngày gần nhất (${window3d.dateRangeLabel}): ${unreachableTabs.join(', ')}.`;
-    } else if (alertDiscrepancies.length > 0 && autoWrittenCount > 0) {
-      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi ${autoWrittenCount} ô mới vào hệ thống; phát hiện ${alertDiscrepancies.length} ô sai lệch cần kiểm tra.`;
-    } else if (alertDiscrepancies.length > 0) {
-      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): phát hiện ${alertDiscrepancies.length} ô sai lệch giữa Hệ thống và Google Sheet (đã giữ nguyên dữ liệu để chờ xác nhận).`;
+    } else if (updatedFromSheetCount > 0 && autoWrittenCount > 0) {
+      summary = `Rà soát & đồng bộ 3 ngày gần nhất (${window3d.dateRangeLabel}): đã ghi đè ${updatedFromSheetCount} dịch vụ sai lệch (lưu chi tiết dữ liệu gốc & thay thế) và ghi mới ${autoWrittenCount} ô để khớp 100% Google Sheet.`;
+    } else if (updatedFromSheetCount > 0) {
+      summary = `Rà soát & đồng bộ 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi đè ${updatedFromSheetCount} mục của dịch vụ theo Google Sheet (đã lưu chi tiết dữ liệu gốc & dữ liệu thay thế).`;
     } else if (autoWrittenCount > 0) {
-      summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi ${autoWrittenCount} ô từ Google Sheet vào Hệ thống.`;
+      summary = `Rà soát & đồng bộ 3 ngày gần nhất (${window3d.dateRangeLabel}): đã tự động ghi mới ${autoWrittenCount} ô từ Google Sheet vào Hệ thống.`;
     } else {
       summary = `Rà soát 3 ngày gần nhất (${window3d.dateRangeLabel}): đã kiểm tra ${totalCheckedCells} ô, dữ liệu Hệ thống và Google Sheet hoàn toàn khớp.`;
     }
@@ -292,23 +314,23 @@ export async function runThreeDaySmartSync(
       status,
       checkedCellsCount: totalCheckedCells,
       autoWrittenCount,
-      discrepancyCount: alertDiscrepancies.length,
-      updatedFromSheetCount: 0,
+      discrepancyCount: overwrittenItems.length,
+      updatedFromSheetCount,
       savedToDatabase,
       databaseNote: persistenceNote,
       performedBy,
       summary,
-      autoWrittenSamples: autoWrittenSamples.slice(0, 40),
-      discrepancies: alertDiscrepancies.slice(0, 80)
+      autoWrittenSamples: autoWrittenSamples.slice(0, 80),
+      discrepancies: overwrittenItems.slice(0, 250)
     };
 
     storageService.addSyncHistoryEntry(entry);
 
-    if (alertDiscrepancies.length > 0) {
+    if (updatedFromSheetCount > 0) {
       storageService.sendNotification({
         recipient: 'Quản trị & Tổ Thống kê CLS',
         targetAddress: 'In-App / Lịch sử đồng bộ',
-        title: `Cảnh báo sai lệch số liệu 3 ngày gần nhất (${alertDiscrepancies.length} mục)`,
+        title: `Đã đồng bộ & ghi đè ${updatedFromSheetCount} dịch vụ khớp Google Sheet (3 ngày gần nhất)`,
         content: summary,
         channel: 'In-App',
         status: 'Đã gửi'
@@ -320,7 +342,9 @@ export async function runThreeDaySmartSync(
       reason: processedSlices === 0 ? 'sheet_unreachable' : undefined,
       entry,
       autoWrittenCount,
-      alertDiscrepancies
+      updatedFromSheetCount,
+      overwrittenItems,
+      alertDiscrepancies: []
     };
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -335,8 +359,8 @@ export async function runThreeDaySmartSync(
       status: 'error',
       checkedCellsCount: totalCheckedCells,
       autoWrittenCount,
-      discrepancyCount: alertDiscrepancies.length,
-      updatedFromSheetCount: 0,
+      discrepancyCount: overwrittenItems.length,
+      updatedFromSheetCount,
       savedToDatabase: false,
       databaseNote: errMsg,
       performedBy,
@@ -349,7 +373,9 @@ export async function runThreeDaySmartSync(
       reason: 'sheet_unreachable',
       entry: errEntry,
       autoWrittenCount,
-      alertDiscrepancies
+      updatedFromSheetCount,
+      overwrittenItems,
+      alertDiscrepancies: []
     };
   }
 }

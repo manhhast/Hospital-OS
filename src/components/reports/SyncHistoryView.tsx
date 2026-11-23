@@ -58,7 +58,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
       map[e.id] = true;
     });
     initial.forEach((e) => {
-      if (e.status === 'discrepancy_alert') map[e.id] = true;
+      if (e.status === 'discrepancy_alert' || e.updatedFromSheetCount > 0) map[e.id] = true;
     });
     return map;
   });
@@ -84,11 +84,13 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
 
   const stats = useMemo(() => {
     let totalAutoWritten = 0;
+    let totalUpdatedFromSheet = 0;
     let totalPendingDiscrepancies = 0;
     let totalRunsWithAlert = 0;
 
     for (const entry of entries) {
       totalAutoWritten += entry.autoWrittenCount || 0;
+      totalUpdatedFromSheet += entry.updatedFromSheetCount || 0;
       const pendingInEntry = (entry.discrepancies || []).filter(
         (d) => !d.resolutionStatus || d.resolutionStatus === 'pending'
       ).length;
@@ -101,6 +103,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
     return {
       totalRuns: entries.length,
       totalAutoWritten,
+      totalUpdatedFromSheet,
       totalPendingDiscrepancies,
       totalRunsWithAlert
     };
@@ -152,17 +155,24 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
         setExpandedIds((prev) => ({ ...prev, [outcome.entry!.id]: true }));
       }
 
-      if (outcome.alertDiscrepancies.length > 0) {
-        onShowToast?.(
-          'Phát hiện sai lệch 3 ngày gần nhất',
-          `Có ${outcome.alertDiscrepancies.length} mục sai lệch giữa Hệ thống và Google Sheet (đã giữ nguyên dữ liệu và lưu vào Lịch sử đồng bộ).`,
-          'warning'
-        );
-      } else if (outcome.autoWrittenCount > 0) {
+      if (outcome.updatedFromSheetCount > 0 || outcome.autoWrittenCount > 0) {
+        const msgParts: string[] = [];
+        if (outcome.updatedFromSheetCount > 0) {
+          msgParts.push(`đã ghi đè ${outcome.updatedFromSheetCount} dịch vụ theo Google Sheet (đã lưu dữ liệu gốc & thay thế)`);
+        }
+        if (outcome.autoWrittenCount > 0) {
+          msgParts.push(`ghi mới ${outcome.autoWrittenCount} ô trống`);
+        }
         onShowToast?.(
           'Đồng bộ 3 ngày gần nhất thành công',
-          `Đã tự động ghi ${outcome.autoWrittenCount} ô mới từ Google Sheet vào Hệ thống.`,
+          `Hoàn tất: ${msgParts.join(' và ')}.`,
           'success'
+        );
+      } else if (outcome.alertDiscrepancies.length > 0) {
+        onShowToast?.(
+          'Phát hiện sai lệch 3 ngày gần nhất',
+          `Có ${outcome.alertDiscrepancies.length} mục sai lệch giữa Hệ thống và Google Sheet.`,
+          'warning'
         );
       } else if (outcome.reason === 'sheet_unreachable') {
         onShowToast?.(
@@ -327,9 +337,23 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
         Icon: AlertTriangle
       };
     }
-    if (entry.autoWrittenCount > 0 || entry.updatedFromSheetCount > 0) {
+    if (entry.updatedFromSheetCount > 0 && entry.autoWrittenCount > 0) {
       return {
-        text: `Đã ghi Hệ thống (${entry.autoWrittenCount + entry.updatedFromSheetCount} ô)`,
+        text: `Đã ghi đè ${entry.updatedFromSheetCount} & ghi mới ${entry.autoWrittenCount} ô`,
+        cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-800',
+        Icon: CheckCircle2
+      };
+    }
+    if (entry.updatedFromSheetCount > 0) {
+      return {
+        text: `Đã ghi đè ${entry.updatedFromSheetCount} dịch vụ khớp Sheet`,
+        cls: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/70 dark:text-blue-200 dark:border-blue-800',
+        Icon: CheckCircle2
+      };
+    }
+    if (entry.autoWrittenCount > 0) {
+      return {
+        text: `Đã ghi mới Hệ thống (${entry.autoWrittenCount} ô)`,
         cls: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-800',
         Icon: CheckCircle2
       };
@@ -355,7 +379,7 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                 Lịch Sử Đồng Bộ &amp; Rà Soát Số Liệu
               </h2>
               <p className="text-xs text-[#718096] dark:text-slate-400 mt-0.5 leading-relaxed">
-                Ghi nhận tự động khi khởi động (rà soát <strong>3 ngày gần nhất</strong>: tự điền ô trống vào Hệ thống, cảnh báo nếu sai lệch hoặc Sheet thiếu) và toàn bộ lịch sử <strong>Rà soát số liệu</strong> thủ công.
+                Ghi nhận tự động khi khởi động &amp; trước khi gửi báo cáo (rà soát <strong>3 ngày gần nhất</strong>: luôn cho phép ghi đè để khớp 100% với Google Sheet, đồng thời lưu chi tiết <strong>dữ liệu gốc</strong> &amp; <strong>dữ liệu thay thế</strong> của từng dịch vụ).
               </p>
             </div>
           </div>
@@ -399,10 +423,15 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
           <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800">
             <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5" />
-              Đã tự động ghi Hệ thống
+              Đã ghi đè / Nạp mới từ Sheet
             </div>
             <div className="text-xl font-black text-emerald-800 dark:text-emerald-200 mt-1 tabular-nums">
-              {stats.totalAutoWritten} <span className="text-xs font-bold">ô</span>
+              {stats.totalUpdatedFromSheet} <span className="text-xs font-bold">dịch vụ</span>
+              {stats.totalAutoWritten > 0 && (
+                <span className="ml-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                  (+{stats.totalAutoWritten} ô mới)
+                </span>
+              )}
             </div>
           </div>
 
@@ -614,15 +643,26 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                 {/* Expanded Details */}
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-3 border-t border-slate-300 dark:border-slate-700 space-y-4 bg-slate-50/70 dark:bg-slate-950/30">
-                    {/* Discrepancy Items Table */}
+                    {/* Discrepancy & Overwrite Audit Log Table (Original vs Replacement) */}
                     {discrepancies.length > 0 && (
                       <div className="space-y-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <h4 className="text-xs font-extrabold text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
-                            <AlertTriangle className="w-3.5 h-3.5" />
+                          <h4
+                            className={`text-xs font-extrabold flex items-center gap-1.5 ${
+                              pendingCount > 0
+                                ? 'text-amber-800 dark:text-amber-200'
+                                : 'text-blue-800 dark:text-blue-200'
+                            }`}
+                          >
+                            {pendingCount > 0 ? (
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                            ) : (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            )}
                             <span>
-                              Chi tiết sai lệch phát hiện ({discrepancies.length} mục
-                              {pendingCount > 0 ? ` · ${pendingCount} mục đang chờ xác nhận` : ' · Đã xử lý xong'})
+                              {pendingCount > 0
+                                ? `Chi tiết sai lệch phát hiện (${discrepancies.length} mục · ${pendingCount} mục đang chờ xác nhận)`
+                                : `Lịch sử ghi đè dịch vụ theo Google Sheet (${discrepancies.length} mục · Đã lưu dữ liệu gốc & dữ liệu thay thế)`}
                             </span>
                           </h4>
                           {onOpenRangeAudit && entry.startDate && entry.endDate && (
@@ -648,26 +688,42 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                             <thead className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold border-b-2 border-slate-300 dark:border-slate-600">
                               <tr>
                                 <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Ngày</th>
-                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Kỹ thuật / Bộ phận</th>
-                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Trên Hệ thống</th>
-                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Trên Google Sheet</th>
-                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Tình trạng</th>
-                                <th className="p-2.5 text-right">Quyết định cập nhật</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Dịch vụ / Bộ phận</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Dữ liệu gốc (Trước ghi đè)</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Dữ liệu thay thế (Google Sheet)</th>
+                                <th className="p-2.5 border-r border-slate-300 dark:border-slate-600">Loại thay đổi</th>
+                                <th className="p-2.5 text-right">Trạng thái / Hành động</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-300 dark:divide-slate-700">
                               {discrepancies.map((disc) => {
                                 const isPending = !disc.resolutionStatus || disc.resolutionStatus === 'pending';
                                 const isBusy = resolvingKey === `${entry.id}__${disc.id}`;
+                                const parseCellNum = (v: number | string | undefined): number | null => {
+                                  if (typeof v === 'number' && Number.isFinite(v)) return v;
+                                  const raw = String(v ?? '').trim();
+                                  if (!raw) return 0;
+                                  if (raw.toUpperCase() === 'LT') return null;
+                                  const parsed = parseInt(raw.replace(/[^0-9]/g, ''), 10);
+                                  return Number.isFinite(parsed) ? parsed : 0;
+                                };
+                                const sysBhN = parseCellNum(disc.systemBh);
+                                const sysNdN = parseCellNum(disc.systemNd);
+                                const shtBhN = parseCellNum(disc.sheetBh);
+                                const shtNdN = parseCellNum(disc.sheetNd);
+                                const sysTotal = sysBhN !== null && sysNdN !== null ? sysBhN + sysNdN : null;
+                                const sheetTotal = shtBhN !== null && shtNdN !== null ? shtBhN + shtNdN : null;
+                                const deltaTotal = sysTotal !== null && sheetTotal !== null ? sheetTotal - sysTotal : null;
+
                                 const typeInfo =
                                   disc.type === 'cleared_on_sheet'
                                     ? {
-                                        label: 'Hệ thống có · Sheet trống',
+                                        label: 'Sheet xóa trống (Ghi đè)',
                                         cls: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200'
                                       }
                                     : disc.type === 'value_changed'
                                       ? {
-                                          label: 'Khác số liệu',
+                                          label: 'Thay đổi số liệu',
                                           cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
                                         }
                                       : {
@@ -686,17 +742,42 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                       </div>
                                       <div className="text-[10px] text-slate-500">{disc.category}</div>
                                     </td>
-                                    <td className="p-2.5 tabular-nums whitespace-nowrap font-semibold text-slate-700 dark:text-slate-200 border-r border-slate-300 dark:border-slate-700">
-                                      BH: {disc.systemBh} · ND: {disc.systemNd}
-                                      {disc.isManualLocked && (
-                                        <span className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
-                                          <Lock className="w-2.5 h-2.5" />
-                                          Sửa tay
-                                        </span>
+                                    <td className="p-2.5 tabular-nums whitespace-nowrap border-r border-slate-300 dark:border-slate-700">
+                                      <div className="font-semibold text-slate-700 dark:text-slate-200">
+                                        BH: {disc.systemBh} · ND: {disc.systemNd}
+                                        {disc.isManualLocked && (
+                                          <span className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
+                                            <Lock className="w-2.5 h-2.5" />
+                                            Sửa tay
+                                          </span>
+                                        )}
+                                      </div>
+                                      {sysTotal !== null && (
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                          Tổng gốc: {sysTotal.toLocaleString('vi-VN')} ca
+                                        </div>
                                       )}
                                     </td>
-                                    <td className="p-2.5 tabular-nums whitespace-nowrap font-bold text-blue-700 dark:text-blue-300 border-r border-slate-300 dark:border-slate-700">
-                                      BH: {disc.sheetBh} · ND: {disc.sheetNd}
+                                    <td className="p-2.5 tabular-nums whitespace-nowrap border-r border-slate-300 dark:border-slate-700">
+                                      <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300">
+                                        <span>BH: {disc.sheetBh} · ND: {disc.sheetNd}</span>
+                                        {deltaTotal !== null && deltaTotal !== 0 && (
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                              deltaTotal > 0
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                            }`}
+                                          >
+                                            {deltaTotal > 0 ? `+${deltaTotal}` : deltaTotal}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {sheetTotal !== null && (
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                          Tổng mới: {sheetTotal.toLocaleString('vi-VN')} ca
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="p-2.5 whitespace-nowrap border-r border-slate-300 dark:border-slate-700">
                                       <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${typeInfo.cls}`}>
@@ -740,9 +821,12 @@ export const SyncHistoryView: React.FC<SyncHistoryViewProps> = ({
                                           </button>
                                         </div>
                                       ) : disc.resolutionStatus === 'updated_from_sheet' ? (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                                        <span
+                                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300"
+                                          title={disc.resolvedAt ? `Ghi đè lúc ${disc.resolvedAt}${disc.resolvedBy ? ` bởi ${disc.resolvedBy}` : ''}` : undefined}
+                                        >
                                           <CheckCircle2 className="w-3 h-3" />
-                                          Đã cập nhật Sheet
+                                          Đã ghi đè khớp Sheet
                                         </span>
                                       ) : (
                                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 dark:text-slate-300">

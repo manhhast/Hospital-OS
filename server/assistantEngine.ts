@@ -528,82 +528,187 @@ async function enrichLiveContextWithPostgres(
 
       const buckets = await loadCloudBucketsForServer(bucketNames);
       if (Object.keys(buckets).length > 0) {
-        const staffProfilesList: any[] = Array.isArray(buckets.staff_profiles)
+        const rawStaffList: any[] = Array.isArray(buckets.staff_profiles)
           ? buckets.staff_profiles
           : baseCtx?.staff?.items || [];
+        const isStaffInactive = (s: any): boolean => {
+          const st = normalizeText(String(s?.currentStatus || ""));
+          return st.includes("nghi viec") || st.includes("nghi huu") || st.includes("chuyen cong tac");
+        };
+        const activeStaffList = rawStaffList.filter((s: any) => !isStaffInactive(s));
+        const inactiveStaffNames = new Set(
+          rawStaffList.filter(isStaffInactive).map((s: any) => String(s?.fullName || "").trim().toLowerCase())
+        );
+
         const rawLeaveList: any[] = Array.isArray(buckets.leave_requests)
           ? buckets.leave_requests
           : [];
         const profileMapById = new Map(
-          staffProfilesList.map((s: any) => [String(s?.userId || ""), s])
+          rawStaffList.map((s: any) => [String(s?.userId || ""), s])
         );
         const profileMapByName = new Map(
-          staffProfilesList.map((s: any) => [String(s?.fullName || "").trim().toLowerCase(), s])
+          rawStaffList.map((s: any) => [String(s?.fullName || "").trim().toLowerCase(), s])
         );
-        const enrichedLeaves = rawLeaveList.map((l: any) => {
-          const prof =
-            profileMapById.get(String(l?.userId || "")) ||
-            profileMapByName.get(String(l?.userName || "").trim().toLowerCase());
-          return {
-            id: l.id,
-            userId: l.userId,
-            userName: l.userName,
-            userRole: l.userRole,
-            departmentSection: prof?.departmentSection || "",
-            room: prof?.room || "",
-            leaveType: l.leaveType,
-            startDate: l.startDate,
-            endDate: l.endDate,
-            totalDays: l.totalDays,
-            reason: l.reason,
-            substituteUserName: l.substituteUserName,
-            status: l.status,
-            approvedBy: l.approvedBy,
-            createdAt: l.createdAt,
-          };
-        });
+        const enrichedLeaves = rawLeaveList
+          .filter((l: any) => !inactiveStaffNames.has(String(l?.userName || "").trim().toLowerCase()))
+          .map((l: any) => {
+            const prof =
+              profileMapById.get(String(l?.userId || "")) ||
+              profileMapByName.get(String(l?.userName || "").trim().toLowerCase());
+            return {
+              id: l.id,
+              userId: l.userId,
+              userName: l.userName,
+              userRole: l.userRole,
+              departmentSection: prof?.departmentSection || "",
+              room: prof?.room || "",
+              leaveType: l.leaveType,
+              startDate: l.startDate,
+              endDate: l.endDate,
+              totalDays: l.totalDays,
+              reason: l.reason,
+              substituteUserName: l.substituteUserName,
+              status: l.status,
+              approvedBy: l.approvedBy,
+              createdAt: l.createdAt,
+            };
+          });
 
         if (!liveContext) {
-          const eqList = buckets.equipment || [];
           baseCtx.currentDateIso = baseCtx.currentDateIso || nowVNStr;
+          const todayMs = Date.parse(`${baseCtx.currentDateIso}T00:00:00Z`);
+          const calcDaysLeft = (iso?: string): number | null => {
+            const clean = String(iso || "").trim().slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(clean) || Number.isNaN(todayMs)) return null;
+            return Math.round((Date.parse(`${clean}T00:00:00Z`) - todayMs) / (24 * 60 * 60 * 1000));
+          };
+
+          const eqList: any[] = Array.isArray(buckets.equipment) ? buckets.equipment : [];
+          const eqStatusCounts: Record<string, number> = {};
+          const eqAlertItems: any[] = [];
+          for (const eq of eqList) {
+            if (!eq) continue;
+            const st = String(eq.status || "Đang hoạt động");
+            eqStatusCounts[st] = (eqStatusCounts[st] || 0) + 1;
+            const tracks = [
+              { label: "Hạn kiểm chuẩn", date: eq.calibrationExpiry },
+              { label: "Bảo trì định kỳ", date: eq.nextMaintenanceDate },
+              { label: "Giấy phép bức xạ", date: eq.radiationSurveyExpiry || eq.radiationLicenseExpiry },
+              { label: "Giấy phép hoạt động", date: eq.operatingPermitExpiry },
+            ];
+            let soonestReason = "";
+            let minDays = 999;
+            for (const tr of tracks) {
+              const d = calcDaysLeft(tr.date);
+              if (d !== null && d <= 30 && d < minDays) {
+                minDays = d;
+                soonestReason = d < 0 ? `${tr.label} quá hạn ${Math.abs(d)} ngày` : `${tr.label} còn ${d} ngày`;
+              }
+            }
+            if (eq.isLockedOut || st === "Sự cố hỏng hóc" || st === "Cần bảo trì" || st === "Tạm ngưng" || soonestReason) {
+              eqAlertItems.push({
+                id: eq.id,
+                code: eq.code,
+                name: eq.name,
+                room: eq.room,
+                status: st,
+                isLockedOut: Boolean(eq.isLockedOut),
+                alertReason: eq.lockoutReason || soonestReason || st,
+                daysRemaining: minDays < 999 ? minDays : undefined,
+                assignedTechnician: eq.assignedTechnician,
+              });
+            }
+          }
           baseCtx.equipment = {
             totalCount: eqList.length,
-            statusCounts: {},
-            alertItems: [],
+            statusCounts: eqStatusCounts,
+            alertItems: eqAlertItems.slice(0, 30),
             items: eqList.slice(0, 60),
           };
+
           baseCtx.rooms = {
             departmentsCount: (buckets.departments || []).length,
             departments: buckets.departments || [],
             roomsCount: (buckets.rooms || []).length,
             items: (buckets.rooms || []).slice(0, 60),
           };
+
+          const expiringCerts: any[] = [];
+          for (const s of activeStaffList) {
+            if (Array.isArray(s?.certificates)) {
+              for (const cert of s.certificates) {
+                const d = calcDaysLeft(cert?.expiryDate);
+                if (d !== null && d <= 60) {
+                  expiringCerts.push({
+                    staffName: s.fullName,
+                    certName: cert.name || "Chứng chỉ",
+                    expiryDate: cert.expiryDate,
+                    status: d < 0 ? `Quá hạn ${Math.abs(d)} ngày` : `Còn ${d} ngày`,
+                  });
+                }
+              }
+            }
+          }
           baseCtx.staff = {
-            totalCount: staffProfilesList.length,
-            items: staffProfilesList.slice(0, 100),
+            totalCount: activeStaffList.length,
+            activeCount: activeStaffList.length,
+            items: activeStaffList.slice(0, 100),
             leaveRequests: enrichedLeaves.slice(0, 150),
             pendingLeaveRequests: enrichedLeaves.filter((l: any) => l.status === "Chờ duyệt").slice(0, 30),
-            expiringCertificates: [],
+            expiringCertificates: expiringCerts.slice(0, 30),
           };
+
+          const rawTasks: any[] = Array.isArray(buckets.tasks) ? buckets.tasks : [];
+          const byStatus: Record<string, number> = {};
+          let overdueCount = 0;
+          const activeTasks: any[] = [];
+          for (const t of rawTasks) {
+            if (!t) continue;
+            const st = String(t.status || "Chưa thực hiện");
+            byStatus[st] = (byStatus[st] || 0) + 1;
+            const dLeft = calcDaysLeft(t.dueDate);
+            if (st !== "Đã hoàn thành" && st !== "Hủy") {
+              if (dLeft !== null && dLeft < 0) overdueCount += 1;
+              activeTasks.push(t);
+            }
+          }
           baseCtx.tasks = {
-            totalCount: (buckets.tasks || []).length,
-            byStatus: {},
-            overdueCount: 0,
-            activeItems: (buckets.tasks || []).slice(0, 60),
+            totalCount: rawTasks.length,
+            byStatus,
+            overdueCount,
+            activeItems: (activeTasks.length > 0 ? activeTasks : rawTasks).slice(0, 60),
           };
+
+          const rawShifts: any[] = Array.isArray(buckets.shifts) ? buckets.shifts : [];
+          const filteredShifts = rawShifts
+            .filter((sh: any) => {
+              if (!sh?.date) return false;
+              const nameLower = String(sh.assignedUserName || sh.userName || "").trim().toLowerCase();
+              if (inactiveStaffNames.has(nameLower)) return false;
+              const dLeft = calcDaysLeft(sh.date);
+              return dLeft !== null && dLeft >= -14 && dLeft <= 21;
+            })
+            .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
           baseCtx.shifts = {
-            todayAndUpcoming: (buckets.shifts || []).slice(0, 150),
-            pendingSwapCount: 0,
+            todayAndUpcoming: (filteredShifts.length > 0 ? filteredShifts : rawShifts).slice(0, 150),
+            pendingSwapCount: rawShifts.filter((sh: any) => sh?.hasPendingSwap).length,
           };
+
           baseCtx.meetings = {
             items: (buckets.meeting_items || []).slice(0, 20),
             weeklyPlans: (buckets.meetings || []).slice(0, 20),
             recentAnnouncements: [],
           };
+
+          const docsList: any[] = Array.isArray(buckets.documents) ? buckets.documents : [];
+          const expiredDocs = docsList.filter((doc: any) => {
+            const dLeft = calcDaysLeft(doc?.expirationDate);
+            return Boolean(doc?.isExpired) || (dLeft !== null && dLeft < 0);
+          }).length;
           baseCtx.documents = {
-            totalCount: (buckets.documents || []).length,
-            expiredCount: 0,
-            items: (buckets.documents || []).slice(0, 40),
+            totalCount: docsList.length,
+            expiredCount: expiredDocs,
+            items: docsList.slice(0, 40),
           };
         } else if (enrichedLeaves.length > 0) {
           baseCtx.staff = {
@@ -1406,33 +1511,36 @@ function collectNormalizedLeaves(liveContext: any): NormalizedLeaveEntry[] {
 function detectQueryIntents(question: string, matchedDays: any[], serviceHistory: any) {
   const q = normalizeText(question);
   const asksAboutLeave =
-    /(dang ky nghi|lich nghi|xin nghi|nghi phep|nghi om|thai san|khong luong|don nghi|duyet nghi|ai nghi|nghi bu|nghi viec|vang mat)/.test(
+    /\b(dang ky nghi|lich nghi|xin nghi|nghi phep|nghi om|thai san|khong luong|don nghi|duyet nghi|ai nghi|nghi bu|nghi viec|vang mat)\b/.test(
       q
     );
   const asksAboutShifts =
-    /(ai truc|lich truc|ca truc|kip truc|doi ca|phan cong truc|phan ca|truc dem|truc hom|truc tuan)/.test(
+    /\b(ai truc|lich truc|ca truc|kip truc|doi ca|phan cong truc|phan ca|truc dem|truc hom|truc tuan)\b/.test(
       q
     );
   const asksAboutStaffProfiles =
-    /(nhan su|nhan vien|bac si|ktv|ky thuat vien|dieu duong|chung chi|chung chi hanh nghe|ho so nhan su|danh sach can bo)/.test(
+    /\b(nhan su|nhan vien|bac si|ktv|ky thuat vien|dieu duong|chung chi|chung chi hanh nghe|ho so nhan su|danh sach can bo)\b/.test(
       q
     );
   const asksAboutEquipment =
-    /(may |may$|thiet bi|bao tri|hieu chuan|kiem chuan|su co|hong |khoa an toan|atbx|kiem xa|het han|lockout)/.test(
+    /\b(thiet bi|may moc|bao tri|hieu chuan|kiem chuan|su co|hong hoc|khoa an toan|atbx|kiem xa|het han|lockout)\b/.test(
       q
-    );
-  const asksAboutRooms = /(phong |phong$|bo phan|cong suat|qua tai)/.test(q);
-  const asksAboutTasks = /(cong viec|task|viec |tre han|qua han|giao viec|hoan thanh)/.test(q);
-  const asksAboutMeetings = /(cuoc hop|lich hop|ke hoach tuan|giao ban tuan|thong bao)/.test(q);
+    ) || /\bmay\b(?! (ca|ngay|gio|nguoi|thang|nam|tuan|lan)\b)/.test(q);
+  const asksAboutRooms = /\b(phong|bo phan|cong suat|qua tai)\b/.test(q);
+  const asksAboutTasks = /\b(cong viec|task|dau viec|viec|tre han|qua han|giao viec|hoan thanh)\b/.test(q);
+  const asksAboutMeetings = /\b(cuoc hop|lich hop|ke hoach tuan|giao ban tuan|thong bao)\b/.test(q);
   const asksAboutSOP =
-    /(sop|iso|15189|quy trinh|troponin|tat |tran do|hoa chat|westgard|can quang|tai lieu|ho so)/.test(q);
-  const asksAboutSync = /(dong bo|google sheet|sai lech|postgresql|lich su dong bo)/.test(q);
+    /\b(sop|iso|15189|quy trinh|troponin|stat tat|thoi gian tat|tat khan|tran do|hoa chat|spill kit|westgard|can quang|tai lieu|kho tai lieu|ho so sop)\b/.test(
+      q
+    ) || /\bho so\b(?! nhan su\b)/.test(q);
+  const asksAboutSync = /\b(dong bo|google sheet|sai lech|postgresql|lich su dong bo)\b/.test(q);
   const asksAboutCases =
     matchedDays.length > 0 ||
     Boolean(serviceHistory) ||
-    /(so ca|so lieu|luot|sieu am|noi soi|x quang|x-quang|dien tim|xet nghiem|sinh hoa|huyet hoc|nuoc tieu|dong mau|vi sinh|msct|mri|bhyt|nhan dan|bao cao.*ca|giao ban.*ca|thang.*ca)/.test(
+    /\b(so ca|so lieu|luot|sieu am|noi soi|x quang|x-quang|dien tim|xet nghiem|sinh hoa|huyet hoc|nuoc tieu|dong mau|vi sinh|msct|mri|bhyt|nhan dan)\b/.test(
       q
-    );
+    ) ||
+    /\b(bao cao|giao ban|thang)\b.*\bca\b/.test(q);
 
   const hasSpecificIntent =
     asksAboutLeave ||
@@ -2311,7 +2419,7 @@ export function buildDeterministicAssistantAnswer(
 
   if (asksAboutSOP) {
     sources.push("Hồ sơ SOP & Tiêu chuẩn ISO 15189");
-    if (q.includes("tran") || q.includes("hoa chat") || q.includes("cobas")) {
+    if (/\b(tran do|hoa chat|spill kit|cobas)\b/.test(q)) {
       parts.push(
         "🧪 **SOP-CLS-XN-04 (Xử lý tràn đổ hóa chất):**\n" +
           "1. Cách ly hiện trường bán kính 2m, đeo PPE cấp 2 (găng nitrile dày, kính, N95, áo choàng).\n" +
@@ -2319,14 +2427,14 @@ export function buildDeterministicAssistantAnswer(
           "3. Thu gom vào túi vàng nguy hại hóa học, khử khuẩn Presept 0.5% hoặc cồn 70°.\n" +
           "4. Lập biên bản BM-SOP-04-02 báo ĐDT và QLCL trong 2 giờ."
       );
-    } else if (q.includes("troponin") || q.includes("tat") || q.includes("khan")) {
+    } else if (/\b(troponin|stat tat|thoi gian tat|tat khan|abg|khi mau)\b/.test(q)) {
       parts.push(
         "⏱️ **SOP-CLS-QC-01 (Tiêu chuẩn TAT khẩn theo ISO 15189:2022 Điều 7.3.7):**\n" +
           "• Troponin T hs / Troponin I khẩn: <= 30 phút.\n" +
           "• Khí máu động mạch (ABG): <= 15 phút | Điện giải / Đường huyết: <= 20 phút.\n" +
           "• X-quang ngực cấp cứu: <= 20 phút | CT sọ não Code Stroke: <= 25 phút."
       );
-    } else if (q.includes("can quang") || q.includes("ct") || q.includes("buc xa")) {
+    } else if (/\b(can quang|chup ct|buc xa|egfr|metformin)\b/.test(q)) {
       parts.push(
         "☢️ **SOP-CLS-CDHA-02 (An toàn tiêm cản quang CT):**\n" +
           "• Đánh giá eGFR >= 45 mL/min/1.73m² (ngoại trú) hoặc >= 30 (cấp cứu có hội chẩn).\n" +

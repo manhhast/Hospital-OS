@@ -2852,8 +2852,8 @@ class HospitalStorageService {
     const current = this.getSyncHistory();
     const trimmedEntry: SyncHistoryEntry = {
       ...entry,
-      autoWrittenSamples: entry.autoWrittenSamples?.slice(0, 40),
-      discrepancies: entry.discrepancies?.slice(0, 80)
+      autoWrittenSamples: entry.autoWrittenSamples?.slice(0, 80),
+      discrepancies: entry.discrepancies?.slice(0, 250)
     };
     const next = [trimmedEntry, ...current.filter((e) => e.id !== entry.id)].slice(0, 80);
     this.safeSetItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify(next));
