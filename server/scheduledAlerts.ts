@@ -1497,27 +1497,29 @@ function formatCompactDelta(
 function getCategoryDisplayMeta(categoryName: string): { icon: string; title: string; order: number } {
   const lower = String(categoryName || "").trim().toLowerCase();
   if (lower.includes("nội soi")) {
-    return { icon: "👁️", title: "NỘI SOI", order: 1 };
+    return { icon: "👁️", title: "PHÒNG NỘI SOI", order: 1 };
   }
   if (lower.includes("siêu âm")) {
-    return { icon: "🩺", title: "SIÊU ÂM", order: 2 };
+    return { icon: "🩺", title: "PHÒNG SIÊU ÂM", order: 2 };
   }
   if (lower.includes("x quang") || lower.includes("x-quang") || lower.includes("clvt")) {
-    return { icon: "🩻", title: "X-QUANG & CLVT", order: 3 };
+    return { icon: "🩻", title: "PHÒNG X-QUANG & CLVT", order: 3 };
   }
   if (lower.includes("điện tim") || lower.includes("lhn") || lower.includes("lưu huyết")) {
-    return { icon: "📈", title: "ĐIỆN TIM & LHN", order: 4 };
+    return { icon: "📈", title: "PHÒNG ĐIỆN TIM & LHN", order: 4 };
   }
   if (lower.includes("xét nghiệm")) {
-    return { icon: "🧪", title: "XÉT NGHIỆM", order: 5 };
+    return { icon: "🧪", title: "PHÒNG XÉT NGHIỆM", order: 5 };
   }
   if (lower.includes("msct")) {
-    return { icon: "🩻", title: "MSCT", order: 6 };
+    return { icon: "🩻", title: "PHÒNG MSCT", order: 6 };
   }
   if (lower.includes("mri")) {
-    return { icon: "🧲", title: "MRI", order: 7 };
+    return { icon: "🧲", title: "PHÒNG MRI", order: 7 };
   }
-  return { icon: "📌", title: String(categoryName || "KHÁC").toUpperCase(), order: 99 };
+  const cleanTitle = String(categoryName || "KHÁC").trim().toUpperCase();
+  const roomTitle = cleanTitle.startsWith("PHÒNG") ? cleanTitle : `PHÒNG ${cleanTitle}`;
+  return { icon: "📌", title: roomTitle, order: 99 };
 }
 
 function formatBhNdParts(bh: number, nd: number): string {
@@ -1714,20 +1716,12 @@ export async function buildNoonServiceReport(
         nd: 0,
         total: 0,
       };
-      const prevCat = prevSummary.byCategoryMap.get(catName) || {
-        category: catName,
-        bh: 0,
-        nd: 0,
-        total: 0,
-      };
       const meta = getCategoryDisplayMeta(catName);
-      const catDelta = formatCompactDelta(curCat.total, prevCat.total, hasPrevBaseline);
+      const roomBhNd = curCat.bh > 0 || curCat.nd > 0 ? ` · ${formatBhNdParts(curCat.bh, curCat.nd)}` : "";
 
       lines.push("");
       lines.push(
-        `${meta.icon} **${meta.title}** (Tổng: **${curCat.total.toLocaleString("vi-VN")} ca**${
-          catDelta ? ` · ${catDelta}` : ""
-        })`
+        `${meta.icon} **${meta.title}** (Tổng: **${curCat.total.toLocaleString("vi-VN")} ca**${roomBhNd})`
       );
 
       const catServices = allMergedServices.filter(
@@ -1737,11 +1731,8 @@ export async function buildNoonServiceReport(
       catServices.forEach((svc) => {
         const ltSuffix = svc.isLt ? " [LT]" : "";
         const bhNdTxt = formatBhNdParts(svc.curBh, svc.curNd);
-        const svcDelta = formatCompactDelta(svc.curTotal, svc.prevTotal, hasPrevBaseline);
         lines.push(
-          `  • **${svc.name}${ltSuffix}**: **${svc.curTotal.toLocaleString(
-            "vi-VN"
-          )} ca** (${bhNdTxt})${svcDelta ? ` · ${svcDelta}` : ""}`
+          `  • ${svc.name}${ltSuffix}: **${svc.curTotal.toLocaleString("vi-VN")} ca** (${bhNdTxt})`
         );
       });
     });
@@ -1752,8 +1743,6 @@ export async function buildNoonServiceReport(
       hasPrevBaseline,
       true
     );
-    const bhDeltaText = formatCompactDelta(summary.totalBh, prevSummary.totalBh, hasPrevBaseline);
-    const ndDeltaText = formatCompactDelta(summary.totalNd, prevSummary.totalNd, hasPrevBaseline);
 
     lines.push("");
     lines.push(DividerLine);
@@ -1763,14 +1752,10 @@ export async function buildNoonServiceReport(
       }`
     );
     lines.push(
-      `  • Bảo hiểm Y tế (BH): **${summary.totalBh.toLocaleString("vi-VN")} ca** (${bhPct}%${
-        bhDeltaText ? ` · ${bhDeltaText}` : ""
-      })`
+      `  • Bảo hiểm Y tế (BH): **${summary.totalBh.toLocaleString("vi-VN")} ca** (${bhPct}%)`
     );
     lines.push(
-      `  • Ngoài định mức / Dịch vụ (ND): **${summary.totalNd.toLocaleString("vi-VN")} ca** (${ndPct}%${
-        ndDeltaText ? ` · ${ndDeltaText}` : ""
-      })`
+      `  • Ngoài định mức / Dịch vụ (ND): **${summary.totalNd.toLocaleString("vi-VN")} ca** (${ndPct}%)`
     );
     if (summary.ltCount > 0) {
       lines.push(`  • Ghi chú LT (Làm thêm / Chờ): ${summary.ltCount} mục kỹ thuật`);
