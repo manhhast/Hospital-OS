@@ -43,6 +43,7 @@ export interface User {
   phone?: string;
   status: 'Active' | 'Inactive';
   password?: string;
+  hasPassword?: boolean;
   resetRequested?: boolean;
   resetRequestNote?: string;
   room?: string; // e.g. "Phòng Xét nghiệm Tầng 2"
@@ -725,6 +726,8 @@ export interface ScheduledAlertPreviewResult {
 
 export interface AppSettings {
   telegramBotToken: string;
+  hasTelegramBotToken?: boolean;
+  telegramBotTokenHint?: string;
   defaultTelegramChatId: string;
   telegramQaEnabled?: boolean;
   aiWebSearchEnabled?: boolean;

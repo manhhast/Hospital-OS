@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { CloudOff, RefreshCw, X } from 'lucide-react';
+import { CloudOff, RefreshCw, WifiOff, X } from 'lucide-react';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
@@ -136,7 +136,11 @@ export default function App() {
   const [notifications, setNotifications] = useState<NotificationLog[]>(storageService.getNotifications());
   const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const [isCloudBannerDismissed, setIsCloudBannerDismissed] = useState(false);
+  const [isBrowserOnline, setIsBrowserOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
   const [topBannerFailed, setTopBannerFailed] = useState(false);
+  const lastConflictIdRef = useRef<number>(0);
 
   // Storage & PostgreSQL server sync lifecycle
   useEffect(() => {
@@ -163,15 +167,31 @@ export default function App() {
       if (next.status === 'error') {
         setIsCloudBannerDismissed(false);
       }
+      if (next.lastConflictNotice && next.lastConflictNotice.id !== lastConflictIdRef.current) {
+        lastConflictIdRef.current = next.lastConflictNotice.id;
+        showToast('Xung đột đồng bộ dữ liệu', next.lastConflictNotice.message, 'warning');
+        postgresSyncService.dismissConflictNotice();
+      }
     });
     const handleReportArchiveUpdated = () => {
       scheduleLiveContextSync(900);
     };
+    const handleOnline = () => {
+      setIsBrowserOnline(true);
+      void postgresSyncService.flushPendingSync();
+    };
+    const handleOffline = () => {
+      setIsBrowserOnline(false);
+    };
     window.addEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
     return () => {
       unsubscribe();
       unsubPg();
       window.removeEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       postgresSyncService.destroy();
     };
   }, []);
@@ -187,14 +207,21 @@ export default function App() {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     let lastHeartbeatAtMs = 0;
 
     const verifyAndResyncBridge = async () => {
+      if (!storageService.isAuthenticated() || !postgresSyncService.isAuthenticatedSession()) return;
       const settings = storageService.getSettings();
-      const hasToken = (settings.telegramBotToken || '').trim().length > 10;
+      const hasToken =
+        (settings.telegramBotToken || '').trim().length > 10 ||
+        Boolean(settings.hasTelegramBotToken);
       const qaEnabled = settings.telegramQaEnabled !== false;
       try {
-        const res = await fetch('/api/telegram/status');
+        const res = await fetch('/api/telegram/status', {
+          headers: postgresSyncService.getAuthHeaders(),
+          credentials: 'include'
+        });
         if (!res.ok) return;
         const json = await res.json();
         const st = json?.data;
@@ -216,12 +243,20 @@ export default function App() {
         const nowMs = Date.now();
         if (nowMs - lastHeartbeatAtMs >= 50000) {
           lastHeartbeatAtMs = nowMs;
-          await fetch('/api/alerts/heartbeat', { method: 'POST' }).catch(() => {});
+          await fetch('/api/alerts/heartbeat', {
+            method: 'POST',
+            headers: postgresSyncService.getAuthHeaders(),
+            credentials: 'include'
+          }).catch(() => {});
         }
       } catch {
         // ignore transient offline checks
       }
     };
+
+    const startupTimer = window.setTimeout(() => {
+      void verifyAndResyncBridge();
+    }, 2000);
 
     const handleFocus = () => {
       void verifyAndResyncBridge();
@@ -232,10 +267,11 @@ export default function App() {
     }, 35000);
 
     return () => {
+      window.clearTimeout(startupTimer);
       window.removeEventListener('focus', handleFocus);
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Automatic 3-day smart sync on app startup (after initial PostgreSQL hydration settles if configured)
   useEffect(() => {
@@ -512,31 +548,45 @@ export default function App() {
           defaultConfigModule={canOpenAdminModule('settings') ? 'settings' : 'users'}
         />
 
-        {pgState.configured && pgState.status === 'error' && !isCloudBannerDismissed && (
+        {(!isBrowserOnline || (pgState.configured && pgState.status === 'error' && !isCloudBannerDismissed)) && (
           <div className="px-4 md:px-5 py-1.5 border-b text-xs flex flex-wrap items-center justify-between gap-2 bg-rose-50 dark:bg-rose-950/35 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-200">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <CloudOff className="w-4 h-4 shrink-0" />
+              {!isBrowserOnline ? <WifiOff className="w-4 h-4 shrink-0" /> : <CloudOff className="w-4 h-4 shrink-0" />}
               <span className="truncate">
-                <strong>Lỗi đồng bộ PostgreSQL:</strong> {pgState.errorMessage || 'Không thể kết nối tới cơ sở dữ liệu máy chủ.'}
+                {!isBrowserOnline ? (
+                  <>
+                    <strong>Mất kết nối mạng:</strong> Các thay đổi đang được lưu tạm cục bộ
+                    {pgState.pendingChangesCount > 0 ? ` (${pgState.pendingChangesCount} mục chờ đồng bộ)` : ''} và sẽ tự động gửi khi có mạng trở lại.
+                  </>
+                ) : (
+                  <>
+                    <strong>Lỗi đồng bộ PostgreSQL:</strong> {pgState.errorMessage || 'Không thể kết nối tới cơ sở dữ liệu máy chủ.'}
+                    {pgState.pendingChangesCount > 0 ? ` (${pgState.pendingChangesCount} thay đổi đang chờ gửi lại)` : ''}
+                  </>
+                )}
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => void postgresSyncService.refreshServerStatus()}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-semibold text-[11px] cursor-pointer"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Thử lại</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCloudBannerDismissed(true)}
-                className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-                title="Ẩn thông báo này"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              {isBrowserOnline && (
+                <button
+                  type="button"
+                  onClick={() => void postgresSyncService.flushPendingSync().then(() => postgresSyncService.refreshServerStatus())}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-semibold text-[11px] cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Thử lại</span>
+                </button>
+              )}
+              {isBrowserOnline && (
+                <button
+                  type="button"
+                  onClick={() => setIsCloudBannerDismissed(true)}
+                  className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                  title="Ẩn thông báo này"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -666,11 +716,11 @@ export default function App() {
           )}
 
           {activeModule === 'meetings' && (
-            <MeetingManagementView />
+            <MeetingManagementView onShowToast={showToast} />
           )}
 
           {activeModule === 'schedule' && (
-            <ScheduleView />
+            <ScheduleView onShowToast={showToast} onConfirmAction={triggerConfirm} />
           )}
 
           {activeModule === 'discussion' && (

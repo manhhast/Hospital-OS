@@ -612,6 +612,40 @@ export async function saveTelegramUpdateOffsetToDb(tokenHash: string, offset: nu
   }
 }
 
+export async function claimTelegramUpdateOnce(
+  tokenHash: string,
+  updateId: number,
+  chatId: string | number,
+  messageId?: number
+): Promise<boolean> {
+  const pool = getPool();
+  if (!pool || !tokenHash || !Number.isFinite(updateId) || updateId <= 0) return true;
+  try {
+    await ensureSchema(pool);
+    const metaKey = `tg_upd_${tokenHash}_${Math.floor(updateId)}_${String(chatId)}_${
+      Number.isFinite(messageId) ? Math.floor(Number(messageId)) : 0
+    }`;
+    const res = await pool.query(
+      `INSERT INTO app_meta (meta_key, meta_value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (meta_key) DO NOTHING
+       RETURNING meta_key`,
+      [metaKey, new Date().toISOString()]
+    );
+    if (Math.random() < 0.04) {
+      await pool
+        .query(
+          `DELETE FROM app_meta WHERE meta_key LIKE 'tg_upd_%' AND updated_at < NOW() - INTERVAL '2 days'`
+        )
+        .catch(() => {});
+    }
+    return (res.rowCount || 0) > 0;
+  } catch {
+    // If DB temporarily fails, let in-memory Set handle deduplication
+    return true;
+  }
+}
+
 async function getSessionSecret(pool: Pool): Promise<string> {
   const envSecret = (process.env.AUTH_SESSION_SECRET || "").trim();
   if (envSecret.length >= 16) {
@@ -690,6 +724,111 @@ function parseCookies(req: Request): Record<string, string> {
   return result;
 }
 
+const SCRYPT_PREFIX = "scrypt$";
+const LOGIN_RATE_WINDOW_MS = 2 * 60 * 1000;
+const LOGIN_RATE_MAX_FAILURES = 12;
+const authFailureTracker = new Map<string, { count: number; resetAt: number }>();
+
+function getAuthRateKey(req: Request, identifier: string): string {
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const ip = fwd || req.ip || "unknown";
+  return `${ip}::${identifier.toLowerCase().slice(0, 80)}`;
+}
+
+function checkAuthRateLimited(rateKey: string): boolean {
+  const now = Date.now();
+  const entry = authFailureTracker.get(rateKey);
+  if (!entry) return false;
+  if (entry.resetAt <= now) {
+    authFailureTracker.delete(rateKey);
+    return false;
+  }
+  return entry.count >= LOGIN_RATE_MAX_FAILURES;
+}
+
+function recordAuthFailure(rateKey: string): void {
+  const now = Date.now();
+  if (authFailureTracker.size > 2000) {
+    for (const [k, v] of authFailureTracker.entries()) {
+      if (v.resetAt <= now) authFailureTracker.delete(k);
+    }
+    if (authFailureTracker.size > 2000) authFailureTracker.clear();
+  }
+  const existing = authFailureTracker.get(rateKey);
+  if (!existing || existing.resetAt <= now) {
+    authFailureTracker.set(rateKey, { count: 1, resetAt: now + LOGIN_RATE_WINDOW_MS });
+  } else {
+    existing.count += 1;
+  }
+}
+
+function clearAuthFailures(rateKey: string): void {
+  authFailureTracker.delete(rateKey);
+}
+
+export function isHashedPassword(stored?: unknown): stored is string {
+  if (typeof stored !== "string" || !stored.startsWith(SCRYPT_PREFIX)) return false;
+  const parts = stored.split("$");
+  return parts.length === 3 && Boolean(parts[1]) && Boolean(parts[2]);
+}
+
+export function hashPasswordScrypt(plain: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = crypto.scryptSync(plain, salt, 64).toString("hex");
+  return `${SCRYPT_PREFIX}${salt}$${derived}`;
+}
+
+export function verifyPasswordConstantTime(plain: string, stored: string): boolean {
+  if (isHashedPassword(stored)) {
+    const [, saltHex, hashHex] = stored.split("$");
+    try {
+      const expectedBuf = Buffer.from(hashHex, "hex");
+      const actualBuf = crypto.scryptSync(plain, saltHex, 64);
+      if (expectedBuf.length !== actualBuf.length) return false;
+      return crypto.timingSafeEqual(expectedBuf, actualBuf);
+    } catch {
+      return false;
+    }
+  }
+  const plainDigest = crypto.createHash("sha256").update(plain, "utf8").digest();
+  const storedDigest = crypto.createHash("sha256").update(stored, "utf8").digest();
+  return crypto.timingSafeEqual(plainDigest, storedDigest);
+}
+
+function scrubBucketItemsForClient(
+  bucketKey: string,
+  items: unknown,
+  viewerIsAdmin: boolean
+): Record<string, unknown>[] {
+  if (!Array.isArray(items)) return [];
+  if (bucketKey === "users") {
+    return items.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return {};
+      const copy = { ...(item as Record<string, unknown>) };
+      const hasPw = typeof copy.password === "string" && copy.password.length > 0;
+      delete copy.password;
+      copy.hasPassword = hasPw;
+      return copy;
+    });
+  }
+  if (bucketKey === "settings") {
+    return items.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return {};
+      const copy = { ...(item as Record<string, unknown>) };
+      const rawToken = typeof copy.telegramBotToken === "string" ? copy.telegramBotToken.trim() : "";
+      delete copy.telegramBotToken;
+      copy.hasTelegramBotToken = Boolean(rawToken);
+      if (viewerIsAdmin && rawToken.length >= 8) {
+        copy.telegramBotTokenHint = `••••${rawToken.slice(-6)}`;
+      } else {
+        delete copy.telegramBotTokenHint;
+      }
+      return copy;
+    });
+  }
+  return items as Record<string, unknown>[];
+}
+
 function extractTokenFromRequest(req: Request): string {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -700,30 +839,53 @@ function extractTokenFromRequest(req: Request): string {
   if (cookies[SESSION_COOKIE_NAME]) {
     return cookies[SESSION_COOKIE_NAME];
   }
-  if (typeof req.query?.token === "string" && req.query.token.trim()) {
-    return req.query.token.trim();
-  }
   return "";
 }
 
-function setSessionCookie(req: Request, res: Response, token: string): void {
-  const isHttps =
-    req.secure ||
-    req.headers["x-forwarded-proto"] === "https" ||
-    (process.env.APP_URL || "").startsWith("https://");
-
-  res.cookie(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: isHttps,
-    sameSite: isHttps ? "none" : "lax",
-    maxAge: SESSION_TTL_MS,
-    path: "/",
-  });
+function isHttpsRequest(req: Request): boolean {
+  const fwdProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  return Boolean(req.secure || fwdProto === "https");
 }
 
-function sanitizeBucketItems(rawItems: unknown): Record<string, unknown>[] {
+function setSessionCookie(req: Request, res: Response, token: string): void {
+  const isHttps = isHttpsRequest(req);
+  const attrs = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    "Path=/",
+    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+    "HttpOnly",
+  ];
+  if (isHttps) {
+    attrs.push("Secure", "SameSite=None", "Partitioned");
+  } else {
+    attrs.push("SameSite=Lax");
+  }
+  res.append("Set-Cookie", attrs.join("; "));
+}
+
+function clearSessionCookie(req: Request, res: Response): void {
+  const isHttps = isHttpsRequest(req);
+  const attrs = [
+    `${SESSION_COOKIE_NAME}=`,
+    "Path=/",
+    "Max-Age=0",
+    "HttpOnly",
+  ];
+  if (isHttps) {
+    attrs.push("Secure", "SameSite=None", "Partitioned");
+  } else {
+    attrs.push("SameSite=Lax");
+  }
+  res.append("Set-Cookie", attrs.join("; "));
+}
+
+function sanitizeBucketItems(rawItems: unknown, bucketKey?: string): Record<string, unknown>[] {
   if (!Array.isArray(rawItems)) return [];
-  return rawItems.slice(0, 1000).map((item) => {
+  const cap = bucketKey === "audit_logs" ? 250 : 2000;
+  return rawItems.slice(0, cap).map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       return {};
     }
@@ -1256,14 +1418,13 @@ async function enforceServerBucketRbac(
     }
     const nextIds = new Set<string>();
     const canConfigureRBAC = canManageStaffTarget(actorAccess, "rbac", null, rooms);
-    const SELF_SAFE_KEYS = ["password", "avatar", "resetRequested", "resetRequestNote"];
+    const SELF_SAFE_KEYS = ["password", "hasPassword", "avatar", "resetRequested", "resetRequestNote"];
     const USER_RBAC_KEYS = [
       "role",
       "managementLevel",
       "managedDepartments",
       "managedRooms",
       "permissionOverrides",
-      "password",
     ];
 
     for (const rawNext of safeItems) {
@@ -1271,6 +1432,7 @@ async function enforceServerBucketRbac(
       if (!nextUser?.id) continue;
       nextIds.add(nextUser.id);
       const prevUser = prevById.get(nextUser.id);
+      const incomingPlainPass = typeof rawNext.password === "string" ? rawNext.password.trim() : "";
 
       if (!prevUser) {
         const escErr = getPrivilegeEscalationError(undefined, rawNext);
@@ -1285,16 +1447,18 @@ async function enforceServerBucketRbac(
         continue;
       }
 
-      if (stableStringify(prevUser) === stableStringify(nextUser)) continue;
+      const prevClean = stripObjectKeys(prevUser as unknown as Record<string, unknown>, ["password", "hasPassword"]);
+      const nextClean = stripObjectKeys(rawNext, ["password", "hasPassword"]);
+      if (stableStringify(prevClean) === stableStringify(nextClean) && !incomingPlainPass) continue;
 
       const prevRaw = prevUser as unknown as Record<string, unknown>;
 
-      // Allow own safe profile/password changes for any authenticated user
+      // Allow own safe profile updates (passwords should use /api/auth/change-password)
       if (prevUser.id === session.userId) {
         const onlySelfSafeChanged =
           stableStringify(stripObjectKeys(prevRaw, SELF_SAFE_KEYS)) ===
           stableStringify(stripObjectKeys(rawNext, SELF_SAFE_KEYS));
-        if (onlySelfSafeChanged) continue;
+        if (onlySelfSafeChanged && !incomingPlainPass) continue;
       }
 
       if (isAdminIdentity(prevUser) || isAdminIdentity(nextUser)) {
@@ -1305,9 +1469,9 @@ async function enforceServerBucketRbac(
         };
       }
 
-      const rbacOrCredsChanged = USER_RBAC_KEYS.some(
-        (k) => stableStringify(prevRaw[k]) !== stableStringify(rawNext[k])
-      );
+      const rbacOrCredsChanged =
+        Boolean(incomingPlainPass) ||
+        USER_RBAC_KEYS.some((k) => stableStringify(prevRaw[k]) !== stableStringify(rawNext[k]));
       if (rbacOrCredsChanged) {
         if (!canConfigureRBAC) {
           return {
@@ -1321,8 +1485,8 @@ async function enforceServerBucketRbac(
       }
 
       const otherUserFieldsChanged =
-        stableStringify(stripObjectKeys(prevRaw, USER_RBAC_KEYS)) !==
-        stableStringify(stripObjectKeys(rawNext, USER_RBAC_KEYS));
+        stableStringify(stripObjectKeys(prevRaw, [...USER_RBAC_KEYS, "password", "hasPassword"])) !==
+        stableStringify(stripObjectKeys(rawNext, [...USER_RBAC_KEYS, "password", "hasPassword"]));
 
       if (otherUserFieldsChanged) {
         const canEditTarget =
@@ -1410,6 +1574,238 @@ async function requirePgAuth(req: AuthedRequest, res: Response, next: NextFuncti
       error: err?.message || "Lỗi xác thực phiên PostgreSQL.",
     });
   }
+}
+
+export async function requireAppAuth(req: Request, res: Response, next: NextFunction) {
+  if (!getPool()) {
+    return next();
+  }
+  return requirePgAuth(req as AuthedRequest, res, next);
+}
+
+export async function isSessionSystemAdmin(req: Request): Promise<boolean> {
+  const pool = getPool();
+  if (!pool) return true;
+  const session = (req as AuthedRequest).pgSession;
+  if (!session) return false;
+  try {
+    const { actorAccess, matchedDbUser } = await resolveServerRbacContext(pool, session);
+    if (matchedDbUser?.status === "Inactive") return false;
+    return Boolean(actorAccess.isSystemAdmin);
+  } catch {
+    return false;
+  }
+}
+
+export async function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
+  const pool = getPool();
+  if (!pool) {
+    return next();
+  }
+  return requirePgAuth(req as AuthedRequest, res, async () => {
+    try {
+      const session = (req as AuthedRequest).pgSession!;
+      const { actorAccess, matchedDbUser } = await resolveServerRbacContext(pool, session);
+      if (matchedDbUser?.status === "Inactive" || !actorAccess.isSystemAdmin) {
+        return res.status(403).json({
+          success: false,
+          error: "Chỉ Quản trị viên hệ thống (Admin) mới có quyền thực hiện thao tác này.",
+        });
+      }
+      next();
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Lỗi kiểm tra phân quyền Admin.",
+      });
+    }
+  });
+}
+
+const APPEND_MERGE_BUCKETS = new Set<string>(["audit_logs", "sync_history"]);
+
+function mergeAppendBucketItems(
+  bucketKey: string,
+  existingItems: Record<string, unknown>[],
+  incomingItems: Record<string, unknown>[]
+): Record<string, unknown>[] {
+  const cap = bucketKey === "audit_logs" ? 250 : 500;
+  const seenIds = new Set<string>();
+  const merged: Record<string, unknown>[] = [];
+  for (const item of incomingItems) {
+    const id = typeof item?.id === "string" ? item.id : "";
+    if (id) seenIds.add(id);
+    merged.push(item);
+  }
+  for (const oldItem of existingItems) {
+    const id = typeof oldItem?.id === "string" ? oldItem.id : "";
+    if (id && seenIds.has(id)) continue;
+    if (id) seenIds.add(id);
+    merged.push(oldItem);
+  }
+  return merged.slice(0, cap);
+}
+
+function reconcileSensitiveBucketOnSave(
+  bucketKey: string,
+  safeItems: Record<string, unknown>[],
+  existingItems: Record<string, unknown>[],
+  actorIsAdmin: boolean
+): Record<string, unknown>[] {
+  if (bucketKey === "users") {
+    const prevPassMap = new Map<string, string>();
+    for (const prev of existingItems) {
+      if (prev && typeof prev.id === "string" && typeof prev.password === "string" && prev.password) {
+        prevPassMap.set(prev.id, prev.password);
+      }
+    }
+    return safeItems.map((item) => {
+      const copy = { ...item };
+      delete copy.hasPassword;
+      const uid = typeof copy.id === "string" ? copy.id : "";
+      const incomingPass = typeof copy.password === "string" ? copy.password : "";
+      if (incomingPass.trim()) {
+        copy.password = isHashedPassword(incomingPass)
+          ? incomingPass
+          : hashPasswordScrypt(incomingPass);
+      } else {
+        const prevPass = uid ? prevPassMap.get(uid) : undefined;
+        if (prevPass) {
+          copy.password = isHashedPassword(prevPass)
+            ? prevPass
+            : hashPasswordScrypt(prevPass);
+        } else {
+          const defaultPlain = uid === "USR-ADMIN" ? "admin" : "123456";
+          copy.password = hashPasswordScrypt(defaultPlain);
+        }
+      }
+      return copy;
+    });
+  }
+
+  if (bucketKey === "settings") {
+    const prevFirst =
+      existingItems[0] && typeof existingItems[0] === "object" ? existingItems[0] : {};
+    const prevToken =
+      typeof prevFirst.telegramBotToken === "string" ? prevFirst.telegramBotToken.trim() : "";
+
+    return safeItems.slice(0, 1).map((item) => {
+      const copy = { ...item };
+      delete copy.hasTelegramBotToken;
+      delete copy.telegramBotTokenHint;
+      const incomingToken =
+        typeof copy.telegramBotToken === "string" ? copy.telegramBotToken.trim() : "";
+      if (actorIsAdmin && incomingToken.length > 10) {
+        copy.telegramBotToken = incomingToken;
+      } else {
+        copy.telegramBotToken = prevToken;
+      }
+      return copy;
+    });
+  }
+
+  return safeItems;
+}
+
+export async function saveTelegramConfigToDb(params: {
+  botToken?: string;
+  clearToken?: boolean;
+  defaultChatId?: string;
+  qaEnabled?: boolean;
+  actorId: string;
+  actorName: string;
+}): Promise<{
+  effectiveToken: string;
+  defaultChatId: string;
+  enabled: boolean;
+  updatedAtMs: number;
+}> {
+  const pool = getPool();
+  const cleanChatId = String(params.defaultChatId || "").trim();
+  const nextQaEnabled = params.qaEnabled !== false;
+
+  if (!pool) {
+    const effectiveToken = params.clearToken ? "" : String(params.botToken || "").trim();
+    return {
+      effectiveToken,
+      defaultChatId: cleanChatId,
+      enabled: nextQaEnabled && effectiveToken.length > 10,
+      updatedAtMs: Date.now(),
+    };
+  }
+
+  await ensureSchema(pool);
+  const client = await pool.connect();
+  let effectiveToken = "";
+  const nowMs = Date.now();
+  try {
+    await client.query("BEGIN");
+    const existingRes = await client.query<{ items: unknown }>(
+      `SELECT items FROM app_buckets WHERE bucket_key = 'settings' FOR UPDATE`
+    );
+    const existingObj =
+      Array.isArray(existingRes.rows[0]?.items) &&
+      existingRes.rows[0].items[0] &&
+      typeof existingRes.rows[0].items[0] === "object"
+        ? { ...(existingRes.rows[0].items[0] as Record<string, unknown>) }
+        : {};
+
+    const prevToken =
+      typeof existingObj.telegramBotToken === "string" ? existingObj.telegramBotToken.trim() : "";
+    if (params.clearToken) {
+      effectiveToken = "";
+    } else if (typeof params.botToken === "string" && params.botToken.trim().length > 10) {
+      effectiveToken = params.botToken.trim();
+    } else {
+      effectiveToken = prevToken;
+    }
+
+    const nextSettings: Record<string, unknown> = {
+      ...existingObj,
+      telegramBotToken: effectiveToken,
+      defaultTelegramChatId:
+        params.defaultChatId !== undefined
+          ? cleanChatId
+          : String(existingObj.defaultTelegramChatId || "").trim(),
+      telegramQaEnabled: nextQaEnabled,
+    };
+    delete nextSettings.hasTelegramBotToken;
+    delete nextSettings.telegramBotTokenHint;
+
+    await client.query(
+      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+       VALUES ('settings', $1::jsonb, 1, $2, $3, $4, NOW())
+       ON CONFLICT (bucket_key)
+       DO UPDATE SET
+         items = EXCLUDED.items,
+         item_count = EXCLUDED.item_count,
+         updated_by_id = EXCLUDED.updated_by_id,
+         updated_by_name = EXCLUDED.updated_by_name,
+         updated_at_ms = EXCLUDED.updated_at_ms,
+         updated_at = NOW()`,
+      [JSON.stringify([nextSettings]), params.actorId, params.actorName, nowMs]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  broadcastPostgresChange(pool, {
+    type: "bucket",
+    key: "settings",
+    updatedAtMs: nowMs,
+    actorId: params.actorId,
+  });
+
+  return {
+    effectiveToken,
+    defaultChatId: cleanChatId,
+    enabled: nextQaEnabled && effectiveToken.length > 10,
+    updatedAtMs: nowMs,
+  };
 }
 
 export function registerPostgresSyncRoutes(app: Express): void {
@@ -1538,6 +1934,19 @@ export function registerPostgresSyncRoutes(app: Express): void {
     try {
       const { userId, email, password } = req.body || {};
       const cleanPass = String(password || "");
+      const identifier =
+        typeof userId === "string" && userId.trim()
+          ? userId.trim()
+          : typeof email === "string" && email.trim()
+            ? email.trim()
+            : "unknown";
+      const rateKey = getAuthRateKey(req, identifier);
+      if (checkAuthRateLimited(rateKey)) {
+        return res.status(429).json({
+          success: false,
+          error: "Quá nhiều lần nhập sai mật khẩu. Vui lòng thử lại sau 1–2 phút.",
+        });
+      }
       if (!cleanPass) {
         return res.status(400).json({ success: false, error: "Vui lòng nhập mật khẩu." });
       }
@@ -1554,9 +1963,17 @@ export function registerPostgresSyncRoutes(app: Express): void {
       }
 
       if (!matched) {
+        recordAuthFailure(rateKey);
         return res.status(401).json({
           success: false,
           error: "Không tìm thấy tài khoản cán bộ trong cơ sở dữ liệu.",
+        });
+      }
+
+      if (matched.status === "Inactive") {
+        return res.status(403).json({
+          success: false,
+          error: "Tài khoản này đã ngừng hoạt động. Vui lòng liên hệ Quản trị viên.",
         });
       }
 
@@ -1564,11 +1981,41 @@ export function registerPostgresSyncRoutes(app: Express): void {
         matched.password ||
         (matched.id === "USR-ADMIN" || matched.role === "Admin" ? "admin" : "123456");
 
-      if (cleanPass !== expectedPass) {
+      if (!verifyPasswordConstantTime(cleanPass, expectedPass)) {
+        recordAuthFailure(rateKey);
         return res.status(401).json({
           success: false,
           error: "Mật khẩu không chính xác.",
         });
+      }
+
+      clearAuthFailures(rateKey);
+
+      // Transparently upgrade legacy plaintext DB password to salted scrypt hash on successful login
+      if (existsInDb && !isHashedPassword(matched.password)) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const curRes = await client.query<{ items: unknown }>(
+            `SELECT items FROM app_buckets WHERE bucket_key = 'users' FOR UPDATE`
+          );
+          if (Array.isArray(curRes.rows[0]?.items)) {
+            const nextUsers = curRes.rows[0].items.map((item: any) =>
+              item && item.id === matched!.id
+                ? { ...item, password: hashPasswordScrypt(cleanPass) }
+                : item
+            );
+            await client.query(
+              `UPDATE app_buckets SET items = $1::jsonb WHERE bucket_key = 'users'`,
+              [JSON.stringify(nextUsers)]
+            );
+          }
+          await client.query("COMMIT");
+        } catch {
+          await client.query("ROLLBACK").catch(() => {});
+        } finally {
+          client.release();
+        }
       }
 
       const secret = await getSessionSecret(pool);
@@ -1603,27 +2050,286 @@ export function registerPostgresSyncRoutes(app: Express): void {
     }
   });
 
+  // 3B. Self Password Change (authenticated, verifies oldPassword server-side via scrypt)
+  app.post("/api/auth/change-password", requirePgAuth, async (req: AuthedRequest, res) => {
+    const pool = getPool()!;
+    const session = req.pgSession!;
+    const { oldPassword, newPassword } = req.body || {};
+    const cleanOld = String(oldPassword || "");
+    const cleanNew = String(newPassword || "");
+
+    const rateKey = getAuthRateKey(req, `cp_${session.userId}`);
+    if (checkAuthRateLimited(rateKey)) {
+      return res.status(429).json({
+        success: false,
+        error: "Quá nhiều lần nhập sai mật khẩu hiện tại. Vui lòng thử lại sau ít phút.",
+      });
+    }
+
+    if (!cleanOld || cleanNew.length < 6 || cleanNew.length > 128) {
+      return res.status(400).json({
+        success: false,
+        error: "Mật khẩu mới phải từ 6 đến 128 ký tự.",
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await ensureSchema(pool);
+      await client.query("BEGIN");
+      const usersRes = await client.query<{ items: unknown }>(
+        `SELECT items FROM app_buckets WHERE bucket_key = 'users' FOR UPDATE`
+      );
+      const list: StaffLoginRecord[] = Array.isArray(usersRes.rows[0]?.items)
+        ? (usersRes.rows[0].items as StaffLoginRecord[])
+        : [];
+      const idx = list.findIndex((u) => u && u.id === session.userId);
+      if (idx < 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({
+          success: false,
+          error: "Không tìm thấy tài khoản trong cơ sở dữ liệu.",
+        });
+      }
+
+      const target = list[idx];
+      const expectedPass =
+        target.password ||
+        (target.id === "USR-ADMIN" || target.role === "Admin" ? "admin" : "123456");
+
+      if (!verifyPasswordConstantTime(cleanOld, expectedPass)) {
+        recordAuthFailure(rateKey);
+        await client.query("ROLLBACK");
+        return res.status(401).json({
+          success: false,
+          error: "Mật khẩu hiện tại không đúng.",
+        });
+      }
+
+      clearAuthFailures(rateKey);
+      const nextUsers = [...list];
+      nextUsers[idx] = {
+        ...target,
+        password: hashPasswordScrypt(cleanNew),
+        resetRequested: false,
+        resetRequestNote: undefined,
+      };
+      const nowMs = Date.now();
+      await client.query(
+        `UPDATE app_buckets
+         SET items = $1::jsonb, item_count = $2, updated_by_id = $3, updated_by_name = $4, updated_at_ms = $5, updated_at = NOW()
+         WHERE bucket_key = 'users'`,
+        [JSON.stringify(nextUsers), nextUsers.length, session.userId, session.name, nowMs]
+      );
+      await client.query("COMMIT");
+
+      broadcastPostgresChange(pool, {
+        type: "bucket",
+        key: "users",
+        updatedAtMs: nowMs,
+        actorId: session.userId,
+      });
+
+      return res.json({
+        success: true,
+        message: "Đổi mật khẩu thành công!",
+        updatedAtMs: nowMs,
+      });
+    } catch (err: any) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("[PostgresSync] change-password error:", err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Lỗi cập nhật mật khẩu.",
+      });
+    } finally {
+      client.release();
+    }
+  });
+
+  // 3C. Admin / RBAC Manager Reset Password (authenticated + RBAC checked)
+  app.post("/api/auth/reset-password", requirePgAuth, async (req: AuthedRequest, res) => {
+    const pool = getPool()!;
+    const session = req.pgSession!;
+    const { userId, newPassword } = req.body || {};
+    const targetId = String(userId || "").trim();
+    const cleanNew = String(newPassword || "");
+
+    if (!targetId || cleanNew.length < 6 || cleanNew.length > 128) {
+      return res.status(400).json({
+        success: false,
+        error: "Thiếu mã tài khoản hoặc mật khẩu mới không hợp lệ (tối thiểu 6 ký tự).",
+      });
+    }
+
+    const { actorAccess, rooms, matchedDbUser } = await resolveServerRbacContext(pool, session);
+    if (matchedDbUser?.status === "Inactive") {
+      return res.status(403).json({ success: false, error: "Tài khoản đã ngừng hoạt động." });
+    }
+    const canConfigureRBAC =
+      actorAccess.isSystemAdmin || canManageStaffTarget(actorAccess, "rbac", null, rooms);
+    if (!canConfigureRBAC) {
+      return res.status(403).json({
+        success: false,
+        error: "Bạn không có quyền cấp lại mật khẩu tài khoản.",
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await ensureSchema(pool);
+      await client.query("BEGIN");
+      const usersRes = await client.query<{ items: unknown }>(
+        `SELECT items FROM app_buckets WHERE bucket_key = 'users' FOR UPDATE`
+      );
+      const list: StaffLoginRecord[] = Array.isArray(usersRes.rows[0]?.items)
+        ? (usersRes.rows[0].items as StaffLoginRecord[])
+        : [];
+      const idx = list.findIndex((u) => u && u.id === targetId);
+      if (idx < 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({
+          success: false,
+          error: "Không tìm thấy tài khoản người dùng.",
+        });
+      }
+
+      const target = list[idx];
+      if (isAdminIdentity(target as unknown as User) && !actorAccess.isSystemAdmin) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          success: false,
+          error: "Chỉ Quản trị viên hệ thống (Admin) mới có quyền đổi mật khẩu tài khoản Admin.",
+        });
+      }
+
+      const nextUsers = [...list];
+      nextUsers[idx] = {
+        ...target,
+        password: hashPasswordScrypt(cleanNew),
+        resetRequested: false,
+        resetRequestNote: undefined,
+      };
+      const nowMs = Date.now();
+      await client.query(
+        `UPDATE app_buckets
+         SET items = $1::jsonb, item_count = $2, updated_by_id = $3, updated_by_name = $4, updated_at_ms = $5, updated_at = NOW()
+         WHERE bucket_key = 'users'`,
+        [JSON.stringify(nextUsers), nextUsers.length, session.userId, session.name, nowMs]
+      );
+      await client.query("COMMIT");
+
+      broadcastPostgresChange(pool, {
+        type: "bucket",
+        key: "users",
+        updatedAtMs: nowMs,
+        actorId: session.userId,
+      });
+
+      return res.json({
+        success: true,
+        message: `Đã đặt lại mật khẩu thành công cho tài khoản ${target.name}`,
+        updatedAtMs: nowMs,
+      });
+    } catch (err: any) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("[PostgresSync] reset-password error:", err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Lỗi đặt lại mật khẩu.",
+      });
+    } finally {
+      client.release();
+    }
+  });
+
+  // 3D. Password Reset Request (persists reset flag without disclosing user existence)
+  app.post("/api/auth/request-reset", async (req, res) => {
+    const pool = getPool();
+    if (!pool) {
+      return res.status(503).json({
+        success: false,
+        error: "EXTERNAL_DATABASE_URL chưa được cấu hình.",
+      });
+    }
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const note = String(req.body?.note || "Yêu cầu khôi phục mật khẩu từ trang đăng nhập")
+      .trim()
+      .slice(0, 200);
+    if (!email) {
+      return res.status(400).json({ success: false, error: "Vui lòng cung cấp email tài khoản." });
+    }
+
+    const rateKey = getAuthRateKey(req, `rr_${email}`);
+    if (checkAuthRateLimited(rateKey)) {
+      return res.status(429).json({
+        success: false,
+        error: "Quá nhiều yêu cầu. Vui lòng thử lại sau ít phút.",
+      });
+    }
+    recordAuthFailure(rateKey);
+
+    const client = await pool.connect();
+    try {
+      await ensureSchema(pool);
+      await client.query("BEGIN");
+      const usersRes = await client.query<{ items: unknown }>(
+        `SELECT items FROM app_buckets WHERE bucket_key = 'users' FOR UPDATE`
+      );
+      const list: StaffLoginRecord[] = Array.isArray(usersRes.rows[0]?.items)
+        ? (usersRes.rows[0].items as StaffLoginRecord[])
+        : [];
+      const idx = list.findIndex((u) => (u?.email || "").toLowerCase().trim() === email);
+      if (idx >= 0) {
+        const nextUsers = [...list];
+        nextUsers[idx] = {
+          ...nextUsers[idx],
+          resetRequested: true,
+          resetRequestNote: note,
+        };
+        const nowMs = Date.now();
+        await client.query(
+          `UPDATE app_buckets SET items = $1::jsonb, updated_at_ms = $2, updated_at = NOW() WHERE bucket_key = 'users'`,
+          [JSON.stringify(nextUsers), nowMs]
+        );
+        await client.query("COMMIT");
+        broadcastPostgresChange(pool, {
+          type: "bucket",
+          key: "users",
+          updatedAtMs: nowMs,
+          actorId: "RESET_REQ",
+        });
+      } else {
+        await client.query("ROLLBACK");
+      }
+      return res.json({
+        success: true,
+        message: "Đã gửi yêu cầu khôi phục mật khẩu tới Admin. Vui lòng liên hệ Quản trị viên để nhận mật khẩu mới.",
+      });
+    } catch (err: any) {
+      await client.query("ROLLBACK").catch(() => {});
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Không thể ghi nhận yêu cầu khôi phục mật khẩu.",
+      });
+    } finally {
+      client.release();
+    }
+  });
+
   // 4. Logout
   app.post("/api/auth/logout", (req, res) => {
-    const isHttps =
-      req.secure ||
-      req.headers["x-forwarded-proto"] === "https" ||
-      (process.env.APP_URL || "").startsWith("https://");
-    res.clearCookie(SESSION_COOKIE_NAME, {
-      httpOnly: true,
-      secure: isHttps,
-      sameSite: isHttps ? "none" : "lax",
-      path: "/",
-    });
+    clearSessionCookie(req, res);
     res.json({ success: true });
   });
 
-  // 5. Full State Pull (authenticated)
-  app.get("/api/db/state", requirePgAuth, async (_req: AuthedRequest, res) => {
+  // 5. Full State Pull (authenticated + scrubbed credentials & secrets)
+  app.get("/api/db/state", requirePgAuth, async (req: AuthedRequest, res) => {
     try {
       const pool = getPool()!;
       await ensureSchema(pool);
-      const [bucketsRes, archivesRes] = await Promise.all([
+      const session = req.pgSession!;
+      const [bucketsRes, archivesRes, viewerIsAdmin] = await Promise.all([
         pool.query<{
           bucket_key: string;
           items: Record<string, unknown>[];
@@ -1641,6 +2347,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
         }>(
           `SELECT archive_key, year, month_key, items, updated_at_ms::text FROM app_report_archives`
         ),
+        isSessionSystemAdmin(req),
       ]);
 
       const buckets: Record<
@@ -1650,7 +2357,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
       for (const row of bucketsRes.rows) {
         if (!ALLOWED_CLOUD_BUCKETS.has(row.bucket_key)) continue;
         buckets[row.bucket_key] = {
-          items: Array.isArray(row.items) ? row.items : [],
+          items: scrubBucketItemsForClient(row.bucket_key, row.items, viewerIsAdmin),
           updatedAtMs: Number(row.updated_at_ms || 0),
           updatedByName: row.updated_by_name,
         };
@@ -1669,6 +2376,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
         buckets,
         reportArchives,
         serverTimeMs: Date.now(),
+        actorId: session.userId,
       });
     } catch (err: any) {
       console.error("[PostgresSync] /api/db/state error:", err);
@@ -1679,14 +2387,14 @@ export function registerPostgresSyncRoutes(app: Express): void {
     }
   });
 
-  // 6. Incremental Changes Polling (authenticated)
+  // 6. Incremental Changes Polling (authenticated + scrubbed credentials & secrets)
   app.get("/api/db/changes", requirePgAuth, async (req: AuthedRequest, res) => {
     try {
       const pool = getPool()!;
       await ensureSchema(pool);
       const since = Math.max(0, Number(req.query.since || 0) || 0);
 
-      const [bucketsRes, archivesRes] = await Promise.all([
+      const [bucketsRes, archivesRes, viewerIsAdmin] = await Promise.all([
         pool.query<{
           bucket_key: string;
           items: Record<string, unknown>[];
@@ -1709,6 +2417,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
            WHERE updated_at_ms > $1`,
           [since]
         ),
+        isSessionSystemAdmin(req),
       ]);
 
       res.json({
@@ -1717,7 +2426,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
           .filter((r) => ALLOWED_CLOUD_BUCKETS.has(r.bucket_key))
           .map((r) => ({
             bucketKey: r.bucket_key,
-            items: Array.isArray(r.items) ? r.items : [],
+            items: scrubBucketItemsForClient(r.bucket_key, r.items, viewerIsAdmin),
             updatedAtMs: Number(r.updated_at_ms || 0),
           })),
         reportArchives: archivesRes.rows.map((r) => ({
@@ -1738,7 +2447,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
     }
   });
 
-  // 7. Upsert Single Bucket (authenticated)
+  // 7. Upsert Single Bucket (authenticated + RBAC + optimistic concurrency + credential preservation)
   app.put("/api/db/bucket/:bucketKey", requirePgAuth, async (req: AuthedRequest, res) => {
     try {
       const bucketKey = String(req.params.bucketKey || "").trim();
@@ -1749,7 +2458,8 @@ export function registerPostgresSyncRoutes(app: Express): void {
       const pool = getPool()!;
       await ensureSchema(pool);
       const session = req.pgSession!;
-      const safeItems = sanitizeBucketItems(req.body?.items);
+      const safeItems = sanitizeBucketItems(req.body?.items, bucketKey);
+      const expectedUpdatedAtMs = Number(req.body?.expectedUpdatedAtMs || 0) || 0;
 
       const rbacCheck = await enforceServerBucketRbac(pool, session, bucketKey, safeItems);
       if (rbacCheck.allowed === false) {
@@ -1759,34 +2469,87 @@ export function registerPostgresSyncRoutes(app: Express): void {
         });
       }
 
-      const nowMs = Date.now();
-      await pool.query(
-        `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
-         VALUES ($1, $2::jsonb, $3, $4, $5, $6, NOW())
-         ON CONFLICT (bucket_key)
-         DO UPDATE SET
-           items = EXCLUDED.items,
-           item_count = EXCLUDED.item_count,
-           updated_by_id = EXCLUDED.updated_by_id,
-           updated_by_name = EXCLUDED.updated_by_name,
-           updated_at_ms = EXCLUDED.updated_at_ms,
-           updated_at = NOW()`,
-        [bucketKey, JSON.stringify(safeItems), safeItems.length, session.userId, session.name, nowMs]
-      );
+      const { actorAccess } = await resolveServerRbacContext(pool, session);
+      const actorIsAdmin = Boolean(actorAccess.isSystemAdmin);
 
-      res.json({
-        success: true,
-        bucketKey,
-        itemCount: safeItems.length,
-        updatedAtMs: nowMs,
-      });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const existingRes = await client.query<{
+          items: Record<string, unknown>[];
+          updated_at_ms: string;
+        }>(
+          `SELECT items, updated_at_ms::text FROM app_buckets WHERE bucket_key = $1 FOR UPDATE`,
+          [bucketKey]
+        );
+        const existingRow = existingRes.rows[0];
+        const existingItems = Array.isArray(existingRow?.items) ? existingRow.items : [];
+        const existingUpdatedAtMs = Number(existingRow?.updated_at_ms || 0);
 
-      broadcastPostgresChange(pool, {
-        type: "bucket",
-        key: bucketKey,
-        updatedAtMs: nowMs,
-        actorId: session.userId,
-      });
+        let itemsToSave = reconcileSensitiveBucketOnSave(
+          bucketKey,
+          safeItems,
+          existingItems,
+          actorIsAdmin
+        );
+
+        if (
+          existingRow &&
+          expectedUpdatedAtMs > 0 &&
+          existingUpdatedAtMs > expectedUpdatedAtMs
+        ) {
+          if (APPEND_MERGE_BUCKETS.has(bucketKey)) {
+            itemsToSave = mergeAppendBucketItems(bucketKey, existingItems, itemsToSave);
+          } else {
+            await client.query("ROLLBACK");
+            return res.status(409).json({
+              success: false,
+              conflict: true,
+              error: `Dữ liệu "${bucketKey}" vừa được cán bộ khác cập nhật trước đó. Đã đồng bộ bản mới nhất từ máy chủ.`,
+              serverBucket: {
+                bucketKey,
+                items: scrubBucketItemsForClient(bucketKey, existingItems, actorIsAdmin),
+                updatedAtMs: existingUpdatedAtMs,
+              },
+            });
+          }
+        }
+
+        const nowMs = Date.now();
+        await client.query(
+          `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+           VALUES ($1, $2::jsonb, $3, $4, $5, $6, NOW())
+           ON CONFLICT (bucket_key)
+           DO UPDATE SET
+             items = EXCLUDED.items,
+             item_count = EXCLUDED.item_count,
+             updated_by_id = EXCLUDED.updated_by_id,
+             updated_by_name = EXCLUDED.updated_by_name,
+             updated_at_ms = EXCLUDED.updated_at_ms,
+             updated_at = NOW()`,
+          [bucketKey, JSON.stringify(itemsToSave), itemsToSave.length, session.userId, session.name, nowMs]
+        );
+        await client.query("COMMIT");
+
+        res.json({
+          success: true,
+          bucketKey,
+          itemCount: itemsToSave.length,
+          updatedAtMs: nowMs,
+        });
+
+        broadcastPostgresChange(pool, {
+          type: "bucket",
+          key: bucketKey,
+          updatedAtMs: nowMs,
+          actorId: session.userId,
+        });
+      } catch (txErr) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
     } catch (err: any) {
       console.error("[PostgresSync] PUT bucket error:", err);
       res.status(500).json({
@@ -1796,7 +2559,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
     }
   });
 
-  // 8. Upsert Single Report Archive Month (authenticated)
+  // 8. Upsert Single Report Archive Month (authenticated + optimistic concurrency)
   app.put("/api/db/report-archive/:archiveKey", requirePgAuth, async (req: AuthedRequest, res) => {
     try {
       const archiveKey = String(req.params.archiveKey || "").trim();
@@ -1807,6 +2570,8 @@ export function registerPostgresSyncRoutes(app: Express): void {
       const year = Number(req.body?.year);
       const monthKey = String(req.body?.monthKey || "").trim().slice(0, 24);
       const safeItems = Array.isArray(req.body?.items) ? req.body.items.slice(0, 500) : [];
+      const expectedUpdatedAtMs = Number(req.body?.expectedUpdatedAtMs || 0) || 0;
+      const forceOverwrite = Boolean(req.body?.forceOverwrite);
       if (!Number.isInteger(year) || year < 1900 || year > 2100 || !monthKey) {
         return res.status(400).json({ success: false, error: "Thông tin năm/tháng báo cáo không hợp lệ." });
       }
@@ -1814,35 +2579,75 @@ export function registerPostgresSyncRoutes(app: Express): void {
       const pool = getPool()!;
       await ensureSchema(pool);
       const session = req.pgSession!;
-      const nowMs = Date.now();
 
-      await pool.query(
-        `INSERT INTO app_report_archives (archive_key, year, month_key, items, updated_by_id, updated_by_name, updated_at_ms, updated_at)
-         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, NOW())
-         ON CONFLICT (archive_key)
-         DO UPDATE SET
-           year = EXCLUDED.year,
-           month_key = EXCLUDED.month_key,
-           items = EXCLUDED.items,
-           updated_by_id = EXCLUDED.updated_by_id,
-           updated_by_name = EXCLUDED.updated_by_name,
-           updated_at_ms = EXCLUDED.updated_at_ms,
-           updated_at = NOW()`,
-        [archiveKey, year, monthKey, JSON.stringify(safeItems), session.userId, session.name, nowMs]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const existingRes = await client.query<{
+          items: unknown[];
+          updated_at_ms: string;
+        }>(
+          `SELECT items, updated_at_ms::text FROM app_report_archives WHERE archive_key = $1 FOR UPDATE`,
+          [archiveKey]
+        );
+        const existingRow = existingRes.rows[0];
+        const existingUpdatedAtMs = Number(existingRow?.updated_at_ms || 0);
+        if (
+          existingRow &&
+          !forceOverwrite &&
+          expectedUpdatedAtMs > 0 &&
+          existingUpdatedAtMs > expectedUpdatedAtMs
+        ) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            success: false,
+            conflict: true,
+            error: `Kho báo cáo tháng "${archiveKey}" vừa được cập nhật ở nơi khác. Đã tải bản mới nhất.`,
+            serverArchive: {
+              archiveKey,
+              year,
+              monthKey,
+              items: Array.isArray(existingRow.items) ? existingRow.items : [],
+              updatedAtMs: existingUpdatedAtMs,
+            },
+          });
+        }
 
-      res.json({
-        success: true,
-        archiveKey,
-        updatedAtMs: nowMs,
-      });
+        const nowMs = Date.now();
+        await client.query(
+          `INSERT INTO app_report_archives (archive_key, year, month_key, items, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+           VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, NOW())
+           ON CONFLICT (archive_key)
+           DO UPDATE SET
+             year = EXCLUDED.year,
+             month_key = EXCLUDED.month_key,
+             items = EXCLUDED.items,
+             updated_by_id = EXCLUDED.updated_by_id,
+             updated_by_name = EXCLUDED.updated_by_name,
+             updated_at_ms = EXCLUDED.updated_at_ms,
+             updated_at = NOW()`,
+          [archiveKey, year, monthKey, JSON.stringify(safeItems), session.userId, session.name, nowMs]
+        );
+        await client.query("COMMIT");
 
-      broadcastPostgresChange(pool, {
-        type: "report_archive",
-        key: archiveKey,
-        updatedAtMs: nowMs,
-        actorId: session.userId,
-      });
+        res.json({
+          success: true,
+          archiveKey,
+          updatedAtMs: nowMs,
+        });
+
+        broadcastPostgresChange(pool, {
+          type: "report_archive",
+          key: archiveKey,
+          updatedAtMs: nowMs,
+          actorId: session.userId,
+        });
+      } catch (txErr) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
     } catch (err: any) {
       console.error("[PostgresSync] PUT report archive error:", err);
       res.status(500).json({
@@ -1882,9 +2687,26 @@ export function registerPostgresSyncRoutes(app: Express): void {
       try {
         await client.query("BEGIN");
 
+        const existingRowsRes = await client.query<{
+          bucket_key: string;
+          items: Record<string, unknown>[];
+        }>(`SELECT bucket_key, items FROM app_buckets WHERE bucket_key = ANY($1::text[]) FOR UPDATE`, [
+          ["users", "settings"],
+        ]);
+        const existingSensitiveMap = new Map<string, Record<string, unknown>[]>();
+        for (const r of existingRowsRes.rows) {
+          existingSensitiveMap.set(r.bucket_key, Array.isArray(r.items) ? r.items : []);
+        }
+
         for (const [bucketKey, rawItems] of Object.entries(rawBuckets)) {
           if (!ALLOWED_CLOUD_BUCKETS.has(bucketKey)) continue;
-          const safeItems = sanitizeBucketItems(rawItems);
+          const sanitized = sanitizeBucketItems(rawItems, bucketKey);
+          const safeItems = reconcileSensitiveBucketOnSave(
+            bucketKey,
+            sanitized,
+            existingSensitiveMap.get(bucketKey) || [],
+            true
+          );
           await client.query(
             `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
              VALUES ($1, $2::jsonb, $3, $4, $5, $6, NOW())
@@ -2417,6 +3239,20 @@ export async function mergeSheetConfigIntoSettingsDbIfMissing(
 
 const inMemoryDailyAlertClaims = new Set<string>();
 
+function pruneInMemoryDailyAlertClaims(currentDateVN: string): void {
+  const dateSegment = `_${currentDateVN}`;
+  for (const k of inMemoryDailyAlertClaims) {
+    if (!k.includes(dateSegment)) {
+      inMemoryDailyAlertClaims.delete(k);
+    }
+  }
+  while (inMemoryDailyAlertClaims.size > 100) {
+    const oldest = inMemoryDailyAlertClaims.values().next().value;
+    if (oldest === undefined) break;
+    inMemoryDailyAlertClaims.delete(oldest);
+  }
+}
+
 function buildDailyAlertLockKey(ruleId: string, dateVN: string, timeHHmm?: string): string {
   const timeSuffix = timeHHmm ? `_${String(timeHHmm).replace(/[^0-9]/g, "")}` : "";
   return `scheduled_alert_lock_${ruleId}_${dateVN}${timeSuffix}`;
@@ -2428,6 +3264,7 @@ export async function tryClaimDailyAlertLock(
   timeHHmm: string,
   hostLabel: string
 ): Promise<boolean> {
+  pruneInMemoryDailyAlertClaims(dateVN);
   const lockKey = buildDailyAlertLockKey(ruleId, dateVN, timeHHmm);
   const legacyKey = buildDailyAlertLockKey(ruleId, dateVN);
   const pool = getPool();

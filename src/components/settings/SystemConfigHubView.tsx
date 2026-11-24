@@ -198,7 +198,7 @@ export const SystemConfigHubView: React.FC<SystemConfigHubViewProps> = ({
 
       {/* Active Configuration Sub-Module Content */}
       <div>
-        {activeTab === 'integration' && <IntegrationHubView />}
+        {activeTab === 'integration' && <IntegrationHubView onShowToast={onShowToast} />}
 
         {activeTab === 'notifications' && (
           <NotificationCenterView

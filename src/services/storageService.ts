@@ -328,6 +328,7 @@ class HospitalStorageService {
           Object.values(s.reportGoogleSheetsByYear).some((cfg) => Boolean(cfg?.sheetId || cfg?.url));
         return (
           !(s.telegramBotToken || '').trim() &&
+          !s.hasTelegramBotToken &&
           !(s.defaultTelegramChatId || '').trim() &&
           !(s.googleDriveFolderId || '').trim() &&
           !(s.googleSheetUrl || '').trim() &&
@@ -407,9 +408,9 @@ class HospitalStorageService {
         });
       }
       if (bucketKey === 'audit_logs') {
-        return parsed.slice(0, 50);
+        return parsed.slice(0, 250);
       }
-      return parsed.slice(0, 1000);
+      return parsed.slice(0, 2000);
     }
 
     return [];
@@ -1214,6 +1215,26 @@ class HospitalStorageService {
     const logs = this.getAuditLogs();
     const sanitizedOld = oldData ? this.sanitizeForAudit(oldData) : undefined;
     const sanitizedNew = newData ? this.sanitizeForAudit(newData) : undefined;
+    const browserHost = typeof window !== 'undefined' && window.location.hostname
+      ? window.location.hostname
+      : 'Phiên trình duyệt';
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const deviceLabel = /Edg\//.test(ua)
+      ? 'Microsoft Edge'
+      : /Firefox\//.test(ua)
+        ? 'Firefox'
+        : /Safari\//.test(ua) && !/Chrome\//.test(ua)
+          ? 'Safari'
+          : 'Chrome / Chromium';
+    const osLabel = /Mac OS X/.test(ua)
+      ? 'macOS'
+      : /Android/.test(ua)
+        ? 'Android'
+        : /iPhone|iPad/.test(ua)
+          ? 'iOS'
+          : /Linux/.test(ua)
+            ? 'Linux'
+            : 'Windows';
     const newLog: AuditLogItem = {
       id: this.nextUniqueId('LOG'),
       userEmail: this.currentUser.email,
@@ -1222,13 +1243,13 @@ class HospitalStorageService {
       action,
       module,
       timestamp: new Date().toLocaleString('sv-SE').replace('T', ' '),
-      ipAddress: '118.69.182.45',
-      device: navigator.userAgent.includes('Mac') ? 'Safari (macOS)' : 'Chrome (Windows 11)',
+      ipAddress: `Trình duyệt (${browserHost})`,
+      device: `${deviceLabel} (${osLabel})`,
       oldData: sanitizedOld ? JSON.stringify(sanitizedOld) : undefined,
       newData: sanitizedNew ? JSON.stringify(sanitizedNew) : undefined
     };
     logs.unshift(newLog);
-    this.safeSetItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(logs.slice(0, 50)));
+    this.safeSetItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(logs.slice(0, 250)));
     this.notify();
   }
 
@@ -1714,7 +1735,11 @@ class HospitalStorageService {
     if (this.currentUser.id === userId) {
       this.currentUser = users[idx];
     }
-    this.logAudit('ADMIN_RESET_PASSWORD', 'User', undefined, { userId, newPassword });
+    this.logAudit('ADMIN_RESET_PASSWORD', 'User', undefined, {
+      userId,
+      targetName: users[idx].name,
+      reset: true
+    });
     this.notify();
     return { success: true, message: `Đã đặt lại mật khẩu thành công cho tài khoản ${users[idx].name}` };
   }

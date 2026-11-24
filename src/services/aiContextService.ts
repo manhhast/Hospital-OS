@@ -1,4 +1,5 @@
 import { storageService } from './storageService';
+import { postgresSyncService } from './postgresSyncService';
 import type { AssistantMemoryItem } from '../types/hospital';
 import {
   getKnownReportYears,
@@ -899,12 +900,16 @@ let lastSyncPayloadHash = '';
 
 export async function syncLiveContextToServer(force = false): Promise<boolean> {
   if (typeof window === 'undefined') return false;
+  if (postgresSyncService.isActiveBackend() && !postgresSyncService.isAuthenticatedSession()) {
+    return false;
+  }
   try {
     const liveContext = buildLiveHospitalContext();
     const settings = storageService.getSettings();
     const botToken = (settings.telegramBotToken || '').trim();
     const defaultChatId = (settings.defaultTelegramChatId || '').trim();
-    const enabled = settings.telegramQaEnabled !== false && botToken.length > 10;
+    const hasConfiguredToken = botToken.length > 10 || Boolean(settings.hasTelegramBotToken);
+    const enabled = settings.telegramQaEnabled !== false && hasConfiguredToken;
 
     const payload = {
       liveContext,
@@ -930,7 +935,11 @@ export async function syncLiveContextToServer(force = false): Promise<boolean> {
       mem: (liveContext.assistantMemory?.memories || []).map(m => m.id).join(','),
       web: liveContext.assistantMemory?.webSearchEnabled !== false,
       gs: `${settings.reportSheetYear || ''}:${settings.googleSheetUrl || ''}:${settings.reportGoogleSheetId || ''}:${Object.entries(settings.reportGoogleSheetsByYear || {}).map(([y, c]) => `${y}=${c?.sheetId || c?.url || ''}`).join(',')}`,
-      tg: botToken ? `${botToken.slice(-6)}_${enabled}_${defaultChatId}` : 'none'
+      tg: botToken
+        ? `${botToken.slice(-6)}_${enabled}_${defaultChatId}`
+        : settings.hasTelegramBotToken
+        ? `server_${enabled}_${defaultChatId}`
+        : 'none'
     });
 
     if (!force && quickSignature === lastSyncPayloadHash) {
@@ -939,7 +948,8 @@ export async function syncLiveContextToServer(force = false): Promise<boolean> {
 
     const res = await fetch('/api/assistant/sync-context', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify(payload)
     });
 

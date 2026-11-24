@@ -11,7 +11,7 @@ import {
   PieChart as RePieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from 'recharts';
 import { storageService } from '../../services/storageService';
-import * as XLSX from 'xlsx';
+import { exportObjectsToXlsxFile } from '../../utils/excelWorkbook';
 import { PinnedIndicatorsPanel } from './PinnedIndicatorsPanel';
 import { ContextualBenchmarkingModal } from './ContextualBenchmarkingModal';
 import { FastPinManagerModal } from './FastPinManagerModal';
@@ -2770,227 +2770,238 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     { month: 'Tháng 7', cost: 14.0, repairs: 1 },
   ];
 
-  const handleExportExcel = () => {
-    const wb = XLSX.utils.book_new();
+  const handleExportExcel = async () => {
+    try {
+      if (sheetTab === 'Báo cáo ngày') {
+        const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
+        const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
 
-    if (sheetTab === 'Báo cáo ngày') {
-      const monthItems = monthlyDataStore[selectedReportMonth] || (selectedReportMonth === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
-      const activeDays = getActiveWorkDaysForMonth(selectedReportMonth, monthItems);
+        const dailyRows = monthItems.map(item => {
+          const dayData = item.dailyData[selectedReportDay] || { bh: 0, nd: 0 };
+          const bhVal = dayData.bh === 'LT' ? 'LT' : (typeof dayData.bh === 'number' ? dayData.bh : 0);
+          const ndVal = dayData.nd === 'LT' ? 'LT' : (typeof dayData.nd === 'number' ? dayData.nd : 0);
+          const bhNum = typeof bhVal === 'number' ? bhVal : 0;
+          const ndNum = typeof ndVal === 'number' ? ndVal : 0;
+          const totalDay = bhNum + ndNum;
+          const monthTotal = getRowTotal(item);
+          const avgPerDay = activeDays > 0 ? (monthTotal / activeDays) : 0;
+          const diffVsAvg = totalDay - avgPerDay;
 
-      const dailyRows = monthItems.map(item => {
-        const dayData = item.dailyData[selectedReportDay] || { bh: 0, nd: 0 };
-        const bhVal = dayData.bh === 'LT' ? 'LT' : (typeof dayData.bh === 'number' ? dayData.bh : 0);
-        const ndVal = dayData.nd === 'LT' ? 'LT' : (typeof dayData.nd === 'number' ? dayData.nd : 0);
-        const bhNum = typeof bhVal === 'number' ? bhVal : 0;
-        const ndNum = typeof ndVal === 'number' ? ndVal : 0;
-        const totalDay = bhNum + ndNum;
-        const monthTotal = getRowTotal(item);
-        const avgPerDay = activeDays > 0 ? (monthTotal / activeDays) : 0;
-        const diffVsAvg = totalDay - avgPerDay;
+          return {
+            'Bộ Phận / Danh Mục': item.category,
+            'Dịch Vụ': item.name,
+            'Số Ca BH (BHYT)': bhVal,
+            'Số Ca ND (Nhân Dân)': ndVal,
+            'Tổng Ca Trong Ngày': totalDay,
+            'TB/Ngày Trong Tháng': Number(avgPerDay.toFixed(1)),
+            'Chênh Lệch So Vốn TB': Number(diffVsAvg.toFixed(1))
+          };
+        });
 
-        return {
-          'Bộ Phận / Danh Mục': item.category,
-          'Dịch Vụ': item.name,
-          'Số Ca BH (BHYT)': bhVal,
-          'Số Ca ND (Nhân Dân)': ndVal,
-          'Tổng Ca Trong Ngày': totalDay,
-          'TB/Ngày Trong Tháng': Number(avgPerDay.toFixed(1)),
-          'Chênh Lệch So Vốn TB': Number(diffVsAvg.toFixed(1))
+        await exportObjectsToXlsxFile(dailyRows, {
+          sheetName: `Ngày ${selectedReportDay} ${selectedReportMonth}`,
+          fileName: `Bao_Cao_Ngay_${selectedReportDay}_${selectedReportMonth.replace(/\s+/g, '_')}_${selectedYear}.xlsx`
+        });
+      } else if (sheetTab === 'Báo cáo tuần') {
+        const currWeekInfo = getWeekDateRange(selectedReportWeek, selectedYear);
+        const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1, selectedYear) : null;
+
+        const weekDates: Date[] = [];
+        let curDate = new Date(currWeekInfo.startDate);
+        while (curDate <= currWeekInfo.endDate) {
+          weekDates.push(new Date(curDate));
+          curDate.setDate(curDate.getDate() + 1);
+        }
+
+        const prevWeekDates: Date[] = [];
+        if (prevWeekInfo) {
+          let pCur = new Date(prevWeekInfo.startDate);
+          while (pCur <= prevWeekInfo.endDate) {
+            prevWeekDates.push(new Date(pCur));
+            pCur.setDate(pCur.getDate() + 1);
+          }
+        }
+
+        const weeklyRows = caseReports.map(item => {
+          let itemWeekBH = 0;
+          let itemWeekND = 0;
+          for (const date of weekDates) {
+            const mNum = date.getMonth() + 1;
+            const mKey = `Tháng ${mNum}`;
+            const dayNum = date.getDate();
+            const monthItems = monthlyDataStore[mKey] || (mKey === selectedReportMonth ? caseReports : []);
+            const foundItem = monthItems.find(i => i.id === item.id || i.name === item.name);
+            if (foundItem && foundItem.dailyData && foundItem.dailyData[dayNum]) {
+              const dData = foundItem.dailyData[dayNum];
+              if (typeof dData.bh === 'number') itemWeekBH += dData.bh;
+              if (typeof dData.nd === 'number') itemWeekND += dData.nd;
+            }
+          }
+
+          let itemPrevWeekTotal = 0;
+          for (const pDate of prevWeekDates) {
+            const mNum = pDate.getMonth() + 1;
+            const mKey = `Tháng ${mNum}`;
+            const dayNum = pDate.getDate();
+            const monthItems = monthlyDataStore[mKey] || (mKey === selectedReportMonth ? caseReports : []);
+            const foundItem = monthItems.find(i => i.id === item.id || i.name === item.name);
+            if (foundItem && foundItem.dailyData && foundItem.dailyData[dayNum]) {
+              const dData = foundItem.dailyData[dayNum];
+              const bh = typeof dData.bh === 'number' ? dData.bh : 0;
+              const nd = typeof dData.nd === 'number' ? dData.nd : 0;
+              itemPrevWeekTotal += bh + nd;
+            }
+          }
+
+          const itemWeekTotal = itemWeekBH + itemWeekND;
+          const avgPerDayInWeek = weekDates.length > 0 ? (itemWeekTotal / weekDates.length) : 0;
+          const weekDiffPct = itemPrevWeekTotal > 0 ? (((itemWeekTotal - itemPrevWeekTotal) / itemPrevWeekTotal) * 100).toFixed(1) + '%' : '-';
+
+          return {
+            'Bộ Phận / Danh Mục': item.category,
+            'Dịch Vụ': item.name,
+            'Số Ca BH (Tuần)': itemWeekBH,
+            'Số Ca ND (Tuần)': itemWeekND,
+            'Tổng Ca Tuần': itemWeekTotal,
+            'TB/Ngày Trong Tuần': Number(avgPerDayInWeek.toFixed(1)),
+            'Tổng Tuần Trước': itemPrevWeekTotal,
+            'Tăng Trưởng So Tuần Trước': weekDiffPct
+          };
+        });
+
+        await exportObjectsToXlsxFile(weeklyRows, {
+          sheetName: `Tuần ${selectedReportWeek}`,
+          fileName: `Bao_Cao_Tuan_${selectedReportWeek}_${selectedYear}.xlsx`
+        });
+      } else if (sheetTab === 'Báo cáo năm') {
+        const allMonths = ALL_MONTHS;
+        const storedMonths = allMonths.filter(m => monthlyDataStore[m] && monthlyDataStore[m].length > 0);
+        const actualMonths = storedMonths.length > 0 ? storedMonths : ['Tháng 2'];
+        const actualMonthsSet = new Set(actualMonths);
+        const seasonalFactors: { [m: string]: number } = {
+          'Tháng 1': 0.98, 'Tháng 2': 0.95, 'Tháng 3': 1.0,
+          'Tháng 4': 1.05, 'Tháng 5': 1.08, 'Tháng 6': 1.10, 'Tháng 7': 1.06,
+          'Tháng 8': 1.04, 'Tháng 9': 1.07, 'Tháng 10': 1.09, 'Tháng 11': 1.05, 'Tháng 12': 1.02
         };
-      });
 
-      const ws = XLSX.utils.json_to_sheet(dailyRows);
-      XLSX.utils.book_append_sheet(wb, ws, `Ngày ${selectedReportDay} ${selectedReportMonth}`);
-      XLSX.writeFile(wb, `Bao_Cao_Ngay_${selectedReportDay}_${selectedReportMonth.replace(/\s+/g, '_')}_${selectedYear}.xlsx`);
+        const serviceMap = new Map<string, { category: string; name: string }>();
+        const allSourceItems = [
+          ...allMonths.flatMap(m => monthlyDataStore[m] || []),
+          ...caseReports
+        ];
+        allSourceItems.forEach(item => {
+          if (!isValidServiceName(item.name)) return;
+          const cat = item.category ? item.category.trim() : 'Siêu Âm';
+          const name = item.name.trim();
+          const key = `${cat}___${name}`;
+          if (!serviceMap.has(key)) {
+            serviceMap.set(key, { category: cat, name });
+          }
+        });
+        const masterServices = Array.from(serviceMap.values());
 
-    } else if (sheetTab === 'Báo cáo tuần') {
-      const currWeekInfo = getWeekDateRange(selectedReportWeek, selectedYear);
-      const prevWeekInfo = selectedReportWeek > 1 ? getWeekDateRange(selectedReportWeek - 1, selectedYear) : null;
+        const displayedMonths = annualViewMode === 'actual_only'
+          ? actualMonths
+          : allMonths;
 
-      const weekDates: Date[] = [];
-      let curDate = new Date(currWeekInfo.startDate);
-      while (curDate <= currWeekInfo.endDate) {
-        weekDates.push(new Date(curDate));
-        curDate.setDate(curDate.getDate() + 1);
+        const annualRows = masterServices.map((srv, idx) => {
+          let actualSum = 0;
+          let actualMonthCount = 0;
+          const monthlyValues: { [m: string]: number } = {};
+
+          actualMonths.forEach(m => {
+            if (monthlyDataStore[m]) {
+              const storeForM = monthlyDataStore[m];
+              const matchedItem = storeForM.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
+              const val = matchedItem ? getRowTotal(matchedItem) : 0;
+              monthlyValues[m] = val;
+              actualSum += val;
+              actualMonthCount++;
+            } else if (m === 'Tháng 2' && selectedYear === 2026 && caseReports.length > 0) {
+              const matchedItem = caseReports.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
+              const val = matchedItem ? getRowTotal(matchedItem) : 0;
+              monthlyValues[m] = val;
+              actualSum += val;
+              actualMonthCount++;
+            } else {
+              monthlyValues[m] = 0;
+            }
+          });
+
+          const actualAvgPerMonth = actualMonthCount > 0 ? actualSum / actualMonthCount : 0;
+          let projectedSum = 0;
+          allMonths.forEach(m => {
+            if (actualMonthsSet.has(m)) return;
+            const factor = seasonalFactors[m] || 1.0;
+            const projVal = Math.round(actualAvgPerMonth * factor);
+            monthlyValues[m] = projVal;
+            projectedSum += projVal;
+          });
+
+          const fullYearTotal = actualSum + projectedSum;
+
+          const row: any = {
+            'STT': idx + 1,
+            'Bộ Phận / Danh Mục': srv.category,
+            'Kỹ Thuật / Dịch Vụ': srv.name,
+          };
+
+          displayedMonths.forEach(m => {
+            row[m] = monthlyValues[m] || 0;
+          });
+
+          row[`Tổng ${actualMonths.length} Tháng Thực Tế`] = actualSum;
+          if (annualViewMode === 'full') {
+            row[`Dự Báo Cả Năm ${selectedYear}`] = fullYearTotal;
+            row['TB / Tháng'] = Math.round(fullYearTotal / 12);
+          }
+
+          return row;
+        });
+
+        await exportObjectsToXlsxFile(annualRows, {
+          sheetName: `Báo Cáo Năm ${selectedYear}`,
+          fileName: `Bao_Cao_Nam_${selectedYear}_${annualViewMode}.xlsx`
+        });
+      } else {
+        // Monthly matrix tab (e.g., Tháng 1 .. Tháng 12)
+        const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
+        const maxDays = getDaysInMonth(sheetTab, selectedYear);
+
+        const matrixRows = targetMonthItems.map(item => {
+          const row: any = {
+            'Bộ Phận / Danh Mục': item.category,
+            'Dịch Vụ': item.name,
+            'Tổng Ca BH': getRowTotal(item, 'bh'),
+            'Tổng Ca ND': getRowTotal(item, 'nd'),
+            'Tổng Cộng Tháng': getRowTotal(item),
+          };
+          for (let day = 1; day <= maxDays; day++) {
+            row[`N${day}_BH`] = item.dailyData[day]?.bh ?? 0;
+            row[`N${day}_ND`] = item.dailyData[day]?.nd ?? 0;
+          }
+          return row;
+        });
+
+        await exportObjectsToXlsxFile(matrixRows, {
+          sheetName: sheetTab,
+          fileName: `Bao_Cao_${sheetTab.replace(/\s+/g, '_')}_${selectedYear}.xlsx`
+        });
       }
-
-      const prevWeekDates: Date[] = [];
-      if (prevWeekInfo) {
-        let pCur = new Date(prevWeekInfo.startDate);
-        while (pCur <= prevWeekInfo.endDate) {
-          prevWeekDates.push(new Date(pCur));
-          pCur.setDate(pCur.getDate() + 1);
-        }
-      }
-
-      const weeklyRows = caseReports.map(item => {
-        let itemWeekBH = 0;
-        let itemWeekND = 0;
-        for (const date of weekDates) {
-          const mNum = date.getMonth() + 1;
-          const mKey = `Tháng ${mNum}`;
-          const dayNum = date.getDate();
-          const monthItems = monthlyDataStore[mKey] || (mKey === selectedReportMonth ? caseReports : []);
-          const foundItem = monthItems.find(i => i.id === item.id || i.name === item.name);
-          if (foundItem && foundItem.dailyData && foundItem.dailyData[dayNum]) {
-            const dData = foundItem.dailyData[dayNum];
-            if (typeof dData.bh === 'number') itemWeekBH += dData.bh;
-            if (typeof dData.nd === 'number') itemWeekND += dData.nd;
-          }
-        }
-
-        let itemPrevWeekTotal = 0;
-        for (const pDate of prevWeekDates) {
-          const mNum = pDate.getMonth() + 1;
-          const mKey = `Tháng ${mNum}`;
-          const dayNum = pDate.getDate();
-          const monthItems = monthlyDataStore[mKey] || (mKey === selectedReportMonth ? caseReports : []);
-          const foundItem = monthItems.find(i => i.id === item.id || i.name === item.name);
-          if (foundItem && foundItem.dailyData && foundItem.dailyData[dayNum]) {
-            const dData = foundItem.dailyData[dayNum];
-            const bh = typeof dData.bh === 'number' ? dData.bh : 0;
-            const nd = typeof dData.nd === 'number' ? dData.nd : 0;
-            itemPrevWeekTotal += bh + nd;
-          }
-        }
-
-        const itemWeekTotal = itemWeekBH + itemWeekND;
-        const avgPerDayInWeek = weekDates.length > 0 ? (itemWeekTotal / weekDates.length) : 0;
-        const weekDiffPct = itemPrevWeekTotal > 0 ? (((itemWeekTotal - itemPrevWeekTotal) / itemPrevWeekTotal) * 100).toFixed(1) + '%' : '-';
-
-        return {
-          'Bộ Phận / Danh Mục': item.category,
-          'Dịch Vụ': item.name,
-          'Số Ca BH (Tuần)': itemWeekBH,
-          'Số Ca ND (Tuần)': itemWeekND,
-          'Tổng Ca Tuần': itemWeekTotal,
-          'TB/Ngày Trong Tuần': Number(avgPerDayInWeek.toFixed(1)),
-          'Tổng Tuần Trước': itemPrevWeekTotal,
-          'Tăng Trưởng So Tuần Trước': weekDiffPct
-        };
-      });
-
-      const ws = XLSX.utils.json_to_sheet(weeklyRows);
-      XLSX.utils.book_append_sheet(wb, ws, `Tuần ${selectedReportWeek}`);
-      XLSX.writeFile(wb, `Bao_Cao_Tuan_${selectedReportWeek}_${selectedYear}.xlsx`);
-
-    } else if (sheetTab === 'Báo cáo năm') {
-      const allMonths = ALL_MONTHS;
-      const storedMonths = allMonths.filter(m => monthlyDataStore[m] && monthlyDataStore[m].length > 0);
-      const actualMonths = storedMonths.length > 0 ? storedMonths : ['Tháng 2'];
-      const actualMonthsSet = new Set(actualMonths);
-      const seasonalFactors: { [m: string]: number } = {
-        'Tháng 1': 0.98, 'Tháng 2': 0.95, 'Tháng 3': 1.0,
-        'Tháng 4': 1.05, 'Tháng 5': 1.08, 'Tháng 6': 1.10, 'Tháng 7': 1.06,
-        'Tháng 8': 1.04, 'Tháng 9': 1.07, 'Tháng 10': 1.09, 'Tháng 11': 1.05, 'Tháng 12': 1.02
-      };
-
-      const serviceMap = new Map<string, { category: string; name: string }>();
-      const allSourceItems = [
-        ...allMonths.flatMap(m => monthlyDataStore[m] || []),
-        ...caseReports
-      ];
-      allSourceItems.forEach(item => {
-        if (!isValidServiceName(item.name)) return;
-        const cat = item.category ? item.category.trim() : 'Siêu Âm';
-        const name = item.name.trim();
-        const key = `${cat}___${name}`;
-        if (!serviceMap.has(key)) {
-          serviceMap.set(key, { category: cat, name });
-        }
-      });
-      const masterServices = Array.from(serviceMap.values());
-
-      const displayedMonths = annualViewMode === 'actual_only'
-        ? actualMonths
-        : allMonths;
-
-      const annualRows = masterServices.map((srv, idx) => {
-        let actualSum = 0;
-        let actualMonthCount = 0;
-        const monthlyValues: { [m: string]: number } = {};
-
-        actualMonths.forEach(m => {
-          if (monthlyDataStore[m]) {
-            const storeForM = monthlyDataStore[m];
-            const matchedItem = storeForM.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
-            const val = matchedItem ? getRowTotal(matchedItem) : 0;
-            monthlyValues[m] = val;
-            actualSum += val;
-            actualMonthCount++;
-          } else if (m === 'Tháng 2' && selectedYear === 2026 && caseReports.length > 0) {
-            const matchedItem = caseReports.find(i => i.name.trim().toLowerCase() === srv.name.toLowerCase() && i.category.trim().toLowerCase() === srv.category.toLowerCase());
-            const val = matchedItem ? getRowTotal(matchedItem) : 0;
-            monthlyValues[m] = val;
-            actualSum += val;
-            actualMonthCount++;
-          } else {
-            monthlyValues[m] = 0;
-          }
-        });
-
-        const actualAvgPerMonth = actualMonthCount > 0 ? actualSum / actualMonthCount : 0;
-        let projectedSum = 0;
-        allMonths.forEach(m => {
-          if (actualMonthsSet.has(m)) return;
-          const factor = seasonalFactors[m] || 1.0;
-          const projVal = Math.round(actualAvgPerMonth * factor);
-          monthlyValues[m] = projVal;
-          projectedSum += projVal;
-        });
-
-        const fullYearTotal = actualSum + projectedSum;
-
-        const row: any = {
-          'STT': idx + 1,
-          'Bộ Phận / Danh Mục': srv.category,
-          'Kỹ Thuật / Dịch Vụ': srv.name,
-        };
-
-        displayedMonths.forEach(m => {
-          row[m] = monthlyValues[m] || 0;
-        });
-
-        row[`Tổng ${actualMonths.length} Tháng Thực Tế`] = actualSum;
-        if (annualViewMode === 'full') {
-          row[`Dự Báo Cả Năm ${selectedYear}`] = fullYearTotal;
-          row['TB / Tháng'] = Math.round(fullYearTotal / 12);
-        }
-
-        return row;
-      });
-
-      const ws = XLSX.utils.json_to_sheet(annualRows);
-      XLSX.utils.book_append_sheet(wb, ws, `Báo Cáo Năm ${selectedYear}`);
-      XLSX.writeFile(wb, `Bao_Cao_Nam_${selectedYear}_${annualViewMode}.xlsx`);
-
-    } else {
-      // Monthly matrix tab (e.g., Tháng 1 .. Tháng 12)
-      const targetMonthItems = monthlyDataStore[sheetTab] || (sheetTab === 'Tháng 2' && selectedYear === 2026 ? caseReports : []);
-      const maxDays = getDaysInMonth(sheetTab, selectedYear);
-      
-      const matrixRows = targetMonthItems.map(item => {
-        const row: any = {
-          'Bộ Phận / Danh Mục': item.category,
-          'Dịch Vụ': item.name,
-          'Tổng Ca BH': getRowTotal(item, 'bh'),
-          'Tổng Ca ND': getRowTotal(item, 'nd'),
-          'Tổng Cộng Tháng': getRowTotal(item),
-        };
-        for (let day = 1; day <= maxDays; day++) {
-          row[`N${day}_BH`] = item.dailyData[day]?.bh ?? 0;
-          row[`N${day}_ND`] = item.dailyData[day]?.nd ?? 0;
-        }
-        return row;
-      });
-
-      const ws = XLSX.utils.json_to_sheet(matrixRows);
-      XLSX.utils.book_append_sheet(wb, ws, sheetTab);
-      XLSX.writeFile(wb, `Bao_Cao_${sheetTab.replace(/\s+/g, '_')}_${selectedYear}.xlsx`);
+    } catch (err) {
+      console.error('Lỗi xuất file Excel:', err);
     }
   };
 
   const handleExportWord = () => {
+    const escapeHtml = (value: unknown): string =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
     let titleText = '';
     let periodText = '';
     let summaryCardsHtml = '';
@@ -3074,7 +3085,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           rowsHtml += `
             <tr>
               <td style="text-align: center;">${globalIdx++}</td>
-              <td>${item.name}</td>
+              <td>${escapeHtml(item.name)}</td>
               <td style="text-align: right;">${bhVal}</td>
               <td style="text-align: right;">${ndVal}</td>
               <td style="text-align: right; font-weight: bold;">${totalDay}</td>
@@ -3086,7 +3097,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         tableBodyHtml += `
           <tr class="category-row">
-            <td colspan="2">📌 ${cat.toUpperCase()} (${catItems.length} dịch vụ)</td>
+            <td colspan="2">📌 ${escapeHtml(cat.toUpperCase())} (${catItems.length} dịch vụ)</td>
             <td style="text-align: right;">${catBH}</td>
             <td style="text-align: right;">${catND}</td>
             <td style="text-align: right;">${catDayTotal}</td>
@@ -3231,20 +3242,20 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           rowsHtml += `
             <tr>
               <td style="text-align: center;">${globalIdx++}</td>
-              <td>${item.name}</td>
+              <td>${escapeHtml(item.name)}</td>
               <td style="text-align: right;">${item.itemWeekBH}</td>
               <td style="text-align: right;">${item.itemWeekND}</td>
               <td style="text-align: right; font-weight: bold;">${item.itemWeekTotal}</td>
               <td style="text-align: right;">${avgPerDayInWeek.toFixed(1)}</td>
               <td style="text-align: right;">${item.itemPrevWeekTotal}</td>
-              <td style="text-align: right; font-weight: bold;">${weekDiffPct}</td>
+              <td style="text-align: right; font-weight: bold;">${escapeHtml(weekDiffPct)}</td>
             </tr>
           `;
         });
 
         tableBodyHtml += `
           <tr class="category-row">
-            <td colspan="2">📌 ${cat.toUpperCase()} (${catItems.length} dịch vụ)</td>
+            <td colspan="2">📌 ${escapeHtml(cat.toUpperCase())} (${catItems.length} dịch vụ)</td>
             <td style="text-align: right;">${catBH}</td>
             <td style="text-align: right;">${catND}</td>
             <td style="text-align: right;">${catTotal}</td>
@@ -3307,7 +3318,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
         <tr>
           <th style="width: 5%;">STT</th>
           <th style="width: 25%;">Kỹ Thuật / Dịch Vụ</th>
-          ${displayedMonths.map(m => `<th>${m}</th>`).join('')}
+          ${displayedMonths.map(m => `<th>${escapeHtml(m)}</th>`).join('')}
           <th>Tổng Thực Tế</th>
           ${annualViewMode === 'full' ? `<th>Dự Báo ${selectedYear}</th><th>TB/Tháng</th>` : ''}
         </tr>
@@ -3366,7 +3377,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           rowsHtml += `
             <tr>
               <td style="text-align: center;">${globalIdx++}</td>
-              <td>${srv.name}</td>
+              <td>${escapeHtml(srv.name)}</td>
               ${displayedMonths.map(m => `<td style="text-align: right;">${(monthlyValues[m] || 0).toLocaleString('vi-VN')}</td>`).join('')}
               <td style="text-align: right; font-weight: bold;">${actualSum.toLocaleString('vi-VN')}</td>
               ${annualViewMode === 'full' ? `<td style="text-align: right; font-weight: bold; color: #1e40af;">${fullYearTotal.toLocaleString('vi-VN')}</td><td style="text-align: right;">${Math.round(fullYearTotal / 12).toLocaleString('vi-VN')}</td>` : ''}
@@ -3379,7 +3390,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         tableBodyHtml += `
           <tr class="category-row">
-            <td colspan="2">📌 ${cat.toUpperCase()} (${catServices.length} dịch vụ)</td>
+            <td colspan="2">📌 ${escapeHtml(cat.toUpperCase())} (${catServices.length} dịch vụ)</td>
             ${displayedMonths.map(() => `<td></td>`).join('')}
             <td style="text-align: right;">${catActualSum.toLocaleString('vi-VN')}</td>
             ${annualViewMode === 'full' ? `<td style="text-align: right;">${catFullYearSum.toLocaleString('vi-VN')}</td><td></td>` : ''}
@@ -3402,7 +3413,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           <div class="summary-title">TỔNG QUAN HOẠT ĐỘNG CẢ NĂM ${selectedYear}</div>
           <table style="width: 100%; border: none;">
             <tr>
-              <td style="border: none; padding: 4px 8px;">• <b>Tổng ${actualMonths.length} tháng thực tế (${actualRangeText}):</b> <span style="color: #047857; font-size: 13pt;">${grandActualSum.toLocaleString('vi-VN')}</span> ca</td>
+              <td style="border: none; padding: 4px 8px;">• <b>Tổng ${actualMonths.length} tháng thực tế (${escapeHtml(actualRangeText)}):</b> <span style="color: #047857; font-size: 13pt;">${grandActualSum.toLocaleString('vi-VN')}</span> ca</td>
               ${annualViewMode === 'full' ? `<td style="border: none; padding: 4px 8px;">• <b>Dự báo tổng cả năm ${selectedYear}:</b> <span style="color: #1e40af; font-size: 13pt;">${grandFullYearTotal.toLocaleString('vi-VN')}</span> ca</td>` : ''}
             </tr>
           </table>
@@ -3426,7 +3437,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
       summaryCardsHtml = `
         <div class="summary-box">
-          <div class="summary-title">TỔNG QUAN SỐ LIỆU ${sheetTab.toUpperCase()} NĂM ${selectedYear}</div>
+          <div class="summary-title">TỔNG QUAN SỐ LIỆU ${escapeHtml(sheetTab.toUpperCase())} NĂM ${selectedYear}</div>
           <table style="width: 100%; border: none;">
             <tr>
               <td style="border: none; padding: 4px 8px;">• <b>Tổng ca thực hiện:</b> <span style="color: #1e40af; font-size: 13pt;">${monthTotal.toLocaleString('vi-VN')}</span> ca</td>
@@ -3466,7 +3477,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           rowsHtml += `
             <tr>
               <td style="text-align: center;">${globalIdx++}</td>
-              <td>${item.name}</td>
+              <td>${escapeHtml(item.name)}</td>
               <td style="text-align: right;">${bh.toLocaleString('vi-VN')}</td>
               <td style="text-align: right;">${nd.toLocaleString('vi-VN')}</td>
               <td style="text-align: right; font-weight: bold;">${tot.toLocaleString('vi-VN')}</td>
@@ -3476,7 +3487,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
         tableBodyHtml += `
           <tr class="category-row">
-            <td colspan="2">📌 ${cat.toUpperCase()} (${catItems.length} dịch vụ)</td>
+            <td colspan="2">📌 ${escapeHtml(cat.toUpperCase())} (${catItems.length} dịch vụ)</td>
             <td style="text-align: right;">${cBH.toLocaleString('vi-VN')}</td>
             <td style="text-align: right;">${cND.toLocaleString('vi-VN')}</td>
             <td style="text-align: right;">${(cBH + cND).toLocaleString('vi-VN')}</td>
@@ -3487,7 +3498,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
 
       tableBodyHtml += `
         <tr class="grand-total-row">
-          <td colspan="2" style="text-align: center; text-transform: uppercase;">TỔNG CỘNG HOẠT ĐỘNG ${sheetTab.toUpperCase()}</td>
+          <td colspan="2" style="text-align: center; text-transform: uppercase;">TỔNG CỘNG HOẠT ĐỘNG ${escapeHtml(sheetTab.toUpperCase())}</td>
           <td style="text-align: right;">${monthBH.toLocaleString('vi-VN')}</td>
           <td style="text-align: right;">${monthND.toLocaleString('vi-VN')}</td>
           <td style="text-align: right;">${monthTotal.toLocaleString('vi-VN')}</td>
@@ -3499,7 +3510,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
       <meta charset='utf-8'>
-      <title>${titleText}</title>
+      <title>${escapeHtml(titleText)}</title>
       <style>
         @page {
           size: A4 portrait;
@@ -3609,8 +3620,8 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           </tr>
         </table>
 
-        <div class="doc-title">${titleText}</div>
-        <div class="doc-subtitle">${periodText}</div>
+        <div class="doc-title">${escapeHtml(titleText)}</div>
+        <div class="doc-subtitle">${escapeHtml(periodText)}</div>
 
         ${summaryCardsHtml}
 

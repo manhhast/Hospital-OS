@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
@@ -11,9 +12,13 @@ import {
 } from "./server/assistantEngine";
 import { telegramManager } from "./server/telegramBot";
 import {
+  isSessionSystemAdmin,
   loadStoredTelegramSettingsFromDb,
   mergeSheetConfigIntoSettingsDbIfMissing,
   registerPostgresSyncRoutes,
+  requireAdminAuth,
+  requireAppAuth,
+  saveTelegramConfigToDb,
 } from "./server/postgresSync";
 import {
   registerScheduledAlertRoutes,
@@ -33,6 +38,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "12mb" }));
 registerPostgresSyncRoutes(app);
 registerScheduledAlertRoutes(app);
@@ -50,7 +56,7 @@ app.get("/api/health", (_req, res) => {
 // ==========================================
 // LIVE DATA CONTEXT SYNC & TELEGRAM BOT Q&A
 // ==========================================
-app.post("/api/assistant/sync-context", (req, res) => {
+app.post("/api/assistant/sync-context", requireAppAuth, async (req, res) => {
   try {
     telegramManager.updateHostLabel(getRequestHostLabel(req));
     const { liveContext, telegramConfig } = req.body || {};
@@ -60,13 +66,29 @@ app.post("/api/assistant/sync-context", (req, res) => {
         void mergeSheetConfigIntoSettingsDbIfMissing(liveContext.settings);
       }
     }
-    if (telegramConfig && typeof telegramConfig === "object") {
-      telegramManager.configure({
-        botToken: String(telegramConfig.botToken || ""),
-        defaultChatId: String(telegramConfig.defaultChatId || ""),
-        enabled: Boolean(telegramConfig.enabled),
-      });
+
+    const callerIsAdmin = await isSessionSystemAdmin(req);
+    if (callerIsAdmin && telegramConfig && typeof telegramConfig === "object") {
+      const existingDelivery = telegramManager.getDeliveryConfig();
+      const incomingToken = String(telegramConfig.botToken || "").trim();
+      const effectiveToken =
+        incomingToken.length > 10 ? incomingToken : existingDelivery.botToken || "";
+      const effectiveChatId =
+        String(telegramConfig.defaultChatId || "").trim() ||
+        existingDelivery.defaultChatId ||
+        "";
+      if (effectiveToken) {
+        telegramManager.configure({
+          botToken: effectiveToken,
+          defaultChatId: effectiveChatId,
+          enabled:
+            telegramConfig.enabled !== undefined
+              ? Boolean(telegramConfig.enabled)
+              : existingDelivery.enabled,
+        });
+      }
     }
+
     triggerScheduledAlertsCatchUp();
     res.json({
       success: true,
@@ -81,7 +103,7 @@ app.post("/api/assistant/sync-context", (req, res) => {
   }
 });
 
-app.get("/api/telegram/status", (req, res) => {
+app.get("/api/telegram/status", requireAppAuth, (req, res) => {
   telegramManager.updateHostLabel(getRequestHostLabel(req));
   res.json({
     success: true,
@@ -89,18 +111,68 @@ app.get("/api/telegram/status", (req, res) => {
   });
 });
 
-app.post("/api/telegram/test", async (req, res) => {
+app.post("/api/telegram/config", requireAdminAuth, async (req, res) => {
   try {
     telegramManager.updateHostLabel(getRequestHostLabel(req));
+    const session = (req as any).pgSession;
+    const { botToken, clearToken, defaultChatId, enabled, liveContext } = req.body || {};
+    if (liveContext && typeof liveContext === "object") {
+      telegramManager.updateLiveContext(liveContext);
+    }
+
+    const saved = await saveTelegramConfigToDb({
+      botToken: typeof botToken === "string" ? botToken : undefined,
+      clearToken: Boolean(clearToken),
+      defaultChatId: typeof defaultChatId === "string" ? defaultChatId : undefined,
+      qaEnabled: enabled !== false,
+      actorId: session?.userId || "USR-ADMIN",
+      actorName: session?.name || "Admin",
+    });
+
+    telegramManager.configure({
+      botToken: saved.effectiveToken,
+      defaultChatId: saved.defaultChatId,
+      enabled: saved.enabled,
+    });
+
+    res.json({
+      success: true,
+      hasBotToken: Boolean(saved.effectiveToken),
+      tokenHint: saved.effectiveToken.length >= 8 ? `••••${saved.effectiveToken.slice(-6)}` : "",
+      updatedAtMs: saved.updatedAtMs,
+      status: telegramManager.getStatus(),
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error?.message || "Không thể lưu cấu hình Telegram Bot",
+    });
+  }
+});
+
+app.post("/api/telegram/test", requireAdminAuth, async (req, res) => {
+  try {
+    telegramManager.updateHostLabel(getRequestHostLabel(req));
+    const session = (req as any).pgSession;
     const { botToken, defaultChatId, liveContext, enabled } = req.body || {};
     if (liveContext) {
       telegramManager.updateLiveContext(liveContext);
     }
-    const result = await telegramManager.testConnection(botToken, defaultChatId);
-    if (typeof botToken === "string" && botToken.trim()) {
+    const cleanIncoming = typeof botToken === "string" ? botToken.trim() : "";
+    const effectiveToken =
+      cleanIncoming.length > 10 ? cleanIncoming : telegramManager.getDeliveryConfig().botToken || "";
+    const result = await telegramManager.testConnection(effectiveToken, defaultChatId);
+    if (effectiveToken) {
+      await saveTelegramConfigToDb({
+        botToken: effectiveToken,
+        defaultChatId: String(defaultChatId || ""),
+        qaEnabled: enabled !== false,
+        actorId: session?.userId || "USR-ADMIN",
+        actorName: session?.name || "Admin",
+      }).catch(() => {});
       telegramManager.configure(
         {
-          botToken: botToken.trim(),
+          botToken: effectiveToken,
           defaultChatId: String(defaultChatId || ""),
           enabled: enabled !== false,
         },
@@ -122,7 +194,7 @@ app.post("/api/telegram/test", async (req, res) => {
   }
 });
 
-app.post("/api/telegram/pause", async (req, res) => {
+app.post("/api/telegram/pause", requireAdminAuth, async (req, res) => {
   try {
     telegramManager.updateHostLabel(getRequestHostLabel(req));
     const status = await telegramManager.pausePolling();
@@ -138,14 +210,14 @@ app.post("/api/telegram/pause", async (req, res) => {
   }
 });
 
-app.post("/api/telegram/retry", async (req, res) => {
+app.post("/api/telegram/retry", requireAdminAuth, async (req, res) => {
   try {
     telegramManager.updateHostLabel(getRequestHostLabel(req));
     const { botToken, defaultChatId, liveContext } = req.body || {};
     if (liveContext) {
       telegramManager.updateLiveContext(liveContext);
     }
-    if (typeof botToken === "string" && botToken.trim()) {
+    if (typeof botToken === "string" && botToken.trim().length > 10) {
       telegramManager.configure(
         {
           botToken: botToken.trim(),
@@ -171,7 +243,7 @@ app.post("/api/telegram/retry", async (req, res) => {
   }
 });
 
-app.post("/api/telegram/verify-exclusivity", async (req, res) => {
+app.post("/api/telegram/verify-exclusivity", requireAdminAuth, async (req, res) => {
   try {
     telegramManager.updateHostLabel(getRequestHostLabel(req));
     const { botToken } = req.body || {};
@@ -190,7 +262,7 @@ app.post("/api/telegram/verify-exclusivity", async (req, res) => {
   }
 });
 
-app.post("/api/telegram/detect-chats", async (req, res) => {
+app.post("/api/telegram/detect-chats", requireAdminAuth, async (req, res) => {
   try {
     const { botToken } = req.body || {};
     const chats = await telegramManager.detectRecentChats(botToken);
@@ -208,7 +280,32 @@ app.post("/api/telegram/detect-chats", async (req, res) => {
 
 app.post("/api/telegram/webhook", async (req, res) => {
   try {
-    await telegramManager.handleIncomingUpdate(req.body);
+    const expectedSecret = (process.env.TELEGRAM_WEBHOOK_SECRET || "").trim();
+    if (expectedSecret) {
+      const provided = String(req.headers["x-telegram-bot-api-secret-token"] || "").trim();
+      const expectedDigest = crypto.createHash("sha256").update(expectedSecret, "utf8").digest();
+      const providedDigest = crypto.createHash("sha256").update(provided, "utf8").digest();
+      if (!provided || !crypto.timingSafeEqual(expectedDigest, providedDigest)) {
+        return res.status(401).json({ ok: false, error: "Invalid webhook secret" });
+      }
+    }
+
+    const body = req.body;
+    const isValidUpdate =
+      body &&
+      typeof body === "object" &&
+      !Array.isArray(body) &&
+      (typeof body.update_id === "number" ||
+        Boolean(body.message || body.edited_message || body.channel_post));
+    if (!isValidUpdate) {
+      return res.status(400).json({ ok: false, error: "Invalid Telegram update payload" });
+    }
+
+    if (!telegramManager.getStatus().configured) {
+      return res.status(200).json({ ok: true, ignored: "bot_not_configured" });
+    }
+
+    await telegramManager.handleIncomingUpdate(body);
     res.json({ ok: true });
   } catch (error: any) {
     res.status(200).json({ ok: true, warning: error?.message });
@@ -218,7 +315,7 @@ app.post("/api/telegram/webhook", async (req, res) => {
 // ==========================================
 // SMART HOSPITAL VIRTUAL ASSISTANT (CHAT)
 // ==========================================
-app.post("/api/ai/assistant-chat", async (req, res) => {
+app.post("/api/ai/assistant-chat", requireAppAuth, async (req, res) => {
   try {
     const { question, history, liveContext, userName, learnedMemories, useWebSearch } = req.body || {};
     if (!question || !String(question).trim()) {
@@ -256,7 +353,7 @@ app.post("/api/ai/assistant-chat", async (req, res) => {
 // ==========================================
 // PILLAR 1: AI MORNING BRIEFING GENERATOR
 // ==========================================
-app.post("/api/ai/morning-briefing", async (req, res) => {
+app.post("/api/ai/morning-briefing", requireAppAuth, async (req, res) => {
   try {
     const { reportDate, yesterdayStats, liveContext } = req.body || {};
     const effectiveContext = liveContext || telegramManager.getLiveContext();
@@ -284,7 +381,7 @@ app.post("/api/ai/morning-briefing", async (req, res) => {
 // ==========================================
 // PILLAR 2: PREDICTIVE WORKLOAD & ROSTERING
 // ==========================================
-app.post("/api/ai/workload-forecast", async (req, res) => {
+app.post("/api/ai/workload-forecast", requireAppAuth, async (req, res) => {
   try {
     const { liveContext } = req.body || {};
     const effectiveContext = liveContext || telegramManager.getLiveContext();
@@ -506,7 +603,7 @@ Trả về JSON: { "tatOptimizationInsights": ["...", "..."] }`;
 // ==========================================
 // PILLAR 3: ISO 15189 & SOP COPILOT (RAG AI)
 // ==========================================
-app.post("/api/ai/iso-copilot", async (req, res) => {
+app.post("/api/ai/iso-copilot", requireAppAuth, async (req, res) => {
   try {
     const { question, liveContext } = req.body || {};
     const effectiveContext = liveContext || telegramManager.getLiveContext();
@@ -622,7 +719,7 @@ Trả về JSON:
 // ==========================================
 // PILLAR 4: PREDICTIVE MAINTENANCE AI
 // ==========================================
-app.post("/api/ai/predictive-maintenance", async (req, res) => {
+app.post("/api/ai/predictive-maintenance", requireAppAuth, async (req, res) => {
   try {
     const { equipmentItems, liveContext } = req.body || {};
     const effectiveContext = liveContext || telegramManager.getLiveContext();
@@ -748,7 +845,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
+    app.get("/{*splat}", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

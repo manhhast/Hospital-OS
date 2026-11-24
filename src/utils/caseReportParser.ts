@@ -1,5 +1,5 @@
-import * as XLSX from 'xlsx';
 import type { ArchivedCaseReportItem } from '../services/reportArchiveService';
+import { parseCsvRows } from './csvParser';
 
 export function getMonthNumber(monthStr: string): number {
   const match = String(monthStr || '').match(/(\d{1,2})/);
@@ -264,25 +264,47 @@ export function parseGoogleSheetRowsToCaseReports(rows: any[][]): ArchivedCaseRe
 
 export async function fetchRawTabCsv(
   spreadsheetId: string,
-  tabName: string
+  tabName: string,
+  timeoutMs = 10000
 ): Promise<string | null> {
-  try {
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-    const response = await fetch(csvUrl, { cache: 'no-store' });
-    if (!response.ok) return null;
-    const csvText = await response.text();
-    if (!csvText || csvText.includes('<!DOCTYPE html>')) return null;
-    return csvText;
-  } catch {
-    return null;
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(csvUrl, {
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+
+      if (response.status === 429 || response.status >= 500) {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
+        return null;
+      }
+      if (!response.ok) return null;
+
+      const csvText = await response.text();
+      if (!csvText || csvText.includes('<!DOCTYPE html>')) return null;
+      return csvText;
+    } catch {
+      clearTimeout(timer);
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      return null;
+    }
   }
+  return null;
 }
 
 export function parseCsvTextToItems(csvText: string): ArchivedCaseReportItem[] {
-  const workbook = XLSX.read(csvText, { type: 'string' });
-  const firstSheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[firstSheetName];
-  const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  const rows = parseCsvRows(csvText);
   if (rows && rows.length > 0) {
     return parseGoogleSheetRowsToCaseReports(rows);
   }

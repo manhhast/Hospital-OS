@@ -24,6 +24,7 @@ import { AppSettings } from '../../types/hospital';
 import { TelegramBotStatus, TelegramExclusivityReport } from '../../types/aiEcosystem';
 import { ScheduledAlertsPanel } from '../notifications/ScheduledAlertsPanel';
 import { storageService } from '../../services/storageService';
+import { postgresSyncService } from '../../services/postgresSyncService';
 import { aiService } from '../../services/aiService';
 
 interface TelegramSettingsViewProps {
@@ -38,13 +39,16 @@ interface DetectedTelegramChat {
   lastSeenAt: string;
 }
 
-const BOTFATHER_COMMANDS_TEMPLATE = `tomtat - Tóm tắt nhanh giao ban toàn khoa
-giaoban - Báo cáo số ca, thiết bị và lịch trực hôm nay
+const BOTFATHER_COMMANDS_TEMPLATE = `giaoban - Bảng số liệu giao ban chi tiết theo bộ phận
+tomtat - Tóm tắt nhanh tình hình toàn khoa
 hoi - Hỏi Trợ lý AI trong nhóm chat
 help - Xem hướng dẫn sử dụng trợ lý`;
 
 export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onShowToast }) => {
   const [settings, setSettings] = useState<AppSettings>(() => storageService.getSettings());
+  const [tokenInput, setTokenInput] = useState<string>(() =>
+    postgresSyncService.isActiveBackend() ? '' : (storageService.getSettings().telegramBotToken || '')
+  );
   const [telegramStatus, setTelegramStatus] = useState<TelegramBotStatus | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -58,6 +62,13 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
   const [detectHint, setDetectHint] = useState<{ type: 'error' | 'info'; message: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  const hasServerOrSavedToken = Boolean(
+    tokenInput.trim().length > 10 ||
+      (settings.telegramBotToken || '').trim().length > 10 ||
+      settings.hasTelegramBotToken ||
+      telegramStatus?.configured
+  );
+
   const refreshStatus = async () => {
     const st = await aiService.getTelegramBotStatus();
     if (st) setTelegramStatus(st);
@@ -69,7 +80,11 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
       void refreshStatus();
     }, 5000);
     const unsub = storageService.subscribe(() => {
-      setSettings(storageService.getSettings());
+      const next = storageService.getSettings();
+      setSettings(next);
+      if (!postgresSyncService.isActiveBackend() && next.telegramBotToken) {
+        setTokenInput(next.telegramBotToken);
+      }
     });
     return () => {
       window.clearInterval(pollInterval);
@@ -92,28 +107,28 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
     }
   };
 
-  const persistTelegramSettings = async (nextSettings: AppSettings) => {
-    storageService.saveSettings(nextSettings);
-    setSettings(nextSettings);
-    await aiService.syncContextNow();
-    await refreshStatus();
-  };
-
   const handleSaveTelegramConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const normalized: AppSettings = {
-        ...storageService.getSettings(),
-        telegramBotToken: (settings.telegramBotToken || '').trim(),
-        defaultTelegramChatId: (settings.defaultTelegramChatId || '').trim(),
-        telegramQaEnabled: settings.telegramQaEnabled !== false
-      };
-      await persistTelegramSettings(normalized);
+      const typedToken = tokenInput.trim();
+      const saved = await aiService.saveTelegramConfig({
+        botToken: typedToken || undefined,
+        defaultChatId: (settings.defaultTelegramChatId || '').trim(),
+        enabled: settings.telegramQaEnabled !== false
+      });
+      if (postgresSyncService.isActiveBackend()) {
+        setTokenInput('');
+      }
+      if (saved.status) {
+        setTelegramStatus(saved.status);
+      } else {
+        await refreshStatus();
+      }
       onShowToast(
         'Đã lưu cấu hình Telegram',
-        normalized.telegramBotToken
-          ? 'Đã lưu Bot Token, Chat ID và đồng bộ dữ liệu khoa cho Trợ lý Telegram.'
+        saved.hasBotToken
+          ? 'Đã lưu cấu hình Bot bảo mật trên máy chủ và đồng bộ dữ liệu khoa cho Trợ lý Telegram.'
           : 'Đã lưu cấu hình Telegram (chưa gắn Bot Token).',
         'success'
       );
@@ -124,9 +139,31 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
     }
   };
 
+  const handleClearBotToken = async () => {
+    setIsSaving(true);
+    try {
+      const saved = await aiService.saveTelegramConfig({
+        clearToken: true,
+        defaultChatId: (settings.defaultTelegramChatId || '').trim(),
+        enabled: false
+      });
+      setTokenInput('');
+      if (saved.status) {
+        setTelegramStatus(saved.status);
+      } else {
+        await refreshStatus();
+      }
+      onShowToast('Đã gỡ Bot Token', 'Đã xóa Bot Token khỏi cấu hình máy chủ.', 'info');
+    } catch (err) {
+      onShowToast('Lỗi xóa Bot Token', err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleTestAndActivateBot = async () => {
-    const token = (settings.telegramBotToken || '').trim();
-    if (!token) {
+    const typedToken = tokenInput.trim();
+    if (!typedToken && !hasServerOrSavedToken) {
       onShowToast(
         'Thiếu Bot Token',
         'Vui lòng tạo Bot qua @BotFather theo hướng dẫn bên dưới và dán HTTP API Token vào ô cấu hình.',
@@ -137,20 +174,19 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
 
     setIsTesting(true);
     try {
-      const normalized: AppSettings = {
-        ...storageService.getSettings(),
-        telegramBotToken: token,
-        defaultTelegramChatId: (settings.defaultTelegramChatId || '').trim(),
-        telegramQaEnabled: settings.telegramQaEnabled !== false
-      };
-      storageService.saveSettings(normalized);
-      setSettings(normalized);
+      await aiService.saveTelegramConfig({
+        botToken: typedToken || undefined,
+        defaultChatId: (settings.defaultTelegramChatId || '').trim(),
+        enabled: settings.telegramQaEnabled !== false
+      });
+      if (postgresSyncService.isActiveBackend()) {
+        setTokenInput('');
+      }
 
-      await aiService.syncContextNow();
       const res = await aiService.testTelegramBot({
-        botToken: token,
-        defaultChatId: normalized.defaultTelegramChatId,
-        enabled: normalized.telegramQaEnabled !== false
+        botToken: typedToken || undefined,
+        defaultChatId: (settings.defaultTelegramChatId || '').trim(),
+        enabled: settings.telegramQaEnabled !== false
       });
 
       if (res.status) {
@@ -173,8 +209,8 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
   };
 
   const handleDetectChats = async () => {
-    const token = (settings.telegramBotToken || '').trim();
-    if (!token) {
+    const typedToken = tokenInput.trim();
+    if (!typedToken && !hasServerOrSavedToken) {
       const msg = 'Vui lòng nhập Telegram Bot Token trước khi dò Chat ID.';
       setDetectHint({ type: 'info', message: msg });
       onShowToast('Thiếu Bot Token', msg, 'warning');
@@ -184,7 +220,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
     setIsDetectingChats(true);
     setDetectHint(null);
     try {
-      const chats = await aiService.detectTelegramChats(token);
+      const chats = await aiService.detectTelegramChats(typedToken || undefined);
       setDetectedChats(chats);
       if (chats.length === 0) {
         const msg =
@@ -236,7 +272,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
   };
 
   const handleRetryPolling = async () => {
-    const token = (settings.telegramBotToken || '').trim();
+    const token = tokenInput.trim();
     setIsChangingPollState(true);
     try {
       const st = await aiService.retryTelegramPolling(
@@ -275,7 +311,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
   };
 
   const handleVerifyExclusivity = async () => {
-    const token = (settings.telegramBotToken || '').trim();
+    const token = tokenInput.trim();
     setIsVerifyingExclusivity(true);
     try {
       const { report, status } = await aiService.verifyTelegramExclusivity(token || undefined);
@@ -618,15 +654,36 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           {/* Bot Token */}
           <div className="space-y-1.5">
-            <label className="block font-bold text-[#263445] dark:text-slate-200">
-              Telegram Bot Token <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="block font-bold text-[#263445] dark:text-slate-200">
+                Telegram Bot Token <span className="text-rose-500">*</span>
+              </label>
+              {hasServerOrSavedToken && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-400">
+                    Đã lưu máy chủ {settings.telegramBotTokenHint || ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleClearBotToken()}
+                    disabled={isSaving}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    Xóa Token
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="relative flex items-center">
               <input
                 type={showToken ? 'text' : 'password'}
-                value={settings.telegramBotToken}
-                onChange={(e) => setSettings({ ...settings, telegramBotToken: e.target.value })}
-                placeholder="1234567890:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                placeholder={
+                  hasServerOrSavedToken
+                    ? `Token đang bảo vệ trên máy chủ (${settings.telegramBotTokenHint || 'đã lưu'}) — nhập mới nếu muốn thay`
+                    : '1234567890:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+                }
                 className="w-full pl-3.5 pr-20 py-2 bg-[#F4F7FB] dark:bg-slate-800 border border-[#DFE7F0] dark:border-slate-700 rounded-lg font-mono text-[#263445] dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#1976D2]/25 focus:border-[#1976D2]"
               />
               <div className="absolute right-2 flex items-center gap-1">
@@ -638,10 +695,10 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
                 >
                   {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
-                {settings.telegramBotToken && (
+                {tokenInput && (
                   <button
                     type="button"
-                    onClick={() => void handleCopyText(settings.telegramBotToken, 'token', 'Bot Token')}
+                    onClick={() => void handleCopyText(tokenInput, 'token', 'Bot Token')}
                     title="Sao chép Token"
                     className="p-1.5 rounded-lg text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                   >
@@ -651,7 +708,7 @@ export const TelegramSettingsView: React.FC<TelegramSettingsViewProps> = ({ onSh
               </div>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Lấy từ <strong>@BotFather</strong> sau khi chạy lệnh <code className="font-mono font-semibold">/newbot</code>. Không chia sẻ Token công khai.
+              Lấy từ <strong>@BotFather</strong> sau khi chạy lệnh <code className="font-mono font-semibold">/newbot</code>. Token được bảo vệ phía máy chủ và không lộ về trình duyệt.
             </p>
           </div>
 

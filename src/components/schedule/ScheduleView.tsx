@@ -10,7 +10,12 @@ import {
 import { ShiftDuty, WeeklyMeeting, User, WorkType, ScheduleColor, ShiftSwapRequest, WorkTaskRow } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 
-export const ScheduleView: React.FC = () => {
+interface ScheduleViewProps {
+  onShowToast?: (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+  onConfirmAction?: (title: string, message: string, onConfirm: () => void, isDanger?: boolean) => void;
+}
+
+export const ScheduleView: React.FC<ScheduleViewProps> = ({ onShowToast, onConfirmAction }) => {
   const [shifts, setShifts] = useState<ShiftDuty[]>([]);
   const [meetings, setMeetings] = useState<WeeklyMeeting[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -87,8 +92,18 @@ export const ScheduleView: React.FC = () => {
     return isRoomMatching(u.department || '', popupFilterRoom) || isRoomMatching(u.room || '', popupFilterRoom);
   });
 
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setDragToast({ message: msg, type });
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
+    if (onShowToast) {
+      const titleMap = {
+        success: 'Thông báo lịch công tác',
+        error: 'Cảnh báo lịch công tác',
+        warning: 'Lưu ý phân công',
+        info: 'Thông tin lịch công tác',
+      };
+      onShowToast(titleMap[type], msg, type);
+      return;
+    }
+    setDragToast({ message: msg, type: type === 'error' ? 'error' : 'success' });
     setTimeout(() => {
       setDragToast(prev => prev?.message === msg ? null : prev);
     }, 3500);
@@ -376,7 +391,7 @@ export const ScheduleView: React.FC = () => {
   const handleCopyShift = (shift: ShiftDuty) => {
     const copied = storageService.duplicateShift(shift.id);
     if (copied) {
-      alert(`Đã sao chép phân công thành công: ${copied.title}`);
+      showToast(`Đã sao chép phân công thành công: ${copied.title}`, 'success');
     }
   };
 
@@ -394,7 +409,7 @@ export const ScheduleView: React.FC = () => {
 
     const ok = storageService.requestShiftSwap(swapTargetShift.id, swapTargetUserId, swapReason || 'Do công tác đột xuất');
     if (ok) {
-      alert('Đã gửi yêu cầu đổi ca thành công tới Trưởng khoa phê duyệt!');
+      showToast('Đã gửi yêu cầu đổi ca thành công tới Trưởng khoa phê duyệt!', 'success');
       setShowSwapModal(false);
     }
   };
@@ -677,7 +692,7 @@ export const ScheduleView: React.FC = () => {
   const handleSaveTaskRowSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskRowFormData.name.trim()) {
-      alert('Vui lòng nhập tên công việc!');
+      showToast('Vui lòng nhập tên công việc trước khi lưu!', 'error');
       return;
     }
 
@@ -695,27 +710,63 @@ export const ScheduleView: React.FC = () => {
 
     storageService.saveWorkTaskRow(rowToSave);
     setShowTaskRowModal(false);
+    showToast(`Đã lưu hàng công việc "${rowToSave.name}" thành công.`, 'success');
   };
 
   const handleDeleteTaskRow = (rowId: string, rowName: string) => {
-    if (window.confirm(`Bạn có chắc muốn xóa công việc "${rowName}"?\n\nLưu ý quan trọng: Sau khi xóa, khi tạo lịch tuần sau công việc này sẽ KHÔNG còn hiển thị nữa!`)) {
+    const executeDelete = () => {
       storageService.deleteWorkTaskRow(rowId);
+      showToast(`Đã xóa hàng công việc "${rowName}".`, 'success');
+    };
+    if (onConfirmAction) {
+      onConfirmAction(
+        'Xác nhận xóa hàng công việc',
+        `Bạn có chắc muốn xóa công việc "${rowName}"? Sau khi xóa, khi tạo lịch tuần sau công việc này sẽ KHÔNG còn hiển thị nữa.`,
+        executeDelete,
+        true
+      );
+      return;
     }
+    executeDelete();
   };
 
   const handleResetTaskRows = () => {
-    if (window.confirm('Bạn có muốn khôi phục danh mục công việc hàng tuần về mẫu chuẩn ban đầu của Khoa Cận Lâm Sàng?')) {
+    const executeReset = () => {
       storageService.resetWorkTaskRows();
+      showToast('Đã khôi phục danh mục công việc hàng tuần về mẫu chuẩn.', 'success');
+    };
+    if (onConfirmAction) {
+      onConfirmAction(
+        'Khôi phục danh mục công việc chuẩn',
+        'Bạn có muốn khôi phục danh mục công việc hàng tuần về mẫu chuẩn ban đầu của Khoa Cận Lâm Sàng?',
+        executeReset,
+        false
+      );
+      return;
     }
+    executeReset();
   };
 
   const handleCopyWeeklyScheduleToNextWeek = () => {
     const mondayStr = currentWeekDays[0];
-    if (window.confirm(`Bạn có muốn khởi tạo Lịch Làm Việc Tuần Sau dựa trên danh mục công việc hiện tại?\n\n• Tất cả công việc (tùy chỉnh tên) còn giữ lại sẽ được TỰ ĐỘNG CHUYỂN SANG TUẦN SAU.\n• Các công việc đã XÓA tuần này sẽ KHÔNG hiển thị ở tuần sau.`)) {
+    const executeCopy = () => {
       const res = storageService.copyWeeklyScheduleToNextWeek(mondayStr);
       setSelectedDate(res.newWeekMonday);
-      alert(`Đã khởi tạo Lịch Làm Việc Tuần Sau (${res.newWeekMonday}) thành công!\nĐã chuyển ${res.createdCount} phân công ca từ danh mục công việc.`);
+      showToast(
+        `Đã khởi tạo Lịch Tuần Sau (${res.newWeekMonday}) thành công — đã chuyển ${res.createdCount} phân công ca.`,
+        'success'
+      );
+    };
+    if (onConfirmAction) {
+      onConfirmAction(
+        'Tạo lịch làm việc tuần sau',
+        'Bạn có muốn khởi tạo Lịch Làm Việc Tuần Sau dựa trên danh mục công việc hiện tại? Tất cả công việc còn giữ lại sẽ được chuyển sang tuần sau; các công việc đã xóa sẽ không hiển thị ở tuần sau.',
+        executeCopy,
+        false
+      );
+      return;
     }
+    executeCopy();
   };
 
   // Export iCalendar (.ics file)
@@ -740,13 +791,32 @@ export const ScheduleView: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // Export Excel / CSV
+  // Export Excel / CSV (with formula-injection neutralization & proper quote escaping)
+  const escapeCsvCell = (rawValue: unknown): string => {
+    const str = String(rawValue ?? '');
+    const neutralized = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+    return `"${neutralized.replace(/"/g, '""')}"`;
+  };
+
   const handleExportExcel = () => {
     let csv = 'Mã Ca,Tên Công Việc,Ngày,Thời Gian,Phụ Trách,Chức Danh,Phòng,Máy,Loại Công Việc,Mức Ưu Tiên,Trạng Thái\n';
     filteredShifts.forEach(s => {
-      csv += `"${s.id}","${s.title || s.shiftName || ''}","${s.date}","${s.startTime || ''}-${s.endTime || ''}","${s.assignedUserName || s.userName || ''}","${s.assignedRole || s.userTitle || ''}","${s.room || ''}","${s.machine || ''}","${s.workType || 'Ca trực'}","${s.priority || 'Trung bình'}","${s.status || 'Đã phân công'}"\n`;
+      csv += [
+        s.id,
+        s.title || s.shiftName || '',
+        s.date,
+        `${s.startTime || ''}-${s.endTime || ''}`,
+        s.assignedUserName || s.userName || '',
+        s.assignedRole || s.userTitle || '',
+        s.room || '',
+        s.machine || '',
+        s.workType || 'Ca trực',
+        s.priority || 'Trung bình',
+        s.status || 'Đã phân công'
+      ].map(escapeCsvCell).join(',') + '\n';
     });
 
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -757,6 +827,7 @@ export const ScheduleView: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Print view

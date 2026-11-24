@@ -249,12 +249,43 @@ class GoogleDriveService {
     return cachedAccessToken;
   }
 
-  private async driveFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit = {},
+    timeoutMs = 20000
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const callerSignal = init.signal;
+    const onCallerAbort = () => controller.abort();
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        controller.abort();
+      } else {
+        callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+      }
+    }
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError' && !callerSignal?.aborted) {
+        throw new Error('Kết nối tới Google Drive quá thời gian chờ. Vui lòng thử lại.');
+      }
+      throw err;
+    } finally {
+      window.clearTimeout(timer);
+      if (callerSignal) {
+        callerSignal.removeEventListener('abort', onCallerAbort);
+      }
+    }
+  }
+
+  private async driveFetch(url: string, init: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
     let token = await this.ensureValidToken();
     const doRequest = async (accessToken: string) => {
       const headers = new Headers(init.headers);
       headers.set('Authorization', `Bearer ${accessToken}`);
-      return fetch(url, { ...init, headers });
+      return this.fetchWithTimeout(url, { ...init, headers }, timeoutMs);
     };
 
     let response = await doRequest(token);
@@ -313,25 +344,53 @@ class GoogleDriveService {
       metadata.parents = [validParentFolderId];
     }
 
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', file);
+    const buildUploadForm = () => {
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
+      return form;
+    };
 
-    const uploadRes = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,size,mimeType,webViewLink,webContentLink,md5Checksum',
+    const uploadEndpoint =
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,size,mimeType,webViewLink,webContentLink,md5Checksum';
+
+    let uploadRes = await this.fetchWithTimeout(
+      uploadEndpoint,
       {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`
         },
-        body: form
-      }
+        body: buildUploadForm()
+      },
+      60000
     );
 
     if (uploadRes.status === 401) {
       cachedAccessToken = null;
       this.setState({ hasAccessToken: false });
-      throw new Error('Phiên xác thực Google Drive đã hết hạn. Vui lòng đăng nhập Google lại và thử tải lên.');
+      const reauth = await this.signInWithGoogle();
+      if (!reauth.success || !cachedAccessToken) {
+        throw new Error(
+          reauth.message || 'Phiên xác thực Google Drive đã hết hạn. Vui lòng đăng nhập Google lại và thử tải lên.'
+        );
+      }
+      uploadRes = await this.fetchWithTimeout(
+        uploadEndpoint,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${cachedAccessToken}`
+          },
+          body: buildUploadForm()
+        },
+        60000
+      );
+      if (uploadRes.status === 401) {
+        cachedAccessToken = null;
+        this.setState({ hasAccessToken: false });
+        throw new Error('Phiên xác thực Google Drive đã hết hạn. Vui lòng đăng nhập Google lại và thử tải lên.');
+      }
     }
 
     if (!uploadRes.ok) {
@@ -562,7 +621,9 @@ class GoogleDriveService {
       if (cachedAccessToken) {
         try {
           const res = await this.driveFetch(
-            `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.driveFileId)}?alt=media&supportsAllDrives=true`
+            `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.driveFileId)}?alt=media&supportsAllDrives=true`,
+            {},
+            60000
           );
           if (res.ok) {
             const blob = await res.blob();

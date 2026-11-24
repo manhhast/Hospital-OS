@@ -297,6 +297,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </p>
               </div>
 
+              {!errorMsg && pgState.errorMessage && !pgState.authenticated && (
+                <div className="px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-xs font-medium">
+                  {pgState.errorMessage}
+                </div>
+              )}
+
               <form onSubmit={handleLogin} className="space-y-4">
                 {/* Staff Combobox / Inline Selected Row */}
                 <div className="space-y-1.5 relative" ref={pickerContainerRef}>

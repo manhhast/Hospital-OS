@@ -5,7 +5,7 @@ import {
   MoreVertical, FileSpreadsheet, FileText, RefreshCw, X, ArrowUpDown, 
   AlertCircle, ChevronLeft, ChevronRight, Eye, Paperclip, Send, BellRing, Clock, AlertTriangle
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { exportObjectsToXlsxFile, readSpreadsheetFileToObjects } from '../../utils/excelWorkbook';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { TaskItem, TaskPriority, TaskStatus, TaskType, TaskRecurrence, User } from '../../types/hospital';
@@ -255,27 +255,31 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   };
 
   // Export to Excel (.xlsx)
-  const handleExportExcel = () => {
-    const exportData = filteredTasks.map(t => ({
-      'Mã Task': t.id,
-      'Tiêu đề': t.title,
-      'Mô tả': t.description,
-      'Ngày hạn': t.dueDate,
-      'Người phụ trách': t.assignee,
-      'Email': t.assigneeEmail,
-      'Loại': t.taskType,
-      'Độ ưu tiên': t.priority,
-      'Trạng thái': t.status,
-      'Bộ phận': t.level,
-      'Lặp': t.recurrence,
-      'Ghi chú': t.notes
-    }));
+  const handleExportExcel = async () => {
+    try {
+      const exportData = filteredTasks.map(t => ({
+        'Mã Task': t.id,
+        'Tiêu đề': t.title,
+        'Mô tả': t.description,
+        'Ngày hạn': t.dueDate,
+        'Người phụ trách': t.assignee,
+        'Email': t.assigneeEmail,
+        'Loại': t.taskType,
+        'Độ ưu tiên': t.priority,
+        'Trạng thái': t.status,
+        'Bộ phận': t.level,
+        'Lặp': t.recurrence,
+        'Ghi chú': t.notes
+      }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Tasks");
-    XLSX.writeFile(workbook, `Hospital_OS_Tasks_${new Date().toISOString().split('T')[0]}.xlsx`);
-    onShowToast('Xuất File Excel', 'Đã tải xuống file danh sách công việc thành công', 'success');
+      await exportObjectsToXlsxFile(exportData, {
+        sheetName: 'Tasks',
+        fileName: `Hospital_OS_Tasks_${new Date().toISOString().split('T')[0]}.xlsx`
+      });
+      onShowToast('Xuất File Excel', 'Đã tải xuống file danh sách công việc thành công', 'success');
+    } catch (err: any) {
+      onShowToast('Lỗi Xuất File', err?.message || 'Không thể tạo tệp Excel', 'error');
+    }
   };
 
   // Export to PDF
@@ -298,54 +302,47 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
   };
 
   // Import Excel File
-  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+    try {
+      const json: any[] = await readSpreadsheetFileToObjects(file);
 
-        let count = 0;
-        json.forEach(row => {
-          if (row['Tiêu đề'] || row['title']) {
-            const newTask: TaskItem = {
-              id: `TSK-IMP-${Math.floor(1000 + Math.random() * 9000)}`,
-              title: row['Tiêu đề'] || row['title'],
-              description: row['Mô tả'] || row['description'] || '',
-              dueDate: row['Ngày hạn'] || row['dueDate'] || new Date().toISOString().split('T')[0],
-              createdDate: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16),
-              updatedDate: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16),
-              creator: currentUser.name,
-              assignee: row['Người phụ trách'] || row['assignee'] || currentUser.name,
-              assigneeEmail: row['Email'] || currentUser.email,
-              telegramChatId: '',
-              taskType: row['Loại'] || 'Hội chẩn',
-              priority: row['Độ ưu tiên'] || 'Trung bình',
-              status: row['Trạng thái'] || 'Chờ xử lý',
-              level: 'Khoa Ngoại',
-              recurrence: 'Không',
-              recurrenceCount: 0,
-              notes: 'Imported from Excel',
-              attachments: []
-            };
-            storageService.saveTask(newTask);
-            count++;
-          }
-        });
+      let count = 0;
+      json.forEach(row => {
+        if (row['Tiêu đề'] || row['title']) {
+          const newTask: TaskItem = {
+            id: `TSK-IMP-${Math.floor(1000 + Math.random() * 9000)}`,
+            title: String(row['Tiêu đề'] || row['title']),
+            description: String(row['Mô tả'] || row['description'] || ''),
+            dueDate: String(row['Ngày hạn'] || row['dueDate'] || new Date().toISOString().split('T')[0]),
+            createdDate: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16),
+            updatedDate: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16),
+            creator: currentUser.name,
+            assignee: String(row['Người phụ trách'] || row['assignee'] || currentUser.name),
+            assigneeEmail: String(row['Email'] || currentUser.email),
+            telegramChatId: '',
+            taskType: (row['Loại'] || 'Hội chẩn') as TaskType,
+            priority: (row['Độ ưu tiên'] || 'Trung bình') as TaskPriority,
+            status: (row['Trạng thái'] || 'Chờ xử lý') as TaskStatus,
+            level: 'Khoa Ngoại',
+            recurrence: 'Không',
+            recurrenceCount: 0,
+            notes: 'Imported from Excel',
+            attachments: []
+          };
+          storageService.saveTask(newTask);
+          count++;
+        }
+      });
 
-        onTasksUpdated();
-        onShowToast('Import thành công', `Đã nhập thành công ${count} công việc từ Excel`, 'success');
-      } catch (err) {
-        onShowToast('Lỗi Import', 'File Excel không đúng định dạng', 'error');
-      }
-    };
-    reader.readAsArrayBuffer(file);
+      onTasksUpdated();
+      onShowToast('Import thành công', `Đã nhập thành công ${count} công việc từ Excel`, 'success');
+    } catch (err: any) {
+      onShowToast('Lỗi Import', err?.message || 'File Excel không đúng định dạng', 'error');
+    }
   };
 
   // Helper Badge Renderers
@@ -487,7 +484,7 @@ export const TaskManagementView: React.FC<TaskManagementViewProps> = ({
             <label className="cursor-pointer flex items-center space-x-1 px-3 py-1.5 bg-[#F4F7FB] hover:bg-[#EAF4FF] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#263445] hover:text-[#155A9C] dark:text-slate-200 border border-[#DFE7F0] dark:border-slate-700 rounded-lg text-xs font-semibold transition-colors">
               <Upload className="w-3.5 h-3.5" />
               <span>Import Excel</span>
-              <input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="hidden" />
+              <input type="file" accept=".xlsx, .csv" onChange={handleImportExcel} className="hidden" />
             </label>
 
             <button

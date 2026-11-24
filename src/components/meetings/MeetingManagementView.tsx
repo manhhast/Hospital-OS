@@ -6,7 +6,11 @@ import {
 import { storageService } from '../../services/storageService';
 import { MeetingItem, MeetingMinutes, MeetingActionItem, TaskItem } from '../../types/hospital';
 
-export const MeetingManagementView: React.FC = () => {
+interface MeetingManagementViewProps {
+  onShowToast?: (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+}
+
+export const MeetingManagementView: React.FC<MeetingManagementViewProps> = ({ onShowToast }) => {
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingItem | null>(null);
   
@@ -64,7 +68,7 @@ export const MeetingManagementView: React.FC = () => {
 
     storageService.saveMeetingMinutes(selectedMeeting.id, minutes);
     setShowMinutesModal(false);
-    alert('Đã lưu biên bản cuộc họp thành công!');
+    onShowToast?.('Biên bản cuộc họp', 'Đã lưu biên bản cuộc họp thành công!', 'success');
   };
 
   // Convert Meeting Action Item directly to TaskManager task!
@@ -104,7 +108,11 @@ export const MeetingManagementView: React.FC = () => {
       storageService.saveMeetingItem(meeting);
     }
 
-    alert(`Đã tự động chuyển kết luận thành Task: "${action.taskTitle}" và giao cho ${action.assigneeName}!`);
+    onShowToast?.(
+      'Giao việc từ cuộc họp',
+      `Đã chuyển kết luận thành Task "${action.taskTitle}" và giao cho ${action.assigneeName}!`,
+      'success'
+    );
   };
 
   return (

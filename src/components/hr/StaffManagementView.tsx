@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import { exportMatrixToXlsxFile, readSpreadsheetFileToObjects } from '../../utils/excelWorkbook';
 import { 
   Users, Award, Calendar, BookOpen, CheckCircle2, Clock, AlertCircle, 
   Search, Check, X, Edit3, Building2, Grid, Layers, History, Plus, Briefcase, ChevronRight, UserCheck, Phone, Mail,
@@ -54,22 +54,13 @@ const parseExcelDateToDDMMYYYY = (val: any): string => {
       return String(val);
     }
     if (val > 0) {
-      try {
-        const parsed = XLSX.SSF.parse_date_code(val);
-        if (parsed && parsed.y && parsed.m && parsed.d) {
-          const d = String(parsed.d).padStart(2, '0');
-          const m = String(parsed.m).padStart(2, '0');
-          const y = parsed.y;
-          return `${d}/${m}/${y}`;
-        }
-      } catch (e) {
-        const dt = new Date(Math.round((val - 25569) * 86400 * 1000));
-        if (!isNaN(dt.getTime())) {
-          const d = String(dt.getUTCDate()).padStart(2, '0');
-          const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
-          const y = dt.getUTCFullYear();
-          return `${d}/${m}/${y}`;
-        }
+      const adjustedSerial = val > 59 ? val - 1 : val;
+      const dt = new Date(Date.UTC(1899, 11, 31) + Math.round(adjustedSerial * 86400 * 1000));
+      if (!isNaN(dt.getTime())) {
+        const d = String(dt.getUTCDate()).padStart(2, '0');
+        const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+        const y = dt.getUTCFullYear();
+        return `${d}/${m}/${y}`;
       }
     }
   }
@@ -924,7 +915,7 @@ export const StaffManagementView: React.FC = () => {
   };
 
   // --- Download Excel Template ---
-  const handleDownloadExcelTemplate = () => {
+  const handleDownloadExcelTemplate = async () => {
     const sampleRoom1 = rooms[0]?.name || 'Phòng Chụp X-Quang Kỹ Thuật Số';
     const sampleDept1 = rooms[0]?.departmentSection || 'Chẩn đoán hình ảnh';
     const sampleRoom2 = rooms[1]?.name || 'Phòng Siêu Âm Tổng Quát & Màu';
@@ -1004,75 +995,38 @@ export const StaffManagementView: React.FC = () => {
       ]
     ];
 
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
-    ws['!cols'] = [
-      { wch: 12 },
-      { wch: 25 },
-      { wch: 18 },
-      { wch: 16 },
-      { wch: 24 },
-      { wch: 32 },
-      { wch: 18 },
-      { wch: 25 },
-      { wch: 10 },
-      { wch: 22 },
-      { wch: 35 },
-      { wch: 24 },
-      { wch: 18 },
-      { wch: 20 },
-      { wch: 20 }
-    ];
-
-    // Explicitly enforce text cell format for Phone (c=6) and Dates (c=9, c=11)
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:O4');
-    for (let R = range.s.r; R <= range.e.r; ++R) {
-      const phoneCell = XLSX.utils.encode_cell({ r: R, c: 6 });
-      if (ws[phoneCell]) {
-        ws[phoneCell].t = 's';
-        ws[phoneCell].z = '@';
-      }
-      const dobCell = XLSX.utils.encode_cell({ r: R, c: 9 });
-      if (ws[dobCell] && R > 0) {
-        ws[dobCell].t = 's';
-        ws[dobCell].z = '@';
-      }
-      const joinCell = XLSX.utils.encode_cell({ r: R, c: 11 });
-      if (ws[joinCell] && R > 0) {
-        ws[joinCell].t = 's';
-        ws[joinCell].z = '@';
-      }
-    }
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Mau_Nhan_Vien');
-    XLSX.writeFile(wb, 'Mau_Danh_Sach_Nhan_Vien_Khoa_CLS.xlsx');
+    await exportMatrixToXlsxFile([headers, ...sampleRows], {
+      fileName: 'Mau_Danh_Sach_Nhan_Vien_Khoa_CLS.xlsx',
+      sheetName: 'Mau_Nhan_Vien',
+      columnWidths: [12, 25, 18, 16, 24, 32, 18, 25, 10, 22, 35, 24, 18, 20, 20],
+      textColumns: [6, 9, 11]
+    });
   };
 
   // --- Excel File Upload, Drag & Drop, and Parse ---
-  const processExcelFile = (file: File) => {
+  const processExcelFile = async (file: File) => {
     const fileName = file.name.toLowerCase();
-    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.csv')) {
-      notifyStaffBanner('Vui lòng chọn hoặc kéo thả tệp định dạng Excel (.xlsx, .xls) hoặc .csv!', 'error');
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.csv')) {
+      notifyStaffBanner(
+        fileName.endsWith('.xls')
+          ? 'Định dạng .xls cũ không còn được hỗ trợ vì lý do bảo mật; vui lòng lưu lại dưới dạng .xlsx hoặc .csv!'
+          : 'Vui lòng chọn hoặc kéo thả tệp định dạng Excel (.xlsx) hoặc .csv!',
+        'error'
+      );
       return;
     }
 
     setExcelFileName(file.name);
     setIsParsingExcel(true);
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
-        const wsName = wb.SheetNames[0];
-        const ws = wb.Sheets[wsName];
-        const rawData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    try {
+      const rawData = await readSpreadsheetFileToObjects(file);
 
-        if (!rawData || rawData.length === 0) {
-          notifyStaffBanner('Tệp Excel không có dữ liệu hàng nào!', 'error');
-          setIsParsingExcel(false);
-          return;
-        }
+      if (!rawData || rawData.length === 0) {
+        notifyStaffBanner('Tệp Excel không có dữ liệu hàng nào!', 'error');
+        setIsParsingExcel(false);
+        return;
+      }
 
         const normalizeKey = (row: any, candidates: string[]): any => {
           for (const key of Object.keys(row)) {
@@ -1154,16 +1108,14 @@ export const StaffManagementView: React.FC = () => {
           };
         });
 
-        setParsedExcelStaff(parsed);
-        setExcelImportStep('preview');
-        setIsParsingExcel(false);
-      } catch (err: any) {
-        console.error(err);
-        notifyStaffBanner('Có lỗi khi đọc file Excel: ' + (err?.message || 'Định dạng file không hỗ trợ'), 'error');
-        setIsParsingExcel(false);
-      }
-    };
-    reader.readAsBinaryString(file);
+      setParsedExcelStaff(parsed);
+      setExcelImportStep('preview');
+      setIsParsingExcel(false);
+    } catch (err: any) {
+      console.error(err);
+      notifyStaffBanner('Có lỗi khi đọc file Excel: ' + (err?.message || 'Định dạng file không hỗ trợ'), 'error');
+      setIsParsingExcel(false);
+    }
   };
 
   const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -5409,7 +5361,7 @@ export const StaffManagementView: React.FC = () => {
                       ref={excelFileInputRef}
                       type="file"
                       id="staff-excel-file-input"
-                      accept=".xlsx, .xls, .csv"
+                      accept=".xlsx, .csv"
                       onChange={handleExcelFileUpload}
                       className="hidden"
                     />
@@ -5430,7 +5382,7 @@ export const StaffManagementView: React.FC = () => {
                           {isDraggingExcel ? '✨ Thả tệp Excel vào đây để tải lên ngay!' : 'Nhấn để chọn tệp Excel hoặc kéo thả vào đây'}
                         </span>
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                          Hỗ trợ định dạng: .xlsx, .xls, .csv (dung lượng tối đa 10MB)
+                          Hỗ trợ định dạng: .xlsx, .csv (dung lượng tối đa 10MB)
                         </p>
                       </div>
                       <button

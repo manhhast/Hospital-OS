@@ -348,7 +348,10 @@ export const DiscussionView: React.FC = () => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `CLS_WorkHub_ChatHistory_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Search filter across messages

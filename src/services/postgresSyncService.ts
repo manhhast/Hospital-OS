@@ -51,6 +51,7 @@ export interface PostgresSyncState {
   errorMessage: string | null;
   liveStreamConnected: boolean;
   pendingChangesCount: number;
+  lastConflictNotice: { id: number; message: string } | null;
 }
 
 function formatNowShort(): string {
@@ -69,6 +70,8 @@ class PostgresSyncService {
   > = {};
   private inFlightBuckets = new Set<CloudBucketKey>();
   private failedRetryBuckets = new Set<CloudBucketKey>();
+  private bucketVersions: Partial<Record<CloudBucketKey, number>> = {};
+  private reportArchiveVersions: Record<string, number> = {};
   private lastServerTimeMs = 0;
   private isHydrating = false;
   private hasExplicitSessionLogin = false;
@@ -98,7 +101,8 @@ class PostgresSyncService {
     sessionUserRole: null,
     errorMessage: null,
     liveStreamConnected: false,
-    pendingChangesCount: 0
+    pendingChangesCount: 0,
+    lastConflictNotice: null
   };
 
   public subscribe(listener: () => void): () => void {
@@ -116,9 +120,19 @@ class PostgresSyncService {
     return this.state.configured;
   }
 
+  public isAuthenticatedSession(): boolean {
+    return !this.state.configured || this.state.authenticated;
+  }
+
   private setState(patch: Partial<PostgresSyncState>): void {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((l) => l());
+  }
+
+  public dismissConflictNotice(): void {
+    if (this.state.lastConflictNotice) {
+      this.setState({ lastConflictNotice: null });
+    }
   }
 
   private getSessionToken(): string {
@@ -134,12 +148,16 @@ class PostgresSyncService {
     }
   }
 
-  private authHeaders(extra?: Record<string, string>): Record<string, string> {
+  public getAuthHeaders(extra?: Record<string, string>): Record<string, string> {
     const token = this.getSessionToken();
     return {
       ...(extra || {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     };
+  }
+
+  private authHeaders(extra?: Record<string, string>): Record<string, string> {
+    return this.getAuthHeaders(extra);
   }
 
   private activateStorageHooks(): void {
@@ -447,6 +465,7 @@ class PostgresSyncService {
         if (remote && Array.isArray(remote.items)) {
           const cloudIsSeed = storageService.isUntouchedSeedData(bucketKey, remote.items);
           const remoteMs = Number(remote.updatedAtMs || 0);
+          this.bucketVersions[bucketKey] = remoteMs;
           const shouldPreferLocal =
             (!localIsSeed && cloudIsSeed) ||
             (Boolean(dirtyTs) && !localIsSeed && Number(dirtyTs) > remoteMs);
@@ -468,6 +487,7 @@ class PostgresSyncService {
       const remoteArchiveMap = new Map<string, { year: number; monthKey: string; items: ArchivedCaseReportItem[] }>();
       for (const arch of remoteArchives) {
         if (!arch?.archiveKey || !Array.isArray(arch.items)) continue;
+        this.reportArchiveVersions[arch.archiveKey] = Number(arch.updatedAtMs || 0);
         remoteArchiveMap.set(arch.archiveKey, arch);
         if (arch.items.length > 0) {
           reportArchiveService.applyCloudMonthArchive(arch.year, arch.monthKey, arch.items);
@@ -529,13 +549,8 @@ class PostgresSyncService {
       this.sseReconnectTimer = null;
     }
 
-    const token = this.getSessionToken();
-    const streamUrl = token
-      ? `/api/db/stream?token=${encodeURIComponent(token)}`
-      : '/api/db/stream';
-
     try {
-      const es = new EventSource(streamUrl, { withCredentials: true });
+      const es = new EventSource('/api/db/stream', { withCredentials: true });
       this.eventSource = es;
 
       es.addEventListener('ready', () => {
@@ -747,6 +762,9 @@ class PostgresSyncService {
       if (Array.isArray(data.buckets)) {
         for (const b of data.buckets) {
           const key = b?.bucketKey as CloudBucketKey;
+          if (key && b?.updatedAtMs) {
+            this.bucketVersions[key] = Number(b.updatedAtMs);
+          }
           if (
             key &&
             Array.isArray(b.items) &&
@@ -762,6 +780,9 @@ class PostgresSyncService {
 
       if (Array.isArray(data.reportArchives)) {
         for (const arch of data.reportArchives) {
+          if (arch?.archiveKey && arch?.updatedAtMs) {
+            this.reportArchiveVersions[arch.archiveKey] = Number(arch.updatedAtMs);
+          }
           if (arch?.year && arch?.monthKey && Array.isArray(arch.items) && arch.items.length > 0) {
             reportArchiveService.applyCloudMonthArchive(arch.year, arch.monthKey, arch.items);
             appliedSomething = true;
@@ -792,12 +813,13 @@ class PostgresSyncService {
     this.updatePendingChangesCount();
 
     try {
+      const expectedUpdatedAtMs = this.bucketVersions[bucketKey] || 0;
       const res = await fetch(`/api/db/bucket/${encodeURIComponent(bucketKey)}`, {
         method: 'PUT',
         headers: this.authHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         keepalive,
-        body: JSON.stringify({ items })
+        body: JSON.stringify({ items, expectedUpdatedAtMs })
       });
 
       if (res.status === 401) {
@@ -810,6 +832,25 @@ class PostgresSyncService {
       }
 
       const data = await res.json();
+      if (res.status === 409 && data?.serverBucket) {
+        const srv = data.serverBucket;
+        if (srv.updatedAtMs) {
+          this.bucketVersions[bucketKey] = Number(srv.updatedAtMs);
+        }
+        if (Array.isArray(srv.items)) {
+          storageService.applyRemoteBucketData(bucketKey, srv.items);
+        }
+        storageService.clearBucketDirty(bucketKey);
+        this.failedRetryBuckets.delete(bucketKey);
+        const conflictMsg =
+          data?.error || 'Dữ liệu vừa được cán bộ khác cập nhật. Hệ thống đã tải bản mới nhất.';
+        this.setState({
+          lastConflictNotice: { id: Date.now(), message: conflictMsg },
+          errorMessage: conflictMsg
+        });
+        throw new Error(conflictMsg);
+      }
+
       if (!res.ok || !data?.success) {
         if (res.status >= 500) {
           this.failedRetryBuckets.add(bucketKey);
@@ -820,8 +861,10 @@ class PostgresSyncService {
 
       this.failedRetryBuckets.delete(bucketKey);
       storageService.clearBucketDirty(bucketKey);
-      if (Number(data.updatedAtMs) > this.lastServerTimeMs) {
-        this.lastServerTimeMs = Number(data.updatedAtMs);
+      const savedAt = Number(data.updatedAtMs || Date.now());
+      this.bucketVersions[bucketKey] = savedAt;
+      if (savedAt > this.lastServerTimeMs) {
+        this.lastServerTimeMs = savedAt;
       }
       this.setState({
         status: 'synced',
@@ -865,18 +908,39 @@ class PostgresSyncService {
     year: number,
     monthKey: string,
     items: ArchivedCaseReportItem[],
-    keepalive = false
+    keepalive = false,
+    forceOverwrite = false
   ): Promise<void> {
     if (!this.state.configured || !this.state.authenticated) return;
     const archiveKey = toReportArchiveKey(year, monthKey);
+    const expectedUpdatedAtMs = this.reportArchiveVersions[archiveKey] || 0;
 
     const res = await fetch(`/api/db/report-archive/${encodeURIComponent(archiveKey)}`, {
       method: 'PUT',
       headers: this.authHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       keepalive,
-      body: JSON.stringify({ year, monthKey, items })
+      body: JSON.stringify({ year, monthKey, items, expectedUpdatedAtMs, forceOverwrite })
     });
+
+    if (res.status === 409) {
+      const data = await res.json().catch(() => ({}));
+      if (data?.serverArchive && Array.isArray(data.serverArchive.items)) {
+        this.reportArchiveVersions[archiveKey] = Number(data.serverArchive.updatedAtMs || Date.now());
+        reportArchiveService.applyCloudMonthArchive(
+          data.serverArchive.year,
+          data.serverArchive.monthKey,
+          data.serverArchive.items
+        );
+      }
+      const conflictMsg =
+        data?.error || 'Báo cáo tháng vừa được cập nhật ở nơi khác. Hệ thống đã tải bản mới nhất.';
+      this.setState({
+        lastConflictNotice: { id: Date.now(), message: conflictMsg },
+        errorMessage: conflictMsg
+      });
+      throw new Error(conflictMsg);
+    }
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -884,8 +948,10 @@ class PostgresSyncService {
     }
 
     const data = await res.json();
-    if (Number(data?.updatedAtMs) > this.lastServerTimeMs) {
-      this.lastServerTimeMs = Number(data.updatedAtMs);
+    const savedAt = Number(data?.updatedAtMs || Date.now());
+    this.reportArchiveVersions[archiveKey] = savedAt;
+    if (savedAt > this.lastServerTimeMs) {
+      this.lastServerTimeMs = savedAt;
     }
     this.setState({
       status: 'synced',
@@ -939,12 +1005,106 @@ class PostgresSyncService {
     }
 
     try {
-      await this.pushReportArchive(year, monthKey, items);
+      await this.pushReportArchive(year, monthKey, items, false, true);
       return { saved: true };
     } catch (err) {
       return {
         saved: false,
         reason: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
+
+  public async changePassword(
+    oldPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> {
+    if (!this.state.configured) {
+      const cur = storageService.getCurrentUser();
+      return storageService.changePassword(cur.id, oldPassword, newPassword);
+    }
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include',
+        body: JSON.stringify({ oldPassword, newPassword })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { success: false, message: json?.error || 'Không thể đổi mật khẩu.' };
+      }
+      if (json.updatedAtMs) {
+        this.bucketVersions.users = Number(json.updatedAtMs);
+      }
+      return { success: true, message: json.message || 'Đổi mật khẩu thành công!' };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Lỗi kết nối khi đổi mật khẩu.'
+      };
+    }
+  }
+
+  public async adminResetPassword(
+    userId: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> {
+    if (!this.state.configured) {
+      return storageService.resetUserPassword(userId, newPassword);
+    }
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include',
+        body: JSON.stringify({ userId, newPassword })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { success: false, message: json?.error || 'Không thể đặt lại mật khẩu.' };
+      }
+      if (json.updatedAtMs) {
+        this.bucketVersions.users = Number(json.updatedAtMs);
+      }
+      await this.pollChanges();
+      return { success: true, message: json.message || 'Đã đặt lại mật khẩu thành công.' };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Lỗi kết nối khi đặt lại mật khẩu.'
+      };
+    }
+  }
+
+  public async requestPasswordReset(
+    email: string,
+    note?: string
+  ): Promise<{ success: boolean; message: string }> {
+    if (!this.state.configured) {
+      return storageService.requestPasswordReset(email, note);
+    }
+    try {
+      const res = await fetch('/api/auth/request-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, note })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        return { success: false, message: json?.error || 'Không thể gửi yêu cầu reset mật khẩu.' };
+      }
+      return {
+        success: true,
+        message:
+          json.message ||
+          'Đã gửi yêu cầu khôi phục mật khẩu tới Admin. Vui lòng liên hệ Quản trị viên để nhận mật khẩu mới.'
+      };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Lỗi gửi yêu cầu reset mật khẩu.'
       };
     }
   }
@@ -1062,6 +1222,7 @@ class PostgresSyncService {
       for (const bucketKey of Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]) {
         const b = remoteBuckets[bucketKey];
         if (b && Array.isArray(b.items)) {
+          this.bucketVersions[bucketKey] = Number((b as any).updatedAtMs || Date.now());
           storageService.applyRemoteBucketData(bucketKey, b.items);
           bucketsPulled++;
         }
@@ -1070,6 +1231,9 @@ class PostgresSyncService {
       const remoteArchives = Array.isArray(data.reportArchives) ? data.reportArchives : [];
       let reportMonthsPulled = 0;
       for (const arch of remoteArchives) {
+        if (arch?.archiveKey) {
+          this.reportArchiveVersions[arch.archiveKey] = Number(arch.updatedAtMs || Date.now());
+        }
         if (arch?.year && arch?.monthKey && Array.isArray(arch.items) && arch.items.length > 0) {
           reportArchiveService.applyCloudMonthArchive(arch.year, arch.monthKey, arch.items);
           reportMonthsPulled++;

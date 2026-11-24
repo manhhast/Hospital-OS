@@ -13,6 +13,7 @@ import {
   UserRole,
 } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
+import { postgresSyncService } from '../../services/postgresSyncService';
 import {
   DEFAULT_TIER_PERMISSIONS,
   MANAGEMENT_TIER_META,
@@ -41,6 +42,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
   const [showAddModal, setShowAddModal] = useState(false);
   const [resetModalUser, setResetModalUser] = useState<User | null>(null);
   const [newAdminPassword, setNewAdminPassword] = useState('123456');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   // Edit RBAC modal state
   const [editingRbacUser, setEditingRbacUser] = useState<User | null>(null);
@@ -118,7 +120,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
 
   const handleAdminResetPassword = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resetModalUser) return;
+    if (!resetModalUser || isResettingPassword) return;
     if (resetModalUser.role === 'Admin' && !actorAccess.isSystemAdmin) {
       onShowToast('Từ chối truy cập', 'Chỉ Quản trị viên hệ thống (Admin) mới có quyền đổi mật khẩu tài khoản Admin.', 'error');
       return;
@@ -128,14 +130,23 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
       return;
     }
 
-    const res = storageService.resetUserPassword(resetModalUser.id, newAdminPassword);
-    if (res.success) {
-      onShowToast('Thành công', res.message, 'success');
-      setResetModalUser(null);
-      setNewAdminPassword('123456');
-    } else {
-      onShowToast('Lỗi', res.message, 'error');
-    }
+    setIsResettingPassword(true);
+    void (async () => {
+      try {
+        const res = postgresSyncService.isActiveBackend()
+          ? await postgresSyncService.adminResetPassword(resetModalUser.id, newAdminPassword)
+          : storageService.resetUserPassword(resetModalUser.id, newAdminPassword);
+        if (res.success) {
+          onShowToast('Thành công', res.message, 'success');
+          setResetModalUser(null);
+          setNewAdminPassword('123456');
+        } else {
+          onShowToast('Lỗi', res.message, 'error');
+        }
+      } finally {
+        setIsResettingPassword(false);
+      }
+    })();
   };
 
   const handleAddUser = (e: React.FormEvent) => {
@@ -1079,9 +1090,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ onShowTo
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl cursor-pointer"
+                  disabled={isResettingPassword}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl cursor-pointer disabled:opacity-50"
                 >
-                  Xác nhận Reset Mật khẩu
+                  {isResettingPassword ? 'Đang xử lý...' : 'Xác nhận Reset Mật khẩu'}
                 </button>
               </div>
             </form>

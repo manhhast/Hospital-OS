@@ -40,6 +40,8 @@ import {
   loadStoredTelegramSettingsFromDb,
   mergeSheetConfigIntoSettingsDbIfMissing,
   releaseDailyAlertLock,
+  requireAdminAuth,
+  requireAppAuth,
   saveScheduledAlertRulesToDb,
   tryClaimDailyAlertLock,
   upsertReportArchiveMonthFromServer,
@@ -94,6 +96,30 @@ const RULE_CATCHUP_WINDOW_MIN: Record<ScheduledAlertRuleId, number> = {
 // When user saves a schedule time already >15 min in the past for today, skip catch-up for that rule today
 const skippedPastEditKeys = new Set<string>();
 const failedRetryTracker = new Map<string, { count: number; nextRetryAtMs: number }>();
+
+function pruneDailyAlertTrackers(todayISO: string): void {
+  const dateMarker = `_${todayISO}_`;
+  for (const key of skippedPastEditKeys) {
+    if (!key.includes(dateMarker)) {
+      skippedPastEditKeys.delete(key);
+    }
+  }
+  while (skippedPastEditKeys.size > 100) {
+    const oldest = skippedPastEditKeys.values().next().value;
+    if (oldest === undefined) break;
+    skippedPastEditKeys.delete(oldest);
+  }
+  for (const key of failedRetryTracker.keys()) {
+    if (!key.includes(dateMarker)) {
+      failedRetryTracker.delete(key);
+    }
+  }
+  while (failedRetryTracker.size > 100) {
+    const oldest = failedRetryTracker.keys().next().value;
+    if (oldest === undefined) break;
+    failedRetryTracker.delete(oldest);
+  }
+}
 
 export interface VNNowParts {
   year: number;
@@ -1477,7 +1503,8 @@ export async function buildNoonServiceReport(
   yesterdayISO: string,
   allowPersistSync: boolean,
   generatedAtVN = "",
-  scheduleTimeHHmm = "12:45"
+  scheduleTimeHHmm = "12:45",
+  syncModeLabel?: string
 ): Promise<ScheduledAlertPreviewResult> {
   const m = yesterdayISO.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const yYear = m ? parseInt(m[1], 10) : new Date().getUTCFullYear();
@@ -1634,9 +1661,10 @@ export async function buildNoonServiceReport(
     return { icon: "📌", title: catName.toUpperCase() };
   };
 
+  const syncBaseLabel = syncModeLabel || `Đồng bộ Tự động ${scheduleTimeHHmm}`;
   const syncOriginLabel = primaryMonth.sourceLabel.includes("Google Sheet")
-    ? `Hệ thống (Đồng bộ Tự động ${scheduleTimeHHmm} · Google Sheet)`
-    : `Hệ thống (Đồng bộ Tự động ${scheduleTimeHHmm} · ${primaryMonth.sourceLabel})`;
+    ? `Hệ thống (${syncBaseLabel} · Google Sheet)`
+    : `Hệ thống (${syncBaseLabel} · ${primaryMonth.sourceLabel})`;
 
   const lines: string[] = [];
   lines.push(`📊 **BÁO CÁO GIAO BAN SỐ LIỆU SỬ DỤNG AI**`);
@@ -2015,6 +2043,105 @@ export async function generateRulePreview(params: {
   );
 }
 
+function parseExplicitBriefingDateISO(queryText: string, vnNow: ReturnType<typeof getVNNowParts>): string | null {
+  const clean = String(queryText || "").trim();
+  const norm = clean
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+
+  if (/\bhom kia\b/.test(norm)) return offsetDateISO(vnNow.dateISO, -2);
+  if (/\bhom qua\b/.test(norm)) return offsetDateISO(vnNow.dateISO, -1);
+  if (/\bhom nay\b/.test(norm)) return vnNow.dateISO;
+
+  const fullMatch = norm.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/);
+  if (fullMatch) {
+    const d = Math.min(31, Math.max(1, parseInt(fullMatch[1], 10)));
+    const m = Math.min(12, Math.max(1, parseInt(fullMatch[2], 10)));
+    const y = parseInt(fullMatch[3], 10);
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  const dmMatch = norm.match(/\b(\d{1,2})[\/\-](\d{1,2})\b/);
+  if (dmMatch) {
+    const d = Math.min(31, Math.max(1, parseInt(dmMatch[1], 10)));
+    const m = Math.min(12, Math.max(1, parseInt(dmMatch[2], 10)));
+    return `${vnNow.year}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  const dayOnlyMatch = norm.match(/\bngay\s+(\d{1,2})\b/);
+  if (dayOnlyMatch) {
+    const d = Math.min(31, Math.max(1, parseInt(dayOnlyMatch[1], 10)));
+    return `${vnNow.year}-${String(vnNow.month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  return null;
+}
+
+export async function generateInteractiveBriefingReport(params: {
+  queryText?: string;
+  liveContext?: any;
+}): Promise<ScheduledAlertPreviewResult> {
+  const vnNow = getVNNowParts();
+  const data = await resolveHospitalDataset(params.liveContext);
+  const syncModeLabel = `Đồng bộ trực tiếp ${vnNow.timeHHmm}`;
+  const explicitISO = parseExplicitBriefingDateISO(params.queryText || "", vnNow);
+
+  if (explicitISO) {
+    return buildNoonServiceReport(
+      data,
+      explicitISO,
+      false,
+      vnNow.dateTimeVN,
+      vnNow.timeHHmm,
+      syncModeLabel
+    );
+  }
+
+  const todayReport = await buildNoonServiceReport(
+    data,
+    vnNow.dateISO,
+    false,
+    vnNow.dateTimeVN,
+    vnNow.timeHHmm,
+    syncModeLabel
+  );
+  const todayHasCases = !todayReport.telegramMarkdown.includes("Chưa ghi nhận số ca nào");
+  if (todayHasCases) {
+    return todayReport;
+  }
+
+  const yesterdayISO = offsetDateISO(vnNow.dateISO, -1);
+  const yesterdayReport = await buildNoonServiceReport(
+    data,
+    yesterdayISO,
+    false,
+    vnNow.dateTimeVN,
+    vnNow.timeHHmm,
+    syncModeLabel
+  );
+  const yesterdayHasCases = !yesterdayReport.telegramMarkdown.includes("Chưa ghi nhận số ca nào");
+  if (yesterdayHasCases) {
+    return yesterdayReport;
+  }
+
+  const latestLiveIso = data.liveContext?.caseReports?.latestRecordedDay?.dateIso;
+  if (typeof latestLiveIso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(latestLiveIso)) {
+    return buildNoonServiceReport(
+      data,
+      latestLiveIso,
+      false,
+      vnNow.dateTimeVN,
+      vnNow.timeHHmm,
+      syncModeLabel
+    );
+  }
+
+  return yesterdayReport;
+}
+
 export async function executeScheduledAlertRule(params: {
   rule: ScheduledAlertRuleConfig;
   triggerMode: "auto_schedule" | "manual_test";
@@ -2271,6 +2398,7 @@ async function runSchedulerTick() {
     }
 
     const vnNow = getVNNowParts();
+    pruneDailyAlertTrackers(vnNow.dateISO);
     const rules = await getActiveAlertRules();
     const deliveryCfg = telegramManager.getDeliveryConfig();
 
@@ -2364,7 +2492,7 @@ function getReqHost(req: Request): string {
 }
 
 export function registerScheduledAlertRoutes(app: Express) {
-  app.post("/api/alerts/heartbeat", async (req, res) => {
+  app.post("/api/alerts/heartbeat", requireAppAuth, async (req, res) => {
     try {
       telegramManager.updateHostLabel(getReqHost(req));
       const { liveContext } = req.body || {};
@@ -2388,7 +2516,7 @@ export function registerScheduledAlertRoutes(app: Express) {
     }
   });
 
-  app.get("/api/alerts/schedule-status", async (req, res) => {
+  app.get("/api/alerts/schedule-status", requireAppAuth, async (req, res) => {
     try {
       telegramManager.updateHostLabel(getReqHost(req));
       triggerScheduledAlertsCatchUp();
@@ -2429,7 +2557,7 @@ export function registerScheduledAlertRoutes(app: Express) {
     }
   });
 
-  app.put("/api/alerts/schedule-rules", async (req, res) => {
+  app.put("/api/alerts/schedule-rules", requireAdminAuth, async (req, res) => {
     try {
       telegramManager.updateHostLabel(getReqHost(req));
       const { rules, liveContext } = req.body || {};
@@ -2451,6 +2579,7 @@ export function registerScheduledAlertRoutes(app: Express) {
       const prevRules = await getActiveAlertRules();
       const normalized = normalizeScheduledRules(rules);
       const vnNow = getVNNowParts();
+      pruneDailyAlertTrackers(vnNow.dateISO);
 
       for (const nextRule of normalized) {
         const prevRule = prevRules.find((p) => p.id === nextRule.id);
@@ -2485,7 +2614,7 @@ export function registerScheduledAlertRoutes(app: Express) {
     }
   });
 
-  app.post("/api/alerts/preview", async (req, res) => {
+  app.post("/api/alerts/preview", requireAppAuth, async (req, res) => {
     try {
       telegramManager.updateHostLabel(getReqHost(req));
       const { ruleId, targetDateVN, equipmentWarningDays, timeHHmmOverride, liveContext } = req.body || {};
@@ -2523,7 +2652,7 @@ export function registerScheduledAlertRoutes(app: Express) {
     }
   });
 
-  app.post("/api/alerts/run-now", async (req, res) => {
+  app.post("/api/alerts/run-now", requireAdminAuth, async (req, res) => {
     try {
       telegramManager.updateHostLabel(getReqHost(req));
       const { ruleId, targetDateVN, channelOverride, customChatId, liveContext } = req.body || {};

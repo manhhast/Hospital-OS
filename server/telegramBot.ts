@@ -2,10 +2,12 @@ import crypto from "crypto";
 import os from "os";
 import {
   askHospitalAssistant,
+  isBriefingStatsRequest,
   type LearnedMemoryEntry,
 } from "./assistantEngine";
 import {
   acquireTelegramPollLease,
+  claimTelegramUpdateOnce,
   getTelegramPollLeaseInfo,
   loadTelegramUpdateOffsetFromDb,
   releaseTelegramPollLease,
@@ -177,6 +179,9 @@ class TelegramAssistantManager {
       [chat.first_name, chat.last_name].filter(Boolean).join(" ") ||
       chat.username ||
       `Chat ${chatId}`;
+    if (this.recentChats.has(chatId)) {
+      this.recentChats.delete(chatId);
+    }
     this.recentChats.set(chatId, {
       chatId,
       title,
@@ -184,6 +189,11 @@ class TelegramAssistantManager {
       username: chat.username,
       lastSeenAt: new Date().toISOString(),
     });
+    while (this.recentChats.size > 200) {
+      const oldestKey = this.recentChats.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.recentChats.delete(oldestKey);
+    }
   }
 
   public updateLiveContext(ctx: any) {
@@ -370,20 +380,44 @@ class TelegramAssistantManager {
 
   private async telegramApiCall(token: string, method: string, body?: any, signal?: AbortSignal) {
     const url = `https://api.telegram.org/bot${token}/${method}`;
-    const res = await fetch(url, {
-      method: body ? "POST" : "GET",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-      signal,
-    });
-    const data: any = await res.json();
-    if (!res.ok || !data?.ok) {
-      const errMsg = data?.description || `Telegram HTTP ${res.status}`;
-      const err: any = new Error(errMsg);
-      err.statusCode = data?.error_code || res.status;
-      throw err;
+    const timeoutMs = method === "getUpdates" ? 35000 : 15000;
+    const controller = new AbortController();
+    const onCallerAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        signal.addEventListener("abort", onCallerAbort, { once: true });
+      }
     }
-    return data.result;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, {
+        method: body ? "POST" : "GET",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      const data: any = await res.json();
+      if (!res.ok || !data?.ok) {
+        const errMsg = data?.description || `Telegram HTTP ${res.status}`;
+        const err: any = new Error(errMsg);
+        err.statusCode = data?.error_code || res.status;
+        throw err;
+      }
+      return data.result;
+    } catch (err: any) {
+      if (err?.name === "AbortError" && !signal?.aborted) {
+        throw new Error(`Telegram ${method} timeout sau ${Math.round(timeoutMs / 1000)}s`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      if (signal) {
+        signal.removeEventListener("abort", onCallerAbort);
+      }
+    }
   }
 
   private escapeHtml(text: string): string {
@@ -493,8 +527,8 @@ class TelegramAssistantManager {
 
     await this.telegramApiCall(token, "setMyCommands", {
       commands: [
-        { command: "tomtat", description: "Tóm tắt nhanh giao ban toàn khoa" },
-        { command: "giaoban", description: "Báo cáo số ca, thiết bị & lịch trực hôm nay" },
+        { command: "giaoban", description: "Bảng số liệu giao ban chi tiết theo bộ phận" },
+        { command: "tomtat", description: "Tóm tắt nhanh tình hình toàn khoa" },
         { command: "hoi", description: "Hỏi Trợ lý AI (dữ liệu app + Internet)" },
         { command: "nho", description: "Dạy Trợ lý ghi nhớ quy ước hoặc kiến thức mới" },
         { command: "help", description: "Xem hướng dẫn sử dụng trợ lý" },
@@ -846,6 +880,18 @@ class TelegramAssistantManager {
       return;
     }
 
+    if (updateId) {
+      const claimed = await claimTelegramUpdateOnce(
+        this.getTokenFingerprint(),
+        updateId,
+        chatId,
+        message?.message_id
+      );
+      if (!claimed) {
+        return;
+      }
+    }
+
     this.lastMessageAt = new Date().toISOString();
 
     let typingTimer: NodeJS.Timeout | null = null;
@@ -870,7 +916,8 @@ class TelegramAssistantManager {
           `🏥 **Trợ Lý Ảo Thông Minh Khoa Cận Lâm Sàng (CLS WorkHub)**\n` +
           `Tôi kết nối trực tiếp dữ liệu khoa (số ca, máy móc, lịch trực, nhân sự, SOP) **và tra cứu Internet trực tiếp**, đồng thời ghi nhớ các quy ước bạn dạy.\n\n` +
           `📌 **Lệnh nhanh:**\n` +
-          `• /tomtat hoặc /giaoban — Tóm tắt giao ban toàn khoa\n` +
+          `• /giaoban — Bảng số liệu giao ban chi tiết theo bộ phận (thêm ngày VD: /giaoban 22/11)\n` +
+          `• /tomtat — Tóm tắt nhanh toàn khoa (số ca, lịch trực, thiết bị, công việc)\n` +
           `• /hoi <câu hỏi> — Hỏi Trợ lý trong nhóm chat\n` +
           `• /nho <quy ước/kiến thức> — Dạy Trợ lý ghi nhớ lâu dài\n\n` +
           `💬 **Hoặc nhắn tự nhiên (chat riêng):**\n` +
@@ -901,9 +948,21 @@ class TelegramAssistantManager {
         return;
       }
 
+      if (/^\/giaoban(?:@\S+)?(?:\s|$)/i.test(cleanText) || isBriefingStatsRequest(cleanText)) {
+        const { generateInteractiveBriefingReport } = await import("./scheduledAlerts");
+        const report = await generateInteractiveBriefingReport({
+          queryText: cleanText,
+          liveContext: this.liveContext,
+        });
+        await this.sendMessage(chatId, report.telegramMarkdown);
+        this.totalAnswered += 1;
+        this.lastError = undefined;
+        return;
+      }
+
       let question = cleanText;
       const askMatch = cleanText.match(/^\/(hoi|ask|web)(?:@\S+)?(?:\s+([\s\S]+))?$/i);
-      if (/^\/(tomtat|giaoban)(?:@\S+)?(?:\s|$)/i.test(cleanText)) {
+      if (/^\/tomtat(?:@\S+)?(?:\s|$)/i.test(cleanText)) {
         question =
           "Hãy tóm tắt nhanh tình hình toàn khoa hiện tại: số liệu ca gần nhất, tình trạng thiết bị cảnh báo, phòng quá tải, lịch trực hôm nay và công việc cần xử lý.";
       } else if (askMatch) {
@@ -940,7 +999,15 @@ class TelegramAssistantManager {
         { sender: "user" as const, content: question },
         { sender: "assistant" as const, content: result.answer },
       ].slice(-8);
+      if (this.chatHistories.has(historyKey)) {
+        this.chatHistories.delete(historyKey);
+      }
       this.chatHistories.set(historyKey, updatedHistory);
+      while (this.chatHistories.size > 200) {
+        const oldestHistoryKey = this.chatHistories.keys().next().value;
+        if (oldestHistoryKey === undefined) break;
+        this.chatHistories.delete(oldestHistoryKey);
+      }
 
       const webLinksBlock =
         result.webSources && result.webSources.length > 0
@@ -1361,7 +1428,7 @@ class TelegramAssistantManager {
           for (const upd of updates) {
             if (upd.update_id >= this.lastUpdateOffset) {
               this.lastUpdateOffset = upd.update_id + 1;
-              void saveTelegramUpdateOffsetToDb(tokenHash, this.lastUpdateOffset);
+              await saveTelegramUpdateOffsetToDb(tokenHash, this.lastUpdateOffset);
             }
             // Run AI replies in non-blocking per-chat workers so poll loop & lease heartbeat never stall
             this.enqueueChatUpdate(upd);

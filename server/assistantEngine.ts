@@ -2547,6 +2547,26 @@ function parseAssistantResponseWithMeta(
   };
 }
 
+export function isBriefingStatsRequest(rawText: string): boolean {
+  const clean = String(rawText || "").trim();
+  if (!clean) return false;
+  if (/^\/giaoban(?:@\S+)?(?:\s|$)/i.test(clean)) return true;
+
+  const q = normalizeText(clean);
+  if (!q.includes("giao ban")) return false;
+
+  const asksOtherModules =
+    /\b(lich hop|cuoc hop|hop giao ban|ke hoach tuan|bien ban|ai truc|lich truc|ca truc|thiet bi|may moc|cong viec|nghi phep|xin nghi|sop|iso)\b/.test(
+      q
+    );
+  if (asksOtherModules) return false;
+
+  return (
+    /\b(so lieu|bao cao|bang|thong ke|chi tiet|xem|cho|gui|lay|tong hop)\b/.test(q) ||
+    /^giao ban(\s+(hom nay|hom qua|hom kia|ngay.*|so lieu.*))?$/.test(q)
+  );
+}
+
 export async function askHospitalAssistant(params: {
   question: string;
   history?: Array<{ sender: "user" | "assistant"; content: string }>;
@@ -2574,6 +2594,33 @@ export async function askHospitalAssistant(params: {
         }))
         .filter((m) => m.content.trim().length > 0)
     : [];
+
+  if (isBriefingStatsRequest(question)) {
+    const { generateInteractiveBriefingReport } = await import("./scheduledAlerts");
+    const report = await generateInteractiveBriefingReport({
+      queryText: question,
+      liveContext: rawLiveContext,
+    });
+    return {
+      answer: report.telegramMarkdown,
+      highlightedMetrics: (report.stats || []).slice(0, 4).map((s) => ({
+        label: s.label,
+        value: s.value,
+        tone: s.tone === "good" ? "emerald" : s.tone === "warn" ? "amber" : "blue",
+      })),
+      actionChecklist: [],
+      dataSourcesUsed: report.dataSourceNotes || ["Google Sheet + Kho báo cáo"],
+      webSources: [],
+      searchQueries: [],
+      usedWebSearch: false,
+      suggestedFollowUps: [
+        "Số liệu giao ban hôm qua?",
+        "Tóm tắt toàn khoa hiện tại?",
+      ],
+      modelUsed: "live-data-engine",
+      usedLiveContext: true,
+    };
+  }
 
   const liveContext = await enrichLiveContextWithPostgres(rawLiveContext, question);
   const ai = getGeminiClient();

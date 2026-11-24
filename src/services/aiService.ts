@@ -15,6 +15,7 @@ import type {
   ScheduledAlertRuleId
 } from '../types/hospital';
 import { buildLiveHospitalContext, syncLiveContextToServer } from './aiContextService';
+import { postgresSyncService } from './postgresSyncService';
 import { storageService } from './storageService';
 
 export const aiService = {
@@ -37,7 +38,8 @@ export const aiService = {
 
     const response = await fetch('/api/ai/assistant-chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({
         question,
         history: history.slice(-8).map(m => ({ sender: m.sender, content: m.content })),
@@ -84,11 +86,15 @@ export const aiService = {
   },
 
   /**
-   * Telegram Bot status & test helpers
+   * Telegram Bot status & config/test helpers
    */
   async getTelegramBotStatus(): Promise<TelegramBotStatus | null> {
     try {
-      const res = await fetch('/api/telegram/status');
+      const res = await fetch('/api/telegram/status', {
+        headers: postgresSyncService.getAuthHeaders(),
+        credentials: 'include'
+      });
+      if (!res.ok) return null;
       const json = await res.json();
       return json?.success ? (json.data as TelegramBotStatus) : null;
     } catch {
@@ -96,8 +102,77 @@ export const aiService = {
     }
   },
 
+  async saveTelegramConfig(params: {
+    botToken?: string;
+    clearToken?: boolean;
+    defaultChatId?: string;
+    enabled?: boolean;
+  }): Promise<{
+    hasBotToken: boolean;
+    tokenHint?: string;
+    status?: TelegramBotStatus;
+  }> {
+    const cleanToken = typeof params.botToken === 'string' ? params.botToken.trim() : '';
+    const cleanChatId = typeof params.defaultChatId === 'string' ? params.defaultChatId.trim() : '';
+    const qaEnabled = params.enabled !== false;
+
+    if (!postgresSyncService.isActiveBackend()) {
+      const current = storageService.getSettings();
+      const nextToken = params.clearToken ? '' : (cleanToken || current.telegramBotToken || '');
+      storageService.saveSettings({
+        ...current,
+        telegramBotToken: nextToken,
+        hasTelegramBotToken: Boolean(nextToken),
+        telegramBotTokenHint: nextToken.length >= 8 ? `••••${nextToken.slice(-6)}` : '',
+        defaultTelegramChatId: cleanChatId,
+        telegramQaEnabled: qaEnabled
+      });
+      await syncLiveContextToServer(true);
+      const st = await this.getTelegramBotStatus();
+      return {
+        hasBotToken: Boolean(nextToken),
+        tokenHint: nextToken.length >= 8 ? `••••${nextToken.slice(-6)}` : '',
+        status: st || undefined
+      };
+    }
+
+    const liveContext = buildLiveHospitalContext();
+    const res = await fetch('/api/telegram/config', {
+      method: 'POST',
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
+      body: JSON.stringify({
+        botToken: cleanToken || undefined,
+        clearToken: Boolean(params.clearToken),
+        defaultChatId: cleanChatId,
+        enabled: qaEnabled,
+        liveContext
+      })
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.error || 'Không thể lưu cấu hình Telegram Bot');
+    }
+
+    const current = storageService.getSettings();
+    storageService.saveSettings({
+      ...current,
+      telegramBotToken: '',
+      hasTelegramBotToken: Boolean(json.hasBotToken),
+      telegramBotTokenHint: String(json.tokenHint || ''),
+      defaultTelegramChatId: cleanChatId,
+      telegramQaEnabled: qaEnabled
+    });
+
+    return {
+      hasBotToken: Boolean(json.hasBotToken),
+      tokenHint: json.tokenHint,
+      status: json.status as TelegramBotStatus | undefined
+    };
+  },
+
   async testTelegramBot(params: {
-    botToken: string;
+    botToken?: string;
     defaultChatId?: string;
     enabled?: boolean;
   }): Promise<{
@@ -109,9 +184,10 @@ export const aiService = {
     const liveContext = buildLiveHospitalContext();
     const res = await fetch('/api/telegram/test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({
-        botToken: params.botToken,
+        botToken: params.botToken || '',
         defaultChatId: params.defaultChatId || '',
         enabled: params.enabled !== false,
         liveContext
@@ -129,13 +205,14 @@ export const aiService = {
     };
   },
 
-  async detectTelegramChats(botToken: string): Promise<
+  async detectTelegramChats(botToken?: string): Promise<
     Array<{ chatId: string; title: string; type: string; username?: string; lastSeenAt: string }>
   > {
     const res = await fetch('/api/telegram/detect-chats', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ botToken })
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
+      body: JSON.stringify({ botToken: botToken || '' })
     });
     const rawText = await res.text();
     let json: any = null;
@@ -153,7 +230,8 @@ export const aiService = {
   async pauseTelegramPolling(): Promise<TelegramBotStatus | null> {
     const res = await fetch('/api/telegram/pause', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include'
     });
     const json = await res.json();
     if (!res.ok || !json?.success) {
@@ -169,7 +247,8 @@ export const aiService = {
     const liveContext = buildLiveHospitalContext();
     const res = await fetch('/api/telegram/retry', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({
         botToken: params?.botToken,
         defaultChatId: params?.defaultChatId,
@@ -189,7 +268,8 @@ export const aiService = {
   }> {
     const res = await fetch('/api/telegram/verify-exclusivity', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({ botToken })
     });
     const json = await res.json();
@@ -222,7 +302,8 @@ export const aiService = {
 
     const response = await fetch('/api/ai/morning-briefing', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({
         reportDate: params.reportDate,
         yesterdayStats: {
@@ -262,7 +343,8 @@ export const aiService = {
     const liveContext = buildLiveHospitalContext();
     const response = await fetch('/api/ai/workload-forecast', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({ liveContext })
     });
     const json = await response.json();
@@ -279,7 +361,8 @@ export const aiService = {
     const liveContext = buildLiveHospitalContext();
     const response = await fetch('/api/ai/iso-copilot', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({
         question,
         chatHistory: history.slice(-6),
@@ -310,7 +393,8 @@ export const aiService = {
     const equipmentItems = storageService.getEquipment();
     const response = await fetch('/api/ai/predictive-maintenance', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({ equipmentItems, liveContext })
     });
     const json = await response.json();
@@ -331,7 +415,10 @@ export const aiService = {
     hasBotToken: boolean;
     defaultChatId: string;
   }> {
-    const res = await fetch('/api/alerts/schedule-status');
+    const res = await fetch('/api/alerts/schedule-status', {
+      headers: postgresSyncService.getAuthHeaders(),
+      credentials: 'include'
+    });
     const json = await res.json();
     if (!res.ok || !json.success || !json.data) {
       throw new Error(json?.error || 'Không thể tải cấu hình cảnh báo theo giờ cố định');
@@ -343,7 +430,8 @@ export const aiService = {
     const liveContext = buildLiveHospitalContext();
     const res = await fetch('/api/alerts/schedule-rules', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({ rules, liveContext })
     });
     const json = await res.json();
@@ -368,7 +456,8 @@ export const aiService = {
     const liveContext = buildLiveHospitalContext();
     const res = await fetch('/api/alerts/preview', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({
         ruleId: params.ruleId,
         targetDateVN: params.targetDateVN,
@@ -396,7 +485,8 @@ export const aiService = {
     const liveContext = buildLiveHospitalContext();
     const res = await fetch('/api/alerts/run-now', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: postgresSyncService.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      credentials: 'include',
       body: JSON.stringify({
         ruleId: params.ruleId,
         targetDateVN: params.targetDateVN,

@@ -38,11 +38,13 @@ export const GASArchitectureView: React.FC<GASArchitectureViewProps> = ({ onShow
   const handleDownloadFile = (file: GASFileCode) => {
     const element = document.createElement("a");
     const blob = new Blob([file.code], { type: 'text/plain' });
-    element.href = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    element.href = url;
     element.download = file.filename;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     onShowToast('Đã tải file', `Đã tải xuống file mã nguồn ${file.filename}`, 'success');
   };
 

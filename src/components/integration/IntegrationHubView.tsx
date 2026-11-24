@@ -6,7 +6,11 @@ import {
 import { storageService } from '../../services/storageService';
 import { IntegrationEndpoint, IntegrationPayloadSample } from '../../types/hospital';
 
-export const IntegrationHubView: React.FC = () => {
+interface IntegrationHubViewProps {
+  onShowToast?: (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+}
+
+export const IntegrationHubView: React.FC<IntegrationHubViewProps> = ({ onShowToast }) => {
   const [endpoints, setEndpoints] = useState<IntegrationEndpoint[]>([]);
   const [payloads, setPayloads] = useState<IntegrationPayloadSample[]>([]);
   const [selectedPayload, setSelectedPayload] = useState<IntegrationPayloadSample | null>(null);
@@ -52,7 +56,11 @@ export const IntegrationHubView: React.FC = () => {
       storageService.addIntegrationPayload(newSample);
       setSelectedPayload(newSample);
       setIsSimulating(false);
-      alert(`Đã gửi thành công gói tin API giả lập từ hệ thống ${simSystem}!`);
+      onShowToast?.(
+        'Kiểm thử API Gateway',
+        `Đã gửi thành công gói tin API giả lập từ hệ thống ${simSystem}!`,
+        'success'
+      );
     }, 800);
   };
 

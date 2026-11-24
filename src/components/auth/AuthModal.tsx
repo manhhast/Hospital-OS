@@ -150,21 +150,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    const activePg = postgresSyncService.isActiveBackend();
+    const curUser = storageService.getCurrentUser();
+    if (activePg && (!postgresSyncService.isAuthenticatedSession() || selectedUser.id !== curUser.id)) {
+      onShowToast(
+        'Yêu cầu đúng phiên đăng nhập',
+        `Trên chế độ PostgreSQL, bạn chỉ có thể tự đổi mật khẩu của tài khoản đang đăng nhập (${curUser.name}). Để đặt lại mật khẩu người khác, Quản trị viên sử dụng mục Quản lý Người dùng.`,
+        'warning'
+      );
+      setSelectedUserId(curUser.id);
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      const res = storageService.changePassword(selectedUser.id, oldPassword, newPassword);
-      setLoading(false);
-      if (res.success) {
-        onShowToast('Thành công', `Đã cập nhật mật khẩu mới cho ${selectedUser.name}!`, 'success');
-        setPassword(newPassword);
-        setOldPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setMode('login');
-      } else {
-        onShowToast('Đổi mật khẩu thất bại', res.message, 'error');
+    void (async () => {
+      try {
+        const res = activePg
+          ? await postgresSyncService.changePassword(oldPassword, newPassword)
+          : storageService.changePassword(selectedUser.id, oldPassword, newPassword);
+        if (res.success) {
+          onShowToast('Thành công', `Đã cập nhật mật khẩu mới cho ${selectedUser.name}!`, 'success');
+          setPassword(newPassword);
+          setOldPassword('');
+          setNewPassword('');
+          setConfirmPassword('');
+          setMode('login');
+        } else {
+          onShowToast('Đổi mật khẩu thất bại', res.message, 'error');
+        }
+      } finally {
+        setLoading(false);
       }
-    }, 250);
+    })();
   };
 
   const handleRequestReset = (e: React.FormEvent) => {
@@ -175,16 +192,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const res = storageService.requestPasswordReset(selectedUser.email, resetNote);
-      setLoading(false);
-      if (res.success) {
-        onShowToast('Đã gửi yêu cầu', res.message, 'info');
-        setMode('login');
-      } else {
-        onShowToast('Lỗi', res.message, 'error');
+    void (async () => {
+      try {
+        const res = postgresSyncService.isActiveBackend()
+          ? await postgresSyncService.requestPasswordReset(selectedUser.email, resetNote)
+          : storageService.requestPasswordReset(selectedUser.email, resetNote);
+        if (res.success) {
+          onShowToast('Đã gửi yêu cầu', res.message, 'info');
+          setMode('login');
+        } else {
+          onShowToast('Lỗi', res.message, 'error');
+        }
+      } finally {
+        setLoading(false);
       }
-    }, 250);
+    })();
   };
 
   return (
@@ -459,20 +481,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* Quick User Picker dropdown if user wants to change another person */}
-              <div className="pt-1">
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full text-xs px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
-                >
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.title || u.role} - {u.department})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Quick User Picker dropdown (only in standalone mode without server session isolation) */}
+              {!postgresSyncService.isActiveBackend() && (
+                <div className="pt-1">
+                  <select
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="w-full text-xs px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
+                  >
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.title || u.role} - {u.department})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Current Password Field */}
