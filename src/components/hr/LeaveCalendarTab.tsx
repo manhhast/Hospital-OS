@@ -22,6 +22,7 @@ import {
 import { LeaveRequest, StaffProfile } from '../../types/hospital';
 import { removeVietnameseTones } from '../../services/searchService';
 import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
+import { formatUniqueUnitLabel } from '../../utils/roomDisplay';
 
 interface LeaveCalendarTabProps {
   leaveRequests: LeaveRequest[];
@@ -1434,9 +1435,7 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
                               {leave.userName}
                             </div>
                             <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                              {[staff?.room || staff?.departmentSection, leave.userRole]
-                                .filter(Boolean)
-                                .join(' · ')}
+                              {formatUniqueUnitLabel([staff?.room || staff?.departmentSection, leave.userRole])}
                             </div>
                           </div>
                         </div>
@@ -1686,13 +1685,14 @@ export const LeaveCalendarTab: React.FC<LeaveCalendarTabProps> = ({
 
               {(() => {
                 const staff = profileByUserId.get(selectedLeave.userId);
-                return staff?.room || staff?.departmentSection ? (
+                const unitLabel = formatUniqueUnitLabel([staff?.room, staff?.departmentSection]);
+                return unitLabel ? (
                   <div className="flex items-start justify-between gap-3 py-1.5 border-b border-[#DFE7F0] dark:border-slate-800">
                     <span className="text-[#718096] dark:text-slate-400 flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5" /> Phòng / Bộ phận:
                     </span>
                     <span className="font-semibold text-[#263445] dark:text-slate-200 text-right">
-                      {[staff.room, staff.departmentSection].filter(Boolean).join(' · ')}
+                      {unitLabel}
                     </span>
                   </div>
                 ) : null;

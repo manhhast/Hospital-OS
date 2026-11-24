@@ -1,10 +1,13 @@
+import { ThinkingLevel } from "@google/genai";
 import type { Express, Request } from "express";
 import type {
   AppSettings,
+  DepartmentUnit,
   EquipmentItem,
   LeaveRequest,
   MeetingItem,
   NotificationLog,
+  ParaclinicalRoom,
   ScheduledAlertChannel,
   ScheduledAlertHistoryItem,
   ScheduledAlertPreviewResult,
@@ -20,6 +23,12 @@ import type {
   WeeklyMeeting,
 } from "../src/types/hospital";
 import type { ArchivedCaseReportItem } from "../src/services/reportArchiveService";
+import { formatUniqueUnitLabel } from "../src/utils/roomDisplay";
+import {
+  getGeminiClient,
+  VALID_FALLBACK_MODEL,
+  VALID_PRIMARY_MODEL,
+} from "./assistantEngine";
 import {
   fetchRawTabCsv,
   fetchSingleSheetTab,
@@ -263,6 +272,8 @@ interface ResolvedHospitalDataset {
   settings: Partial<AppSettings>;
   tasks: TaskItem[];
   equipment: EquipmentItem[];
+  rooms: ParaclinicalRoom[];
+  departments: DepartmentUnit[];
   shifts: ShiftDuty[];
   leaveRequests: LeaveRequest[];
   meetings: WeeklyMeeting[];
@@ -339,6 +350,8 @@ async function resolveHospitalDataset(liveContextOverride?: any): Promise<Resolv
     "settings",
     "tasks",
     "equipment",
+    "rooms",
+    "departments",
     "shifts",
     "leave_requests",
     "meetings",
@@ -376,6 +389,16 @@ async function resolveHospitalDataset(liveContextOverride?: any): Promise<Resolv
     liveCtx?.equipment?.items
   );
 
+  const rooms = pickNonEmptyArray<ParaclinicalRoom>(
+    buckets.rooms,
+    liveCtx?.rooms?.items
+  );
+
+  const departments = pickNonEmptyArray<DepartmentUnit>(
+    buckets.departments,
+    liveCtx?.rooms?.departments
+  );
+
   const shifts = pickNonEmptyArray<ShiftDuty>(
     buckets.shifts,
     liveCtx?.shifts?.todayAndUpcoming ?? liveCtx?.shifts?.items
@@ -409,6 +432,8 @@ async function resolveHospitalDataset(liveContextOverride?: any): Promise<Resolv
     settings: mergedSettings,
     tasks,
     equipment,
+    rooms,
+    departments,
     shifts,
     leaveRequests,
     meetings,
@@ -694,7 +719,7 @@ export function buildMorningBriefing(
         sh.startTime && sh.endTime
           ? `${sh.startTime}–${sh.endTime}`
           : sh.shiftTime || sh.shiftName || sh.workType || "Trong ca";
-      const place = [sh.room || sh.roomLocation, sh.machine].filter(Boolean).join(" / ");
+      const place = formatUniqueUnitLabel([sh.room || sh.roomLocation, sh.machine], " / ");
       lines.push(
         `  ${idx + 1}. **${name}** (${sh.workType || "Ca trực"} · ${timeStr})${
           place ? ` — ${place}` : ""
@@ -1498,14 +1523,66 @@ function computeMonthAverageToDay(items: ArchivedCaseReportItem[], maxDay: numbe
   };
 }
 
-export async function buildNoonServiceReport(
+interface MergedServiceComparisonRow {
+  key: string;
+  name: string;
+  category: string;
+  curBh: number;
+  curNd: number;
+  curTotal: number;
+  prevTotal: number;
+  isLt: boolean;
+}
+
+interface ComputedServiceReportBundle {
+  preview: ScheduledAlertPreviewResult;
+  targetISO: string;
+  prevISO: string;
+  dateVN: string;
+  weekday: string;
+  prevDateVN: string;
+  prevWeekday: string;
+  year: number;
+  monthNum: number;
+  sourceLabel: string;
+  syncOriginLabel: string;
+  summary: ReturnType<typeof summarizeMonthDay>;
+  prevSummary: ReturnType<typeof summarizeMonthDay>;
+  mtdStats: ReturnType<typeof computeMonthAverageToDay>;
+  categoryNames: string[];
+  activeCategories: string[];
+  allMergedServices: MergedServiceComparisonRow[];
+  activeServicesCount: number;
+  hasPrevBaseline: boolean;
+  bhPct: number;
+  ndPct: number;
+}
+
+function formatCategoryHeader(catName: string): { icon: string; title: string } {
+  const norm = String(catName || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+  if (norm.includes("noi soi")) return { icon: "👁️", title: "NỘI SOI" };
+  if (norm.includes("x quang") || norm.includes("x-quang")) return { icon: "🩻", title: "X-QUANG & CLVT" };
+  if (norm.includes("dien tim") || norm.includes("lhn")) return { icon: "📈", title: "ĐIỆN TIM & LHN" };
+  if (norm.includes("xet nghiem")) return { icon: "🧪", title: "XÉT NGHIỆM" };
+  if (norm.includes("sieu am")) return { icon: "🩺", title: "SIÊU ÂM" };
+  if (norm.includes("msct")) return { icon: "🖥️", title: "MSCT" };
+  if (norm.includes("mri")) return { icon: "🧲", title: "MRI" };
+  return { icon: "📌", title: catName.toUpperCase() };
+}
+
+async function computeServiceReportBundle(
   data: ResolvedHospitalDataset,
   yesterdayISO: string,
   allowPersistSync: boolean,
   generatedAtVN = "",
   scheduleTimeHHmm = "12:45",
   syncModeLabel?: string
-): Promise<ScheduledAlertPreviewResult> {
+): Promise<ComputedServiceReportBundle> {
   const m = yesterdayISO.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const yYear = m ? parseInt(m[1], 10) : new Date().getUTCFullYear();
   const yMonth = m ? parseInt(m[2], 10) : new Date().getUTCMonth() + 1;
@@ -1538,7 +1615,7 @@ export async function buildNoonServiceReport(
   }
 
   let summary = summarizeMonthDay(primaryMonth.items, yDay);
-  let prevSummary = summarizeMonthDay(prevDayMonthItems, dbDay);
+  const prevSummary = summarizeMonthDay(prevDayMonthItems, dbDay);
   const mtdStats = computeMonthAverageToDay(primaryMonth.items, yDay);
   const notes = [...data.dataSourceNotes, primaryMonth.sourceLabel];
 
@@ -1584,7 +1661,6 @@ export async function buildNoonServiceReport(
   const ndPct = summary.totalCases > 0 ? 100 - bhPct : 0;
   const hasPrevBaseline = prevSummary.totalCases > 0 || prevSummary.ltCount > 0;
 
-  // Merge union of categories from yesterday and dayBeforeYesterday
   const categoryNames = Array.from(
     new Set([
       ...summary.categories.map((c) => c.category),
@@ -1596,20 +1672,7 @@ export async function buildNoonServiceReport(
     return totB - totA;
   });
 
-  // Merge union of all technical services across yesterday and dayBeforeYesterday
-  const unionServiceMap = new Map<
-    string,
-    {
-      key: string;
-      name: string;
-      category: string;
-      curBh: number;
-      curNd: number;
-      curTotal: number;
-      prevTotal: number;
-      isLt: boolean;
-    }
-  >();
+  const unionServiceMap = new Map<string, MergedServiceComparisonRow>();
 
   for (const svc of summary.allServices) {
     const prevSvc = prevSummary.serviceByKey.get(svc.key);
@@ -1644,27 +1707,15 @@ export async function buildNoonServiceReport(
     (s) => s.curTotal > 0 || s.prevTotal > 0 || s.isLt
   ).length;
 
-  const formatCategoryHeader = (catName: string): { icon: string; title: string } => {
-    const norm = String(catName || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/đ/g, "d")
-      .replace(/Đ/g, "D")
-      .toLowerCase();
-    if (norm.includes("noi soi")) return { icon: "👁️", title: "NỘI SOI" };
-    if (norm.includes("x quang") || norm.includes("x-quang")) return { icon: "🩻", title: "X-QUANG & CLVT" };
-    if (norm.includes("dien tim") || norm.includes("lhn")) return { icon: "📈", title: "ĐIỆN TIM & LHN" };
-    if (norm.includes("xet nghiem")) return { icon: "🧪", title: "XÉT NGHIỆM" };
-    if (norm.includes("sieu am")) return { icon: "🩺", title: "SIÊU ÂM" };
-    if (norm.includes("msct")) return { icon: "🖥️", title: "MSCT" };
-    if (norm.includes("mri")) return { icon: "🧲", title: "MRI" };
-    return { icon: "📌", title: catName.toUpperCase() };
-  };
-
   const syncBaseLabel = syncModeLabel || `Đồng bộ Tự động ${scheduleTimeHHmm}`;
-  const syncOriginLabel = primaryMonth.sourceLabel.includes("Google Sheet")
+  const syncOriginLabel = primaryMonth.sourceLabel.startsWith("Google Sheet")
     ? `Hệ thống (${syncBaseLabel} · Google Sheet)`
     : `Hệ thống (${syncBaseLabel} · ${primaryMonth.sourceLabel})`;
+
+  const activeCategories = categoryNames.filter((catName) => {
+    const curCat = summary.byCategoryMap.get(catName);
+    return (curCat?.total || 0) > 0;
+  });
 
   const lines: string[] = [];
   lines.push(`📊 **BÁO CÁO GIAO BAN SỐ LIỆU SỬ DỤNG AI**`);
@@ -1689,11 +1740,6 @@ export async function buildNoonServiceReport(
       );
     }
   } else {
-    const activeCategories = categoryNames.filter((catName) => {
-      const curCat = summary.byCategoryMap.get(catName);
-      return (curCat?.total || 0) > 0;
-    });
-
     activeCategories.forEach((catName) => {
       const curCat = summary.byCategoryMap.get(catName) || {
         category: catName,
@@ -1757,7 +1803,7 @@ export async function buildNoonServiceReport(
         )} · ND ${summary.totalNd.toLocaleString("vi-VN")} · ${activeServicesCount} dịch vụ kỹ thuật có số liệu.`
       : `Báo cáo ${scheduleTimeHHmm} ngày ${dateVN}: Chưa ghi nhận phát sinh số ca trong kho lưu trữ/Google Sheet.`;
 
-  return {
+  const preview: ScheduledAlertPreviewResult = {
     ruleId: "noon_services_1245",
     ruleName: "Tổng hợp Dịch vụ Kỹ thuật Ngày Hôm Trước",
     targetDateVN: yesterdayISO,
@@ -1803,6 +1849,49 @@ export async function buildNoonServiceReport(
     ],
     dataSourceNotes: Array.from(new Set(notes)),
   };
+
+  return {
+    preview,
+    targetISO: yesterdayISO,
+    prevISO: dayBeforeISO,
+    dateVN,
+    weekday,
+    prevDateVN,
+    prevWeekday,
+    year: yYear,
+    monthNum: yMonth,
+    sourceLabel: primaryMonth.sourceLabel,
+    syncOriginLabel,
+    summary,
+    prevSummary,
+    mtdStats,
+    categoryNames,
+    activeCategories,
+    allMergedServices,
+    activeServicesCount,
+    hasPrevBaseline,
+    bhPct,
+    ndPct,
+  };
+}
+
+export async function buildNoonServiceReport(
+  data: ResolvedHospitalDataset,
+  yesterdayISO: string,
+  allowPersistSync: boolean,
+  generatedAtVN = "",
+  scheduleTimeHHmm = "12:45",
+  syncModeLabel?: string
+): Promise<ScheduledAlertPreviewResult> {
+  const bundle = await computeServiceReportBundle(
+    data,
+    yesterdayISO,
+    allowPersistSync,
+    generatedAtVN,
+    scheduleTimeHHmm,
+    syncModeLabel
+  );
+  return bundle.preview;
 }
 
 // ==========================================
@@ -1893,7 +1982,7 @@ export function buildEveningPrepBriefing(
         sh.startTime && sh.endTime
           ? `${sh.startTime}–${sh.endTime}`
           : sh.shiftTime || sh.shiftName || sh.workType || "Trong ca";
-      const place = [sh.room || sh.roomLocation, sh.machine].filter(Boolean).join(" / ");
+      const place = formatUniqueUnitLabel([sh.room || sh.roomLocation, sh.machine], " / ");
       lines.push(
         `  ${idx + 1}. **${name}** (${sh.workType || "Ca trực"} · ${timeStr})${
           place ? ` — ${place}` : ""
@@ -2043,6 +2132,1005 @@ export async function generateRulePreview(params: {
   );
 }
 
+function isStaffInactiveStatus(status?: string): boolean {
+  const norm = String(status || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+  return (
+    norm.includes("nghi viec") ||
+    norm.includes("nghi huu") ||
+    norm.includes("chuyen cong tac")
+  );
+}
+
+function getActiveStaffAndLeaves(data: ResolvedHospitalDataset) {
+  const activeStaff = data.staffProfiles.filter(
+    (s) => s && !isStaffInactiveStatus(s.currentStatus)
+  );
+  const inactiveNames = new Set(
+    data.staffProfiles
+      .filter((s) => s && isStaffInactiveStatus(s.currentStatus))
+      .map((s) => String(s.fullName || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const activeLeaveRequests = data.leaveRequests.filter(
+    (l) => l && !inactiveNames.has(String(l.userName || "").trim().toLowerCase())
+  );
+  return { activeStaff, activeLeaveRequests };
+}
+
+function scanStaffCertificateAlertsForDate(
+  staffList: StaffProfile[],
+  referenceISO: string,
+  warningDays = 30
+): Array<{
+  staffName: string;
+  certName: string;
+  expiryDateISO: string;
+  daysRemaining: number;
+}> {
+  const alerts: Array<{
+    staffName: string;
+    certName: string;
+    expiryDateISO: string;
+    daysRemaining: number;
+  }> = [];
+
+  for (const s of staffList) {
+    if (!Array.isArray(s?.certificates)) continue;
+    for (const cert of s.certificates) {
+      const cleanDate = String(cert?.expiryDate || "").trim().slice(0, 10);
+      if (!cleanDate) continue;
+      const daysRemaining = diffDaysBetweenISO(cleanDate, referenceISO);
+      if (daysRemaining === null || daysRemaining > warningDays) continue;
+      alerts.push({
+        staffName: s.fullName,
+        certName: cert.name || "Chứng chỉ chuyên môn",
+        expiryDateISO: cleanDate,
+        daysRemaining,
+      });
+    }
+  }
+
+  alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
+  return alerts;
+}
+
+function formatShortDM(dateISO?: string): string {
+  const clean = String(dateISO || "").trim().slice(0, 10);
+  const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return clean || "Chưa rõ";
+  return `${m[3]}/${m[2]}`;
+}
+
+async function resolveBestServiceReportBundle(params: {
+  data: ResolvedHospitalDataset;
+  queryText?: string;
+  vnNow: ReturnType<typeof getVNNowParts>;
+  syncModeLabel: string;
+}): Promise<{
+  bundle: ComputedServiceReportBundle;
+  explicitISO: string | null;
+}> {
+  const { data, queryText, vnNow, syncModeLabel } = params;
+  const explicitISO = parseExplicitBriefingDateISO(queryText || "", vnNow);
+
+  if (explicitISO) {
+    const bundle = await computeServiceReportBundle(
+      data,
+      explicitISO,
+      false,
+      vnNow.dateTimeVN,
+      vnNow.timeHHmm,
+      syncModeLabel
+    );
+    return { bundle, explicitISO };
+  }
+
+  const todayBundle = await computeServiceReportBundle(
+    data,
+    vnNow.dateISO,
+    false,
+    vnNow.dateTimeVN,
+    vnNow.timeHHmm,
+    syncModeLabel
+  );
+  if (todayBundle.summary.totalCases > 0) {
+    return { bundle: todayBundle, explicitISO: null };
+  }
+
+  const yesterdayISO = offsetDateISO(vnNow.dateISO, -1);
+  const yesterdayBundle = await computeServiceReportBundle(
+    data,
+    yesterdayISO,
+    false,
+    vnNow.dateTimeVN,
+    vnNow.timeHHmm,
+    syncModeLabel
+  );
+  if (yesterdayBundle.summary.totalCases > 0) {
+    return { bundle: yesterdayBundle, explicitISO: null };
+  }
+
+  const latestLiveIso = data.liveContext?.caseReports?.latestRecordedDay?.dateIso;
+  if (typeof latestLiveIso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(latestLiveIso)) {
+    const latestBundle = await computeServiceReportBundle(
+      data,
+      latestLiveIso,
+      false,
+      vnNow.dateTimeVN,
+      vnNow.timeHHmm,
+      syncModeLabel
+    );
+    return { bundle: latestBundle, explicitISO: null };
+  }
+
+  return { bundle: yesterdayBundle, explicitISO: null };
+}
+
+// ==========================================
+// 4A. COMPACT /tomtat REPORT BUILDER
+// ==========================================
+export async function generateCompactSummaryReport(params: {
+  queryText?: string;
+  liveContext?: any;
+}): Promise<ScheduledAlertPreviewResult> {
+  const vnNow = getVNNowParts();
+  const data = await resolveHospitalDataset(params.liveContext);
+  const syncModeLabel = `Đồng bộ trực tiếp ${vnNow.timeHHmm}`;
+
+  const { bundle, explicitISO } = await resolveBestServiceReportBundle({
+    data,
+    queryText: params.queryText,
+    vnNow,
+    syncModeLabel,
+  });
+
+  const opsDateISO = explicitISO || vnNow.dateISO;
+  const opsDateVN = formatDateISOToVN(opsDateISO);
+  const opsIsToday = opsDateISO === vnNow.dateISO;
+
+  // Compact open tasks summary
+  const openTasks = data.tasks.filter(
+    (t) => t && t.status !== "Đã hoàn thành" && t.status !== "Hủy"
+  );
+  const sortedOpenTasks = [...openTasks].sort((a, b) => {
+    const dA = String(a.dueDate || "").trim().slice(0, 10);
+    const dB = String(b.dueDate || "").trim().slice(0, 10);
+    const rank = (d: string) => (d && d < opsDateISO ? 0 : d === opsDateISO ? 1 : 2);
+    const rDiff = rank(dA) - rank(dB);
+    if (rDiff !== 0) return rDiff;
+    const pDiff = priorityScore(a.priority) - priorityScore(b.priority);
+    if (pDiff !== 0) return pDiff;
+    return (dA || "9999").localeCompare(dB || "9999");
+  });
+
+  const overdueCount = openTasks.filter((t) => {
+    const d = String(t.dueDate || "").trim().slice(0, 10);
+    return Boolean(d) && d < opsDateISO;
+  }).length;
+  const dueTodayCount = openTasks.filter(
+    (t) => String(t.dueDate || "").trim().slice(0, 10) === opsDateISO
+  ).length;
+
+  // Compact leave summary
+  const { activeLeaveRequests } = getActiveStaffAndLeaves(data);
+  const leaveList = collectLeaveForDate(activeLeaveRequests, data.shifts, opsDateISO);
+  const pendingLeaveCount = activeLeaveRequests.filter((l) => l.status === "Chờ duyệt").length;
+
+  const extraLines: string[] = [];
+  extraLines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+
+  const taskSummaryTags = [
+    `${openTasks.length} mở`,
+    ...(overdueCount > 0 ? [`${overdueCount} quá hạn`] : []),
+    ...(dueTodayCount > 0 ? [`${dueTodayCount} đến hạn`] : []),
+  ].join(" · ");
+  extraLines.push(`📋 **CÔNG VIỆC (${taskSummaryTags})**`);
+
+  if (sortedOpenTasks.length === 0) {
+    extraLines.push(`• ✅ Không có công việc tồn đọng.`);
+  } else {
+    sortedOpenTasks.slice(0, 5).forEach((t) => {
+      const dueISO = String(t.dueDate || "").trim().slice(0, 10);
+      const tag =
+        dueISO && dueISO < opsDateISO
+          ? "🔴 Quá hạn"
+          : dueISO === opsDateISO
+          ? "🟠 Hôm nay"
+          : t.priority;
+      const dueShort = dueISO ? ` · ${formatShortDM(dueISO)}` : "";
+      extraLines.push(
+        `• [${tag}] ${t.title} — _${t.assignee || "Chưa gán"}_${dueShort}`
+      );
+    });
+    if (sortedOpenTasks.length > 5) {
+      extraLines.push(`• _... và ${sortedOpenTasks.length - 5} việc khác._`);
+    }
+  }
+
+  extraLines.push("");
+  extraLines.push(
+    `🏖️ **NGƯỜI NGHỈ (${opsIsToday ? `Hôm nay ${opsDateVN}` : opsDateVN}: ${leaveList.length} người)**`
+  );
+  if (leaveList.length === 0) {
+    extraLines.push(`• ✅ Đủ quân số (không có người nghỉ).`);
+  } else {
+    leaveList.slice(0, 8).forEach((l) => {
+      const subTxt = l.substitute ? ` · Thay: ${l.substitute}` : "";
+      const pendTxt = l.statusLabel === "Chờ duyệt" ? " [Chờ duyệt]" : "";
+      extraLines.push(`• **${l.name}** — ${l.detail}${subTxt}${pendTxt}`);
+    });
+    if (leaveList.length > 8) {
+      extraLines.push(`• _... và ${leaveList.length - 8} người nghỉ khác._`);
+    }
+  }
+  if (pendingLeaveCount > 0 && leaveList.every((l) => l.statusLabel !== "Chờ duyệt")) {
+    extraLines.push(`• _Có ${pendingLeaveCount} đơn xin nghỉ đang chờ duyệt._`);
+  }
+
+  return {
+    ...bundle.preview,
+    title: `Tóm tắt số liệu ${bundle.dateVN}, công việc & người nghỉ (${opsDateVN})`,
+    telegramMarkdown: `${bundle.preview.telegramMarkdown}\n${extraLines.join("\n")}`,
+    inAppSummary: `${bundle.preview.inAppSummary} Công việc mở: ${openTasks.length} (${overdueCount} quá hạn). Người nghỉ ${opsDateVN}: ${leaveList.length}.`,
+    stats: [
+      ...bundle.preview.stats.slice(0, 2),
+      {
+        label: "Công việc mở",
+        value: `${openTasks.length} việc (${overdueCount} trễ)`,
+        tone: overdueCount > 0 ? "danger" : openTasks.length > 0 ? "warn" : "good",
+      },
+      {
+        label: `Nghỉ (${formatShortDM(opsDateISO)})`,
+        value: `${leaveList.length} người`,
+        tone: leaveList.length > 0 ? "warn" : "good",
+      },
+    ],
+  };
+}
+
+// ==========================================
+// 4B. FULL DETAILED & EVALUATED /giaoban BUILDER
+// ==========================================
+function buildDeterministicComprehensiveEvaluation(ctx: {
+  caseDateVN: string;
+  prevDateVN: string;
+  opsDateVN: string;
+  opsIsToday: boolean;
+  bundle: ComputedServiceReportBundle;
+  roomsTotal: number;
+  overloadedRooms: ParaclinicalRoom[];
+  maintenanceRooms: ParaclinicalRoom[];
+  eqTotal: number;
+  eqBrokenCount: number;
+  eqExpiringCount: number;
+  eqExpiredComplianceCount: number;
+  activeStaffCount: number;
+  dutyCount: number;
+  leaveList: Array<{ name: string; detail: string; substitute?: string; statusLabel: string }>;
+  pendingLeavesCount: number;
+  certAlertCount: number;
+  openTasksCount: number;
+  overdueTasksCount: number;
+  dueTodayTasksCount: number;
+  urgentTasksCount: number;
+  completedOpsCount: number;
+  meetingsCount: number;
+}): string[] {
+  const { bundle } = ctx;
+  const { summary, prevSummary, mtdStats, hasPrevBaseline, bhPct, ndPct } = bundle;
+  const evalLines: string[] = [];
+
+  // 1. Service volume evaluation
+  if (summary.totalCases > 0) {
+    const prevPctStr =
+      hasPrevBaseline && prevSummary.totalCases > 0
+        ? (() => {
+            const diff = summary.totalCases - prevSummary.totalCases;
+            const pct = ((diff / prevSummary.totalCases) * 100).toFixed(1);
+            return ` (${diff >= 0 ? "+" : ""}${pct}%, ${diff >= 0 ? "+" : ""}${diff.toLocaleString("vi-VN")} ca so với ${ctx.prevDateVN})`;
+          })()
+        : "";
+    const mtdCompStr =
+      mtdStats.avgPerDay > 0
+        ? (() => {
+            const diffMtd = summary.totalCases - mtdStats.avgPerDay;
+            const pctMtd = ((diffMtd / mtdStats.avgPerDay) * 100).toFixed(1);
+            return `, ${diffMtd >= 0 ? "vượt" : "thấp hơn"} TB tháng ${Math.abs(Number(pctMtd))}% (TB ${mtdStats.avgPerDay.toLocaleString("vi-VN")} ca/ngày)`;
+          })()
+        : "";
+    const topCat = bundle.activeCategories[0]
+      ? summary.byCategoryMap.get(bundle.activeCategories[0])
+      : undefined;
+    const topCatTxt = topCat
+      ? ` Nhóm chủ lực là **${formatCategoryHeader(topCat.category).title}** (${topCat.total.toLocaleString("vi-VN")} ca, chiếm ${Math.round(
+          (topCat.total / summary.totalCases) * 100
+        )}%).`
+      : "";
+    evalLines.push(
+      `• **Hoạt động chuyên môn & sản lượng:** Tổng khối lượng đạt **${summary.totalCases.toLocaleString(
+        "vi-VN"
+      )} ca**${prevPctStr}${mtdCompStr}. Cơ cấu BHYT chiếm **${bhPct}%**, Dịch vụ/ND chiếm **${ndPct}%**.${topCatTxt}`
+    );
+  } else {
+    evalLines.push(
+      `• **Hoạt động chuyên môn & sản lượng:** Chưa ghi nhận số ca ngày ${ctx.caseDateVN} trên hệ thống/Google Sheet; cần kiểm tra tiến độ cập nhật bảng số liệu.`
+    );
+  }
+
+  // 2. Rooms & capacity evaluation
+  if (ctx.roomsTotal === 0) {
+    evalLines.push(
+      `• **Phòng chuyên môn & công suất:** Chưa có dữ liệu phòng chuyên môn trong kho đồng bộ.`
+    );
+  } else if (ctx.overloadedRooms.length > 0 || ctx.maintenanceRooms.length > 0) {
+    const parts: string[] = [];
+    if (ctx.overloadedRooms.length > 0) {
+      parts.push(
+        `${ctx.overloadedRooms.length} phòng đang tải cao/quá tải (${ctx.overloadedRooms
+          .slice(0, 3)
+          .map((r) => `${r.name} ${r.utilizationRate}%`)
+          .join(", ")})`
+      );
+    }
+    if (ctx.maintenanceRooms.length > 0) {
+      parts.push(
+        `${ctx.maintenanceRooms.length} phòng đang bảo trì/tạm ngưng (${ctx.maintenanceRooms
+          .slice(0, 2)
+          .map((r) => r.name)
+          .join(", ")})`
+      );
+    }
+    evalLines.push(
+      `• **Phòng chuyên môn & điều phối luồng bệnh nhân:** Trong ${ctx.roomsTotal} phòng có ${parts.join(
+        "; "
+      )} — cần điều tiết bệnh nhân sang phòng dự phòng trong khung giờ cao điểm.`
+    );
+  } else {
+    evalLines.push(
+      `• **Phòng chuyên môn & công suất:** Cả ${ctx.roomsTotal} phòng vận hành ổn định, chưa ghi nhận điểm nghẽn quá tải.`
+    );
+  }
+
+  // 3. Equipment & compliance evaluation
+  if (ctx.eqBrokenCount > 0 || ctx.eqExpiringCount > 0) {
+    const riskLevel =
+      ctx.eqBrokenCount > 0 || ctx.eqExpiredComplianceCount > 0 ? "Mức cảnh báo cao" : "Cần theo dõi";
+    evalLines.push(
+      `• **Trang thiết bị & an toàn kiểm định (${riskLevel}):** Hiện có **${ctx.eqBrokenCount}** máy gặp sự cố/khóa an toàn và **${ctx.eqExpiringCount}** mốc kiểm định/bảo trì ≤30 ngày (trong đó **${ctx.eqExpiredComplianceCount}** mốc đã quá hạn), cần tổ TBYT bám sát khắc phục.`
+    );
+  } else {
+    evalLines.push(
+      `• **Trang thiết bị & an toàn kiểm định:** Toàn bộ ${ctx.eqTotal} thiết bị hoạt động bình thường, các hạn kiểm chuẩn/ATBX/bảo trì đều an toàn (>30 ngày).`
+    );
+  }
+
+  // 4. HR, Duty roster, Leaves & Certs evaluation
+  const missingSubCount = ctx.leaveList.filter((l) => !l.substitute).length;
+  const hrParts: string[] = [
+    `Quân số hoạt động **${ctx.activeStaffCount} người**, phân công **${ctx.dutyCount} lượt trực/ca làm việc**`,
+    ctx.leaveList.length > 0
+      ? `có **${ctx.leaveList.length} người nghỉ**${
+          missingSubCount > 0 ? ` (${missingSubCount} người chưa ghi nhận người thay ca)` : " (đã bố trí người thay thế)"
+        }`
+      : `không có người nghỉ trong ngày`,
+  ];
+  if (ctx.pendingLeavesCount > 0) {
+    hrParts.push(`${ctx.pendingLeavesCount} đơn nghỉ phép chờ duyệt`);
+  }
+  if (ctx.certAlertCount > 0) {
+    hrParts.push(`${ctx.certAlertCount} chứng chỉ nhân sự sắp/đã hết hạn ≤30 ngày`);
+  }
+  evalLines.push(`• **Nhân sự, lịch trực & chứng chỉ:** ${hrParts.join("; ")}.`);
+
+  // 5. Tasks & Meetings evaluation
+  evalLines.push(
+    `• **Công việc & lịch họp:** Đang mở **${ctx.openTasksCount}** đầu việc (**${ctx.overdueTasksCount}** quá hạn, **${ctx.dueTodayTasksCount}** đến hạn ${
+      ctx.opsIsToday ? "hôm nay" : ctx.opsDateVN
+    }, **${ctx.urgentTasksCount}** khẩn cấp/cao; đã xong **${ctx.completedOpsCount}** việc). Lịch họp ghi nhận **${ctx.meetingsCount}** cuộc họp.`
+  );
+
+  // 6. Prioritized executive recommendations
+  const actions: string[] = [];
+  if (ctx.eqBrokenCount > 0 || ctx.eqExpiredComplianceCount > 0) {
+    actions.push(
+      `Xử lý dứt điểm ${ctx.eqBrokenCount > 0 ? `${ctx.eqBrokenCount} thiết bị sự cố/khóa` : ""}${
+        ctx.eqBrokenCount > 0 && ctx.eqExpiredComplianceCount > 0 ? " và " : ""
+      }${
+        ctx.eqExpiredComplianceCount > 0 ? `${ctx.eqExpiredComplianceCount} hồ sơ kiểm định quá hạn` : ""
+      } để đảm bảo thông suốt kỹ thuật & ISO/ATBX.`
+    );
+  }
+  if (ctx.overdueTasksCount > 0 || ctx.dueTodayTasksCount > 0) {
+    const taskActionParts = [
+      ctx.overdueTasksCount > 0 ? `${ctx.overdueTasksCount} việc quá hạn` : "",
+      ctx.dueTodayTasksCount > 0 ? `${ctx.dueTodayTasksCount} việc đến hạn trong ngày ${ctx.opsDateVN}` : "",
+    ].filter(Boolean);
+    actions.push(`Đôn đốc hoàn thành ${taskActionParts.join(" và ")}.`);
+  }
+  if (ctx.overloadedRooms.length > 0) {
+    actions.push(
+      `Điều phối nhân lực hỗ trợ ${ctx.overloadedRooms
+        .slice(0, 2)
+        .map((r) => r.name)
+        .join(", ")} đang công suất cao.`
+    );
+  }
+  if (missingSubCount > 0 || ctx.pendingLeavesCount > 0) {
+    actions.push(
+      `Rà soát ${missingSubCount > 0 ? "bố trí người thay ca cho nhân sự nghỉ" : ""}${
+        missingSubCount > 0 && ctx.pendingLeavesCount > 0 ? " và " : ""
+      }${ctx.pendingLeavesCount > 0 ? `phê duyệt ${ctx.pendingLeavesCount} đơn nghỉ tồn` : ""}.`
+    );
+  }
+  if (actions.length === 0) {
+    actions.push(
+      "Duy trì IQC đầu ngày, giám sát TAT trả kết quả các nhóm kỹ thuật trọng điểm và cập nhật số ca kịp thời lên Google Sheet."
+    );
+  }
+
+  evalLines.push(`• **Kiến nghị điều hành ưu tiên:** ${actions.join(" ")}`);
+  return evalLines;
+}
+
+async function generateGeminiBriefingEvaluation(
+  digestText: string,
+  fallbackLines: string[]
+): Promise<{ lines: string[]; usedAi: boolean }> {
+  const ai = getGeminiClient();
+  if (!ai) {
+    return { lines: fallbackLines, usedAi: false };
+  }
+
+  const systemInstruction = `Bạn là Trưởng Khoa Cận Lâm Sàng dày dặn kinh nghiệm đang tổng kết báo cáo giao ban toàn khoa.
+Hãy viết phần **ĐÁNH GIÁ TỔNG HỢP TẤT CẢ CÁC NỘI DUNG & KHUYẾN NGHỊ ĐIỀU HÀNH** bằng tiếng Việt súc tích, thực chiến dựa HOÀN TOÀN vào DỮ LIỆU THỰC TẾ bên dưới.
+
+QUY TẮC BẮT BUỘC:
+1. Chỉ sử dụng số liệu, tên phòng, tên máy, tên nhân sự, tên công việc có thật trong dữ liệu cung cấp. TUYỆT ĐỐI không tự bịa số liệu hay thêm SOP không liên quan.
+2. Đánh giá ĐẦY ĐỦ cả 5 mảng nội dung:
+   • **Số liệu dịch vụ & biến động** (tổng ca, % tăng/giảm, so với TB tháng, cơ cấu BH/ND, nhóm nổi bật)
+   • **Phòng chuyên môn & công suất** (điểm nóng quá tải, phòng bảo trì/tạm ngưng hoặc vận hành ổn)
+   • **Trang thiết bị & an toàn kiểm định** (máy sự cố/khóa, mốc sắp/quá hạn ATBX/ISO/bảo trì)
+   • **Nhân sự, lịch trực, nghỉ phép & chứng chỉ** (đủ hay thiếu quân số, thay ca, đơn chờ duyệt, chứng chỉ sắp hạn)
+   • **Công việc & lịch họp** (việc quá hạn/đến hạn/ưu tiên, cuộc họp trọng tâm)
+3. Kết thúc bằng mục **• Khuyến nghị điều hành ưu tiên:** gồm 2-4 hành động cụ thể nhất ngay trong ngày (gắn đúng tên đối tượng thực tế).
+4. Định dạng: mỗi mảng 1 gạch đầu dòng \`• **Tên mảng:** nội dung súc tích 1-2 câu\`. Không dùng bảng Markdown \`|...|\`, không viết lời mở đầu hay kết luận thừa.`;
+
+  try {
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: VALID_PRIMARY_MODEL,
+        contents: `DỮ LIỆU GIAO BAN THỰC TẾ:\n${digestText}`,
+        config: {
+          systemInstruction,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        },
+      }),
+      10000,
+      "Briefing evaluation AI timeout"
+    );
+
+    const text = (response?.text || "").trim();
+    if (text.length > 60) {
+      const cleanedLines = text
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      return { lines: cleanedLines, usedAi: true };
+    }
+  } catch {
+    // Quick fallback to flash-lite once before deterministic fallback
+    try {
+      const fallbackRes = await withTimeout(
+        ai.models.generateContent({
+          model: VALID_FALLBACK_MODEL,
+          contents: `DỮ LIỆU GIAO BAN THỰC TẾ:\n${digestText}`,
+          config: { systemInstruction },
+        }),
+        7000,
+        "Briefing evaluation fallback timeout"
+      );
+      const text = (fallbackRes?.text || "").trim();
+      if (text.length > 60) {
+        const cleanedLines = text
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean);
+        return { lines: cleanedLines, usedAi: true };
+      }
+    } catch {
+      // Fall back cleanly to deterministic multi-domain evaluation
+    }
+  }
+
+  return { lines: fallbackLines, usedAi: false };
+}
+
+export async function generateFullBriefingReport(params: {
+  queryText?: string;
+  liveContext?: any;
+}): Promise<ScheduledAlertPreviewResult> {
+  const vnNow = getVNNowParts();
+  const data = await resolveHospitalDataset(params.liveContext);
+  const syncModeLabel = `Đồng bộ trực tiếp ${vnNow.timeHHmm}`;
+
+  const { bundle, explicitISO } = await resolveBestServiceReportBundle({
+    data,
+    queryText: params.queryText,
+    vnNow,
+    syncModeLabel,
+  });
+
+  const opsDateISO = explicitISO || vnNow.dateISO;
+  const opsDateVN = formatDateISOToVN(opsDateISO);
+  const opsWeekday = getVNWeekdayLabel(opsDateISO);
+  const opsIsToday = opsDateISO === vnNow.dateISO;
+
+  // Operational data
+  const { activeStaff, activeLeaveRequests } = getActiveStaffAndLeaves(data);
+  const certAlerts = scanStaffCertificateAlertsForDate(activeStaff, opsDateISO, 30);
+  const dutyList = collectOnDutyForDate(data.shifts, opsDateISO);
+  const leaveList = collectLeaveForDate(activeLeaveRequests, data.shifts, opsDateISO);
+  const pendingLeaves = activeLeaveRequests.filter((l) => l.status === "Chờ duyệt");
+
+  const eqScan = scanEquipmentAlertsForDate(data.equipment, opsDateISO, 30);
+  const eqExpiredComplianceCount = eqScan.expiringAlerts.filter((e) => e.daysRemaining < 0).length;
+
+  const rooms = data.rooms || [];
+  const overloadedRooms = rooms
+    .filter((r) => r.utilizationRate >= 85 || r.status === "Quá tải")
+    .sort((a, b) => (b.utilizationRate || 0) - (a.utilizationRate || 0));
+  const maintenanceRooms = rooms.filter(
+    (r) => r.status === "Bảo trì" || r.status === "Tạm nghỉ" || r.status === "Tạm ngưng"
+  );
+  const activeRoomsCount = rooms.filter(
+    (r) => r.status === "Đang hoạt động" || r.status === "Quá tải"
+  ).length;
+
+  const openTasks = data.tasks.filter(
+    (t) => t && t.status !== "Đã hoàn thành" && t.status !== "Hủy"
+  );
+  const completedOps = data.tasks.filter((t) => {
+    if (!t || t.status !== "Đã hoàn thành") return false;
+    const upd = String(t.updatedDate || "").trim().slice(0, 10);
+    const due = String(t.dueDate || "").trim().slice(0, 10);
+    return upd === opsDateISO || due === opsDateISO;
+  });
+  const tasksOverdue = openTasks
+    .filter((t) => {
+      const d = String(t.dueDate || "").trim().slice(0, 10);
+      return Boolean(d) && d < opsDateISO;
+    })
+    .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  const tasksDueToday = openTasks
+    .filter((t) => String(t.dueDate || "").trim().slice(0, 10) === opsDateISO)
+    .sort((a, b) => priorityScore(a.priority) - priorityScore(b.priority));
+  const tasksUrgentOther = openTasks
+    .filter((t) => {
+      const d = String(t.dueDate || "").trim().slice(0, 10);
+      return (!d || d > opsDateISO) && (t.priority === "Khẩn cấp" || t.priority === "Cao");
+    })
+    .sort((a, b) => priorityScore(a.priority) - priorityScore(b.priority));
+
+  const meetingsOnDate = collectMeetingsForDate(data.meetings, data.meetingItems, opsDateISO);
+  const upcomingMeetings: Array<{ dateVN: string; title: string; time: string; location: string }> = [];
+  for (let delta = 1; delta <= 2; delta++) {
+    const dIso = offsetDateISO(opsDateISO, delta);
+    const list = collectMeetingsForDate(data.meetings, data.meetingItems, dIso);
+    for (const m of list) {
+      upcomingMeetings.push({
+        dateVN: formatShortDM(dIso),
+        title: m.title,
+        time: m.time,
+        location: m.location,
+      });
+    }
+  }
+
+  const { summary, prevSummary, mtdStats, hasPrevBaseline, bhPct, ndPct } = bundle;
+  const lines: string[] = [];
+
+  // Header
+  lines.push(`📋 **BÁO CÁO GIAO BAN CHI TIẾT & ĐÁNH GIÁ TOÀN KHOA CLS**`);
+  lines.push(
+    `📅 Số liệu kỹ thuật: **${bundle.dateVN}** (${bundle.weekday}) · Điều hành: **${opsDateVN}** (${opsWeekday})`
+  );
+  lines.push(`👤 Đồng bộ từ: ${bundle.syncOriginLabel}`);
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+
+  // SECTION 1: Detailed Service Metrics
+  lines.push(`📊 **1. CHI TIẾT SỐ LIỆU DỊCH VỤ KỸ THUẬT**`);
+  if (summary.totalCases === 0 && !hasPrevBaseline) {
+    lines.push(`⚠️ Chưa ghi nhận số ca nào cho ngày **${bundle.dateVN}** (Tháng ${bundle.monthNum}/${bundle.year}).`);
+  } else {
+    bundle.activeCategories.forEach((catName) => {
+      const curCat = summary.byCategoryMap.get(catName) || {
+        category: catName,
+        bh: 0,
+        nd: 0,
+        total: 0,
+      };
+      const prevCat = prevSummary.byCategoryMap.get(catName);
+      const { icon, title } = formatCategoryHeader(catName);
+      let catDeltaBadge = "";
+      if (hasPrevBaseline && prevCat && prevCat.total > 0) {
+        const diff = curCat.total - prevCat.total;
+        const pct = ((diff / prevCat.total) * 100).toFixed(1);
+        catDeltaBadge = ` · ${diff >= 0 ? "+" : ""}${pct}%`;
+      }
+      lines.push(
+        `${icon} **${title} (Tổng: ${curCat.total.toLocaleString("vi-VN")} ca${catDeltaBadge})**`
+      );
+
+      const catServices = bundle.allMergedServices.filter(
+        (s) => s.category === catName && (s.curTotal > 0 || s.isLt)
+      );
+      catServices.forEach((svc) => {
+        const bhPart = svc.curBh > 0 ? `BH: ${svc.curBh.toLocaleString("vi-VN")}` : "";
+        const ndPart = svc.curNd > 0 ? `ND: ${svc.curNd.toLocaleString("vi-VN")}` : "";
+        const breakdownList = [bhPart, ndPart].filter(Boolean);
+        const breakdownTxt = breakdownList.length > 0 ? ` (${breakdownList.join(", ")})` : "";
+        const ltSuffix = svc.isLt ? " [LT]" : "";
+        lines.push(
+          `• ${svc.name}${ltSuffix}: **${svc.curTotal.toLocaleString("vi-VN")} ca**${breakdownTxt}`
+        );
+      });
+    });
+
+    const totalPctDeltaText = formatComparisonDelta(
+      summary.totalCases,
+      prevSummary.totalCases,
+      hasPrevBaseline
+    );
+    lines.push(
+      `📈 **TỔNG CỘNG TOÀN KHOA: ${summary.totalCases.toLocaleString("vi-VN")} ca**${
+        bundle.activeServicesCount > 0 ? ` (${bundle.activeServicesCount} dịch vụ kỹ thuật)` : ""
+      }`
+    );
+    lines.push(`• So với ngày hôm trước (${bundle.prevDateVN}): ${totalPctDeltaText}`);
+    lines.push(
+      `• Cơ cấu thanh toán: BHYT **${summary.totalBh.toLocaleString(
+        "vi-VN"
+      )} ca** (${bhPct}%) · Ngoài định mức / DV **${summary.totalNd.toLocaleString(
+        "vi-VN"
+      )} ca** (${ndPct}%)`
+    );
+    if (mtdStats.monthTotal > 0) {
+      const mtdDeltaTxt =
+        mtdStats.avgPerDay > 0
+          ? (() => {
+              const d = summary.totalCases - mtdStats.avgPerDay;
+              const p = ((d / mtdStats.avgPerDay) * 100).toFixed(1);
+              return ` (${d >= 0 ? "+" : ""}${p}% so với TB tháng)`;
+            })()
+          : "";
+      lines.push(
+        `• Lũy kế Tháng ${bundle.monthNum}/${bundle.year}: **${mtdStats.monthTotal.toLocaleString(
+          "vi-VN"
+        )} ca** (${mtdStats.activeDays} ngày · TB **${mtdStats.avgPerDay.toLocaleString(
+          "vi-VN"
+        )} ca/ngày**)${mtdDeltaTxt}`
+      );
+    }
+
+    if (hasPrevBaseline) {
+      const topMoversUp = bundle.allMergedServices
+        .filter((s) => s.curTotal - s.prevTotal > 0 && s.prevTotal > 0)
+        .sort((a, b) => b.curTotal - b.prevTotal - (a.curTotal - a.prevTotal))
+        .slice(0, 3);
+      const topMoversDown = bundle.allMergedServices
+        .filter((s) => s.curTotal - s.prevTotal < 0 && s.prevTotal > 0)
+        .sort((a, b) => a.curTotal - a.prevTotal - (b.curTotal - b.prevTotal))
+        .slice(0, 3);
+      if (topMoversUp.length > 0) {
+        lines.push(
+          `• Biến động tăng nổi bật: ${topMoversUp
+            .map((s) => `${s.name} (+${s.curTotal - s.prevTotal})`)
+            .join(", ")}`
+        );
+      }
+      if (topMoversDown.length > 0) {
+        lines.push(
+          `• Biến động giảm đáng chú ý: ${topMoversDown
+            .map((s) => `${s.name} (${s.curTotal - s.prevTotal})`)
+            .join(", ")}`
+        );
+      }
+    }
+  }
+
+  lines.push("");
+
+  // SECTION 2: Rooms & Capacity
+  lines.push(
+    `🏥 **2. PHÒNG CHUYÊN MÔN & CÔNG SUẤT (${rooms.length} phòng · ${activeRoomsCount} đang hoạt động)**`
+  );
+  if (rooms.length === 0) {
+    lines.push(`• Chưa ghi nhận danh sách phòng chuyên môn trong hệ thống.`);
+  } else {
+    if (overloadedRooms.length > 0) {
+      lines.push(`• 🔥 **Phòng tải cao / quá tải (${overloadedRooms.length}):**`);
+      overloadedRooms.slice(0, 6).forEach((r) => {
+        lines.push(
+          `  - **${r.name}** (${r.code}): ${r.currentDayCases}/${r.maxCapacityCasesPerDay} ca (**${r.utilizationRate}%** · ${r.status}) — PT: _${
+            r.managerInCharge || "Chưa gán"
+          }_`
+        );
+      });
+    }
+    if (maintenanceRooms.length > 0) {
+      lines.push(`• 🔧 **Phòng bảo trì / tạm ngưng (${maintenanceRooms.length}):**`);
+      maintenanceRooms.slice(0, 5).forEach((r) => {
+        lines.push(`  - **${r.name}** (${r.code}): ${r.status} — PT: _${r.managerInCharge || "Chưa gán"}_`);
+      });
+    }
+    if (overloadedRooms.length === 0 && maintenanceRooms.length === 0) {
+      const topBusyRooms = [...rooms]
+        .sort((a, b) => (b.utilizationRate || 0) - (a.utilizationRate || 0))
+        .slice(0, 4);
+      lines.push(
+        `• ✅ Các phòng đều vận hành trong ngưỡng an toàn (<85% công suất). Cao nhất: ${topBusyRooms
+          .map((r) => `${r.name} (${r.utilizationRate}%)`)
+          .join(", ")}.`
+      );
+    }
+  }
+
+  lines.push("");
+
+  // SECTION 3: Equipment & Compliance
+  lines.push(
+    `🛠️ **3. THIẾT BỊ Y TẾ & KIỂM ĐỊNH (${data.equipment.length} máy · ${eqScan.brokenOrLocked.length} sự cố/khóa · ${eqScan.expiringAlerts.length} mốc ≤30 ngày)**`
+  );
+  if (data.equipment.length === 0) {
+    lines.push(`• Chưa có dữ liệu máy móc trong hệ thống.`);
+  } else {
+    if (eqScan.brokenOrLocked.length > 0) {
+      lines.push(`• ⚠️ **Máy đang khóa an toàn / sự cố / bảo trì (${eqScan.brokenOrLocked.length}):**`);
+      eqScan.brokenOrLocked.slice(0, 8).forEach((eq, idx) => {
+        const reason = eq.lockoutReason ? ` (${eq.lockoutReason})` : "";
+        lines.push(
+          `  ${idx + 1}. **${eq.name}** (${eq.code} · ${eq.room}) — ${
+            eq.isLockedOut ? "ĐANG KHÓA AN TOÀN" : eq.status
+          }${reason}`
+        );
+      });
+    }
+    if (eqScan.expiringAlerts.length > 0) {
+      lines.push(`• 🔔 **Mốc hết hạn kiểm định / ATBX / bảo trì ≤30 ngày (${eqScan.expiringAlerts.length}):**`);
+      eqScan.expiringAlerts.slice(0, 10).forEach((a, idx) => {
+        const icon = a.daysRemaining < 0 ? "🔴" : a.daysRemaining <= 7 ? "🟠" : "🟡";
+        lines.push(
+          `  ${idx + 1}. ${icon} **${a.equipmentName}** (${a.equipmentCode}) — ${
+            a.trackLabel
+          }: ${formatDateISOToVN(a.expiryDateISO)} (${formatExpiryDeltaLabel(a.daysRemaining)}) · PT: ${
+            a.technician
+          }`
+        );
+      });
+      if (eqScan.expiringAlerts.length > 10) {
+        lines.push(`  _... và ${eqScan.expiringAlerts.length - 10} mốc khác._`);
+      }
+    }
+    if (eqScan.brokenOrLocked.length === 0 && eqScan.expiringAlerts.length === 0) {
+      lines.push(`• ✅ Tất cả ${data.equipment.length} thiết bị hoạt động tốt và còn hạn kiểm định >30 ngày.`);
+    }
+  }
+
+  lines.push("");
+
+  // SECTION 4: HR, Duty Roster, Leave & Certificates
+  lines.push(
+    `👥 **4. NHÂN SỰ, LỊCH TRỰC & NGHỈ PHÉP (${opsDateVN} · ${activeStaff.length} nhân sự hoạt động)**`
+  );
+  lines.push(`• **Lịch trực & phân ca (${dutyList.length} lượt phân công):**`);
+  if (dutyList.length > 0) {
+    dutyList.slice(0, 15).forEach((sh, idx) => {
+      const name = sh.userName || sh.assignedUserName || "Chưa rõ";
+      const timeStr =
+        sh.startTime && sh.endTime
+          ? `${sh.startTime}–${sh.endTime}`
+          : sh.shiftTime || sh.shiftName || sh.workType || "Trong ca";
+      const place = formatUniqueUnitLabel([sh.room || sh.roomLocation, sh.machine], " / ");
+      lines.push(
+        `  ${idx + 1}. **${name}** (${sh.workType || "Ca trực"} · ${timeStr})${
+          place ? ` — ${place}` : ""
+        }`
+      );
+    });
+    if (dutyList.length > 15) {
+      lines.push(`  _... và ${dutyList.length - 15} lượt phân ca khác._`);
+    }
+  } else {
+    lines.push(`  - Chưa ghi nhận lịch trực ngày ${opsDateVN}.`);
+  }
+
+  lines.push(`• **Nhân sự nghỉ ngày ${opsDateVN} (${leaveList.length} người):**`);
+  if (leaveList.length > 0) {
+    leaveList.forEach((l, idx) => {
+      const subText = l.substitute ? ` · Thay ca: ${l.substitute}` : " · ⚠️ Chưa ghi nhận người thay";
+      lines.push(`  ${idx + 1}. **${l.name}** — ${l.detail} [${l.statusLabel}]${subText}`);
+    });
+  } else {
+    lines.push(`  - ✅ Đầy đủ quân số, không có nhân sự nghỉ ngày ${opsDateVN}.`);
+  }
+
+  if (pendingLeaves.length > 0) {
+    lines.push(`• ⏳ **Đơn xin nghỉ đang chờ duyệt (${pendingLeaves.length} đơn):**`);
+    pendingLeaves.slice(0, 5).forEach((pl) => {
+      lines.push(
+        `  - **${pl.userName}** — ${pl.leaveType} (${formatShortDM(pl.startDate)}–${formatShortDM(
+          pl.endDate
+        )})`
+      );
+    });
+  }
+
+  if (certAlerts.length > 0) {
+    lines.push(`• 🪪 **Chứng chỉ nhân sự sắp/đã hết hạn ≤30 ngày (${certAlerts.length}):**`);
+    certAlerts.slice(0, 5).forEach((c) => {
+      const icon = c.daysRemaining < 0 ? "🔴" : "🟠";
+      lines.push(
+        `  - ${icon} **${c.staffName}** — ${c.certName} (${formatExpiryDeltaLabel(c.daysRemaining)})`
+      );
+    });
+  }
+
+  lines.push("");
+
+  // SECTION 5: Tasks & Meetings
+  lines.push(
+    `📋 **5. CÔNG VIỆC & LỊCH HỌP (${openTasks.length} việc mở · ${completedOps.length} xong ${
+      opsIsToday ? "hôm nay" : opsDateVN
+    })**`
+  );
+  if (tasksOverdue.length > 0) {
+    lines.push(`• 🔴 **Công việc quá hạn (${tasksOverdue.length}):**`);
+    tasksOverdue.slice(0, 8).forEach((t, idx) => {
+      const lateDays = Math.abs(diffDaysBetweenISO(t.dueDate, opsDateISO) || 0);
+      lines.push(
+        `  ${idx + 1}. [${t.priority}] ${t.title} — _${t.assignee || "Chưa gán"}_ (Hạn ${formatDateISOToVN(
+          t.dueDate
+        )}, trễ ${lateDays} ngày · ${t.status})`
+      );
+    });
+    if (tasksOverdue.length > 8) {
+      lines.push(`  _... và ${tasksOverdue.length - 8} việc quá hạn khác._`);
+    }
+  }
+  if (tasksDueToday.length > 0) {
+    lines.push(`• 🟠 **Công việc đến hạn ngày ${opsDateVN} (${tasksDueToday.length}):**`);
+    tasksDueToday.slice(0, 8).forEach((t, idx) => {
+      lines.push(
+        `  ${idx + 1}. [${t.priority}] ${t.title} — _${t.assignee || "Chưa gán"}_ (${t.status})`
+      );
+    });
+  }
+  if (tasksUrgentOther.length > 0) {
+    lines.push(`• ⚡ **Việc ưu tiên Cao/Khẩn cấp hạn sắp tới (${tasksUrgentOther.length}):**`);
+    tasksUrgentOther.slice(0, 5).forEach((t, idx) => {
+      lines.push(
+        `  ${idx + 1}. [${t.priority}] ${t.title} — _${t.assignee || "Chưa gán"}_ (Hạn ${formatShortDM(
+          t.dueDate
+        )})`
+      );
+    });
+  }
+  if (openTasks.length === 0) {
+    lines.push(`• ✅ Hiện không có công việc tồn đọng hoặc quá hạn.`);
+  } else if (tasksOverdue.length === 0 && tasksDueToday.length === 0 && tasksUrgentOther.length === 0) {
+    lines.push(`• ✅ Không có việc quá hạn hay đến hạn trong ngày; còn ${openTasks.length} việc hạn sau ${opsDateVN}.`);
+  }
+
+  if (meetingsOnDate.length > 0) {
+    lines.push(`• 📅 **Lịch họp ngày ${opsDateVN} (${meetingsOnDate.length}):**`);
+    meetingsOnDate.slice(0, 6).forEach((m) => {
+      lines.push(
+        `  - ${m.time}: **${m.title}** (${m.location}${m.chair ? ` · Chủ trì: ${m.chair}` : ""})`
+      );
+    });
+  } else {
+    lines.push(`• 📅 **Lịch họp ngày ${opsDateVN}:** Không có cuộc họp lên lịch.`);
+  }
+  if (upcomingMeetings.length > 0) {
+    lines.push(
+      `• 🗓️ Lịch họp 2 ngày tới: ${upcomingMeetings
+        .slice(0, 4)
+        .map((m) => `${m.dateVN} ${m.time} (${m.title})`)
+        .join("; ")}`
+    );
+  }
+
+  lines.push("");
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+
+  // SECTION 6: Comprehensive evaluation across ALL sections
+  const deterministicEvalLines = buildDeterministicComprehensiveEvaluation({
+    caseDateVN: bundle.dateVN,
+    prevDateVN: bundle.prevDateVN,
+    opsDateVN,
+    opsIsToday,
+    bundle,
+    roomsTotal: rooms.length,
+    overloadedRooms,
+    maintenanceRooms,
+    eqTotal: data.equipment.length,
+    eqBrokenCount: eqScan.brokenOrLocked.length,
+    eqExpiringCount: eqScan.expiringAlerts.length,
+    eqExpiredComplianceCount,
+    activeStaffCount: activeStaff.length,
+    dutyCount: dutyList.length,
+    leaveList,
+    pendingLeavesCount: pendingLeaves.length,
+    certAlertCount: certAlerts.length,
+    openTasksCount: openTasks.length,
+    overdueTasksCount: tasksOverdue.length,
+    dueTodayTasksCount: tasksDueToday.length,
+    urgentTasksCount: tasksUrgentOther.length,
+    completedOpsCount: completedOps.length,
+    meetingsCount: meetingsOnDate.length,
+  });
+
+  // Compact verified facts snapshot for AI evaluation
+  const digestForEval = lines.join("\n").slice(0, 7500);
+  const evalResult = await generateGeminiBriefingEvaluation(
+    digestForEval,
+    deterministicEvalLines
+  );
+
+  lines.push(`🧠 **6. ĐÁNH GIÁ TỔNG HỢP TẤT CẢ CÁC NỘI DUNG & KHUYẾN NGHỊ ĐIỀU HÀNH**`);
+  evalResult.lines.forEach((el) => lines.push(el));
+
+  const inAppSummary = `${bundle.preview.inAppSummary} Phòng: ${overloadedRooms.length}/${rooms.length} tải cao. Máy: ${eqScan.brokenOrLocked.length} sự cố, ${eqScan.expiringAlerts.length} mốc ≤30 ngày. Trực ${dutyList.length}, nghỉ ${leaveList.length}, việc mở ${openTasks.length} (${tasksOverdue.length} quá hạn).`;
+
+  return {
+    ruleId: "morning_0700",
+    ruleName: "Giao ban Toàn diện Khoa CLS",
+    targetDateVN: bundle.targetISO,
+    generatedAtVN: vnNow.dateTimeVN,
+    title: `Báo cáo giao ban chi tiết toàn khoa (${bundle.dateVN})`,
+    telegramMarkdown: lines.join("\n"),
+    inAppSummary,
+    stats: [
+      {
+        label: `Tổng ca (${formatShortDM(bundle.targetISO)})`,
+        value: `${summary.totalCases.toLocaleString("vi-VN")} ca`,
+        tone: summary.totalCases > 0 ? "good" : "warn",
+      },
+      {
+        label: "Thiết bị / Phòng",
+        value: `${eqScan.brokenOrLocked.length} sự cố · ${overloadedRooms.length} phòng nóng`,
+        tone:
+          eqScan.brokenOrLocked.length > 0 || overloadedRooms.length > 0
+            ? "danger"
+            : eqScan.expiringAlerts.length > 0
+            ? "warn"
+            : "good",
+      },
+      {
+        label: "Trực / Nghỉ phép",
+        value: `${dutyList.length} trực · ${leaveList.length} nghỉ`,
+        tone: "neutral",
+      },
+      {
+        label: "Công việc mở",
+        value: `${openTasks.length} việc (${tasksOverdue.length} trễ)`,
+        tone: tasksOverdue.length > 0 ? "danger" : openTasks.length > 0 ? "warn" : "good",
+      },
+    ],
+    dataSourceNotes: Array.from(
+      new Set([
+        ...bundle.preview.dataSourceNotes,
+        evalResult.usedAi ? "Đánh giá tổng hợp AI" : "Đánh giá tổng hợp tự động",
+      ])
+    ),
+  };
+}
+
 function parseExplicitBriefingDateISO(queryText: string, vnNow: ReturnType<typeof getVNNowParts>): string | null {
   const clean = String(queryText || "").trim();
   const norm = clean
@@ -2084,62 +3172,7 @@ export async function generateInteractiveBriefingReport(params: {
   queryText?: string;
   liveContext?: any;
 }): Promise<ScheduledAlertPreviewResult> {
-  const vnNow = getVNNowParts();
-  const data = await resolveHospitalDataset(params.liveContext);
-  const syncModeLabel = `Đồng bộ trực tiếp ${vnNow.timeHHmm}`;
-  const explicitISO = parseExplicitBriefingDateISO(params.queryText || "", vnNow);
-
-  if (explicitISO) {
-    return buildNoonServiceReport(
-      data,
-      explicitISO,
-      false,
-      vnNow.dateTimeVN,
-      vnNow.timeHHmm,
-      syncModeLabel
-    );
-  }
-
-  const todayReport = await buildNoonServiceReport(
-    data,
-    vnNow.dateISO,
-    false,
-    vnNow.dateTimeVN,
-    vnNow.timeHHmm,
-    syncModeLabel
-  );
-  const todayHasCases = !todayReport.telegramMarkdown.includes("Chưa ghi nhận số ca nào");
-  if (todayHasCases) {
-    return todayReport;
-  }
-
-  const yesterdayISO = offsetDateISO(vnNow.dateISO, -1);
-  const yesterdayReport = await buildNoonServiceReport(
-    data,
-    yesterdayISO,
-    false,
-    vnNow.dateTimeVN,
-    vnNow.timeHHmm,
-    syncModeLabel
-  );
-  const yesterdayHasCases = !yesterdayReport.telegramMarkdown.includes("Chưa ghi nhận số ca nào");
-  if (yesterdayHasCases) {
-    return yesterdayReport;
-  }
-
-  const latestLiveIso = data.liveContext?.caseReports?.latestRecordedDay?.dateIso;
-  if (typeof latestLiveIso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(latestLiveIso)) {
-    return buildNoonServiceReport(
-      data,
-      latestLiveIso,
-      false,
-      vnNow.dateTimeVN,
-      vnNow.timeHHmm,
-      syncModeLabel
-    );
-  }
-
-  return yesterdayReport;
+  return generateFullBriefingReport(params);
 }
 
 export async function executeScheduledAlertRule(params: {

@@ -127,6 +127,10 @@ class TelegramAssistantManager {
     string,
     { chatId: string; title: string; type: string; username?: string; lastSeenAt: string }
   >();
+  private pendingMenuCommands = new Map<
+    string,
+    { command: "giaoban" | "tomtat" | "hoi" | "nho"; expiresAt: number }
+  >();
   private unsubscribeTakeover: (() => void) | null = null;
 
   constructor() {
@@ -482,25 +486,38 @@ class TelegramAssistantManager {
     return chunks.filter((c) => c.length > 0);
   }
 
-  public async sendMessage(chatId: string | number, rawText: string, tokenOverride?: string) {
+  public async sendMessage(
+    chatId: string | number,
+    rawText: string,
+    tokenOverride?: string,
+    extraParams?: { reply_markup?: any; reply_to_message_id?: number }
+  ) {
     const token = tokenOverride || this.botToken;
     if (!token) throw new Error("Thiếu Telegram Bot Token");
 
     // Chunk raw markdown FIRST along natural line/section boundaries so HTML tags never split mid-tag
     const rawChunks = this.splitTelegramMessage(rawText, 3200);
 
-    for (const rawChunk of rawChunks) {
+    for (let i = 0; i < rawChunks.length; i++) {
+      const rawChunk = rawChunks[i];
+      const isLastRaw = i === rawChunks.length - 1;
       const htmlBody = this.formatMarkdownToTelegramHtml(rawChunk);
       const safeHtmlChunks =
-        htmlBody.length > 4000 ? this.splitTelegramMessage(rawChunk, 2400).map((c) => this.formatMarkdownToTelegramHtml(c)) : [htmlBody];
+        htmlBody.length > 4000
+          ? this.splitTelegramMessage(rawChunk, 2400).map((c) => this.formatMarkdownToTelegramHtml(c))
+          : [htmlBody];
 
-      for (const chunk of safeHtmlChunks) {
+      for (let j = 0; j < safeHtmlChunks.length; j++) {
+        const chunk = safeHtmlChunks[j];
+        const isLast = isLastRaw && j === safeHtmlChunks.length - 1;
+        const tailParams = isLast && extraParams ? extraParams : {};
         try {
           await this.telegramApiCall(token, "sendMessage", {
             chat_id: chatId,
             text: chunk,
             parse_mode: "HTML",
             disable_web_page_preview: true,
+            ...tailParams,
           });
         } catch {
           // Fallback plain text if Telegram rejects any HTML formatting
@@ -508,10 +525,74 @@ class TelegramAssistantManager {
             chat_id: chatId,
             text: chunk.replace(/<\/?(b|i|code|a|pre|u|s)[^>]*>/g, ""),
             disable_web_page_preview: true,
+            ...tailParams,
           });
         }
       }
     }
+  }
+
+  private getBotMenuCommands() {
+    return [
+      { command: "giaoban", description: "Giao ban đầy đủ chi tiết & đánh giá toàn diện" },
+      { command: "tomtat", description: "Số liệu kỹ thuật kèm công việc & người nghỉ vắn tắt" },
+      { command: "hoi", description: "Hỏi Trợ lý AI (nhập câu hỏi rồi gửi)" },
+      { command: "nho", description: "Dạy Trợ lý ghi nhớ quy ước mới" },
+      { command: "help", description: "Xem hướng dẫn sử dụng trợ lý" },
+    ];
+  }
+
+  private getPendingKey(chatId: string | number, senderId?: string | number): string {
+    return `${String(chatId)}:${senderId !== undefined ? String(senderId) : "anon"}`;
+  }
+
+  private setPendingMenuCommand(
+    chatId: string | number,
+    senderId: string | number | undefined,
+    command: "giaoban" | "tomtat" | "hoi" | "nho"
+  ) {
+    const key = this.getPendingKey(chatId, senderId);
+    if (this.pendingMenuCommands.has(key)) {
+      this.pendingMenuCommands.delete(key);
+    }
+    this.pendingMenuCommands.set(key, {
+      command,
+      expiresAt: Date.now() + 3 * 60 * 1000,
+    });
+    while (this.pendingMenuCommands.size > 300) {
+      const oldestKey = this.pendingMenuCommands.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.pendingMenuCommands.delete(oldestKey);
+    }
+  }
+
+  private peekPendingMenuCommand(
+    chatId: string | number,
+    senderId?: string | number
+  ): "giaoban" | "tomtat" | "hoi" | "nho" | null {
+    const key = this.getPendingKey(chatId, senderId);
+    const entry = this.pendingMenuCommands.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt < Date.now()) {
+      this.pendingMenuCommands.delete(key);
+      return null;
+    }
+    return entry.command;
+  }
+
+  private consumePendingMenuCommand(
+    chatId: string | number,
+    senderId?: string | number
+  ): "giaoban" | "tomtat" | "hoi" | "nho" | null {
+    const cmd = this.peekPendingMenuCommand(chatId, senderId);
+    if (cmd) {
+      this.pendingMenuCommands.delete(this.getPendingKey(chatId, senderId));
+    }
+    return cmd;
+  }
+
+  private clearPendingMenuCommand(chatId: string | number, senderId?: string | number) {
+    this.pendingMenuCommands.delete(this.getPendingKey(chatId, senderId));
   }
 
   public async testConnection(tokenInput?: string, testChatId?: string) {
@@ -526,13 +607,7 @@ class TelegramAssistantManager {
     this.lastError = undefined;
 
     await this.telegramApiCall(token, "setMyCommands", {
-      commands: [
-        { command: "giaoban", description: "Bảng số liệu giao ban chi tiết theo bộ phận" },
-        { command: "tomtat", description: "Tóm tắt nhanh tình hình toàn khoa" },
-        { command: "hoi", description: "Hỏi Trợ lý AI (dữ liệu app + Internet)" },
-        { command: "nho", description: "Dạy Trợ lý ghi nhớ quy ước hoặc kiến thức mới" },
-        { command: "help", description: "Xem hướng dẫn sử dụng trợ lý" },
-      ],
+      commands: this.getBotMenuCommands(),
     }).catch(() => {});
 
     let messageSent = false;
@@ -613,7 +688,14 @@ class TelegramAssistantManager {
         updates = await this.telegramApiCall(token, "getUpdates", {
           limit: 50,
           timeout: 0,
-          allowed_updates: ["message", "edited_message", "channel_post", "my_chat_member", "chat_member"],
+          allowed_updates: [
+            "message",
+            "edited_message",
+            "channel_post",
+            "callback_query",
+            "my_chat_member",
+            "chat_member",
+          ],
         });
       } catch (err: any) {
         if (err?.statusCode === 409) {
@@ -758,7 +840,13 @@ class TelegramAssistantManager {
             offset: this.lastUpdateOffset || undefined,
             limit: 1,
             timeout: 2,
-            allowed_updates: ["message", "edited_message", "channel_post", "my_chat_member"],
+            allowed_updates: [
+              "message",
+              "edited_message",
+              "channel_post",
+              "callback_query",
+              "my_chat_member",
+            ],
           });
           externalListenerDetected = false;
           transientClearedOwnSocket = true;
@@ -848,10 +936,16 @@ class TelegramAssistantManager {
       update.message ||
       update.edited_message ||
       update.channel_post ||
+      update.callback_query?.message ||
       update.my_chat_member ||
       update.chat_member;
     if (anyChatHolder?.chat) {
       this.recordChatFromMessage(anyChatHolder);
+    }
+
+    if (update.callback_query) {
+      await this.handleCallbackQuery(update.callback_query, updateId);
+      return;
     }
 
     const message = update.message || update.edited_message;
@@ -859,6 +953,7 @@ class TelegramAssistantManager {
     if (!message || !rawBody || message.from?.is_bot) return;
 
     const chatId = message.chat?.id;
+    const senderId = message.from?.id;
     const chatType = message.chat?.type || "private";
     const senderName =
       [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ") ||
@@ -875,8 +970,9 @@ class TelegramAssistantManager {
         (!this.botUsername ||
           message.reply_to_message?.from?.username?.toLowerCase() === this.botUsername.toLowerCase())
     );
+    const hasActivePending = Boolean(this.peekPendingMenuCommand(chatId, senderId));
 
-    if (chatType !== "private" && !isCommand && !mentionsBot && !isReplyToBot) {
+    if (chatType !== "private" && !isCommand && !mentionsBot && !isReplyToBot && !hasActivePending) {
       return;
     }
 
@@ -896,28 +992,24 @@ class TelegramAssistantManager {
 
     let typingTimer: NodeJS.Timeout | null = null;
     try {
-      const sendTyping = () =>
-        this.telegramApiCall(this.botToken, "sendChatAction", {
-          chat_id: chatId,
-          action: "typing",
-        }).catch(() => {});
-
-      await sendTyping();
-      typingTimer = setInterval(() => {
-        void sendTyping();
-      }, 4500);
-
       const cleanText = botMention
         ? rawText.replace(new RegExp(`@${this.botUsername}`, "ig"), "").trim()
         : rawText;
 
+      if (/^\/?(huy|cancel)(?:@\S+)?$/i.test(cleanText)) {
+        this.clearPendingMenuCommand(chatId, senderId);
+        await this.sendMessage(chatId, "❌ Đã hủy thao tác vừa chọn.");
+        return;
+      }
+
       if (/^\/(start|help)(?:@\S+)?(?:\s|$)/i.test(cleanText)) {
+        this.clearPendingMenuCommand(chatId, senderId);
         const helpMsg =
           `🏥 **Trợ Lý Ảo Thông Minh Khoa Cận Lâm Sàng (CLS WorkHub)**\n` +
           `Tôi kết nối trực tiếp dữ liệu khoa (số ca, máy móc, lịch trực, nhân sự, SOP) **và tra cứu Internet trực tiếp**, đồng thời ghi nhớ các quy ước bạn dạy.\n\n` +
-          `📌 **Lệnh nhanh:**\n` +
-          `• /giaoban — Bảng số liệu giao ban chi tiết theo bộ phận (thêm ngày VD: /giaoban 22/11)\n` +
-          `• /tomtat — Tóm tắt nhanh toàn khoa (số ca, lịch trực, thiết bị, công việc)\n` +
+          `📌 **Lệnh nhanh (có bước xác nhận / nhập nội dung rồi nhấn Gửi đi):**\n` +
+          `• /tomtat — Báo cáo số liệu kỹ thuật kèm công việc & người nghỉ vắn tắt (thêm ngày VD: /tomtat 22/11)\n` +
+          `• /giaoban — Giao ban đầy đủ chi tiết toàn khoa & đánh giá tổng hợp tất cả nội dung\n` +
           `• /hoi <câu hỏi> — Hỏi Trợ lý trong nhóm chat\n` +
           `• /nho <quy ước/kiến thức> — Dạy Trợ lý ghi nhớ lâu dài\n\n` +
           `💬 **Hoặc nhắn tự nhiên (chat riêng):**\n` +
@@ -929,16 +1021,28 @@ class TelegramAssistantManager {
         return;
       }
 
+      // Check bare menu commands FIRST before sending AI typing actions
       const nhoMatch = cleanText.match(/^\/(nho|remember)(?:@\S+)?(?:\s+([\s\S]+))?$/i);
       if (nhoMatch) {
         const memo = (nhoMatch[2] || "").trim();
         if (!memo) {
+          this.setPendingMenuCommand(chatId, senderId, "nho");
           await this.sendMessage(
             chatId,
-            "Vui lòng nhập nội dung cần tôi ghi nhớ sau lệnh, ví dụ: `/nho Phòng SA-02 ưu tiên ca cấp cứu trước 9h sáng`."
+            "🧠 **Bạn đã chọn lệnh /nho**\nHãy nhập quy ước hoặc kiến thức muốn Trợ lý ghi nhớ bên dưới rồi nhấn **Gửi đi** để xác nhận (hoặc gõ `Hủy`):",
+            undefined,
+            {
+              reply_to_message_id: message.message_id,
+              reply_markup: {
+                force_reply: true,
+                selective: true,
+                input_field_placeholder: "Nhập nội dung cần ghi nhớ rồi nhấn Gửi đi...",
+              },
+            }
           );
           return;
         }
+        this.clearPendingMenuCommand(chatId, senderId);
         this.addLearnedMemory({ content: memo, category: "rule", source: "telegram" });
         await this.sendMessage(
           chatId,
@@ -948,10 +1052,134 @@ class TelegramAssistantManager {
         return;
       }
 
-      if (/^\/giaoban(?:@\S+)?(?:\s|$)/i.test(cleanText) || isBriefingStatsRequest(cleanText)) {
+      const bareGiaobanMatch = cleanText.match(/^\/giaoban(?:@\S+)?(?:\s+([\s\S]+))?$/i);
+      if (bareGiaobanMatch && !(bareGiaobanMatch[1] || "").trim()) {
+        this.setPendingMenuCommand(chatId, senderId, "giaoban");
+        await this.sendMessage(
+          chatId,
+          "📋 **Xác nhận lệnh `/giaoban`**\nBấm nút **Gửi đi** bên dưới để xác nhận phát báo cáo giao ban hôm nay, hoặc nhắn ngày cụ thể (VD: `22/11`) rồi nhấn **Gửi đi**:",
+          undefined,
+          {
+            reply_to_message_id: message.message_id,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: "✅ Gửi đi (Hôm nay)", callback_data: "cmd:exec:giaoban" },
+                  { text: "📅 Hôm qua", callback_data: "cmd:exec:giaoban_yesterday" },
+                ],
+                [{ text: "❌ Hủy bỏ", callback_data: "cmd:cancel" }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      const bareTomtatMatch = cleanText.match(/^\/tomtat(?:@\S+)?(?:\s+([\s\S]+))?$/i);
+      if (bareTomtatMatch && !(bareTomtatMatch[1] || "").trim()) {
+        this.setPendingMenuCommand(chatId, senderId, "tomtat");
+        await this.sendMessage(
+          chatId,
+          "📊 **Xác nhận lệnh `/tomtat`**\nBấm nút **Gửi đi** bên dưới để gửi báo cáo số liệu kèm công việc & người nghỉ vắn tắt, hoặc nhắn ngày cụ thể (VD: `22/11`) rồi nhấn **Gửi đi**:",
+          undefined,
+          {
+            reply_to_message_id: message.message_id,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: "✅ Gửi đi", callback_data: "cmd:exec:tomtat" },
+                  { text: "📅 Hôm qua", callback_data: "cmd:exec:tomtat_yesterday" },
+                ],
+                [{ text: "❌ Hủy bỏ", callback_data: "cmd:cancel" }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      const askMatch = cleanText.match(/^\/(hoi|ask|web)(?:@\S+)?(?:\s+([\s\S]+))?$/i);
+      if (askMatch && !(askMatch[2] || "").trim()) {
+        this.setPendingMenuCommand(chatId, senderId, "hoi");
+        await this.sendMessage(
+          chatId,
+          "💬 **Bạn đã chọn lệnh `/hoi`**\nHãy nhập câu hỏi của bạn rồi nhấn **Gửi đi** để xác nhận hỏi Trợ lý AI (hoặc gõ `Hủy`):",
+          undefined,
+          {
+            reply_to_message_id: message.message_id,
+            reply_markup: {
+              force_reply: true,
+              selective: true,
+              input_field_placeholder: "Nhập câu hỏi rồi nhấn Gửi đi...",
+            },
+          }
+        );
+        return;
+      }
+
+      // If user clicked /nho or /giaoban from menu earlier and now typed the follow-up value + pressed Send
+      const pendingCmd = !isCommand ? this.consumePendingMenuCommand(chatId, senderId) : null;
+      if (!isCommand && pendingCmd === "nho") {
+        this.addLearnedMemory({ content: cleanText, category: "rule", source: "telegram" });
+        await this.sendMessage(
+          chatId,
+          `✅ **Đã ghi nhớ!** Tôi sẽ áp dụng lưu ý này cho các lần tư vấn và báo cáo sau:\n• "${cleanText}"`
+        );
+        this.totalAnswered += 1;
+        return;
+      }
+
+      if (isCommand) {
+        this.clearPendingMenuCommand(chatId, senderId);
+      }
+
+      const sendTyping = () =>
+        this.telegramApiCall(this.botToken, "sendChatAction", {
+          chat_id: chatId,
+          action: "typing",
+        }).catch(() => {});
+
+      await sendTyping();
+      typingTimer = setInterval(() => {
+        void sendTyping();
+      }, 4500);
+
+      const looksLikeBriefingDateParam =
+        /^\s*(?:ngày\s*)?\d{1,2}(?:\s*[\/\-]\s*\d{1,2}(?:\s*[\/\-]\s*\d{2,4})?)?\s*$/i.test(
+          cleanText
+        ) || /^(?:hôm nay|hom nay|hôm qua|hom qua|sáng nay|sang nay)$/i.test(cleanText);
+
+      if (
+        (!isCommand && pendingCmd === "tomtat" && looksLikeBriefingDateParam) ||
+        bareTomtatMatch
+      ) {
+        const effectiveQuery =
+          !isCommand && pendingCmd === "tomtat" && looksLikeBriefingDateParam
+            ? `/tomtat ${cleanText}`
+            : cleanText;
+        const { generateCompactSummaryReport } = await import("./scheduledAlerts");
+        const report = await generateCompactSummaryReport({
+          queryText: effectiveQuery,
+          liveContext: this.liveContext,
+        });
+        await this.sendMessage(chatId, report.telegramMarkdown);
+        this.totalAnswered += 1;
+        this.lastError = undefined;
+        return;
+      }
+
+      if (
+        (!isCommand && pendingCmd === "giaoban" && looksLikeBriefingDateParam) ||
+        bareGiaobanMatch ||
+        isBriefingStatsRequest(cleanText)
+      ) {
+        const effectiveQuery =
+          !isCommand && pendingCmd === "giaoban" && looksLikeBriefingDateParam
+            ? `/giaoban ${cleanText}`
+            : cleanText;
         const { generateInteractiveBriefingReport } = await import("./scheduledAlerts");
         const report = await generateInteractiveBriefingReport({
-          queryText: cleanText,
+          queryText: effectiveQuery,
           liveContext: this.liveContext,
         });
         await this.sendMessage(chatId, report.telegramMarkdown);
@@ -961,17 +1189,10 @@ class TelegramAssistantManager {
       }
 
       let question = cleanText;
-      const askMatch = cleanText.match(/^\/(hoi|ask|web)(?:@\S+)?(?:\s+([\s\S]+))?$/i);
-      if (/^\/tomtat(?:@\S+)?(?:\s|$)/i.test(cleanText)) {
-        question =
-          "Hãy tóm tắt nhanh tình hình toàn khoa hiện tại: số liệu ca gần nhất, tình trạng thiết bị cảnh báo, phòng quá tải, lịch trực hôm nay và công việc cần xử lý.";
-      } else if (askMatch) {
+      if (askMatch) {
         question = (askMatch[2] || "").trim();
-      }
-
-      if (!question) {
-        await this.sendMessage(chatId, "Vui lòng nhập câu hỏi sau lệnh, ví dụ: `/hoi Hôm nay có bao nhiêu ca?`");
-        return;
+      } else if (!isCommand && pendingCmd === "hoi") {
+        question = cleanText;
       }
 
       const historyKey = String(chatId);
@@ -1042,6 +1263,131 @@ class TelegramAssistantManager {
     }
   }
 
+  private async handleCallbackQuery(callbackQuery: any, updateId?: number): Promise<void> {
+    const callbackId = callbackQuery?.id;
+    const data = String(callbackQuery?.data || "").trim();
+    const message = callbackQuery?.message;
+    const chatId = message?.chat?.id;
+    const messageId = message?.message_id;
+    const senderId = callbackQuery?.from?.id;
+    const senderName =
+      [callbackQuery?.from?.first_name, callbackQuery?.from?.last_name]
+        .filter(Boolean)
+        .join(" ") ||
+      callbackQuery?.from?.username ||
+      "Cán bộ CLS";
+
+    const answerCallback = (text?: string) =>
+      this.telegramApiCall(this.botToken, "answerCallbackQuery", {
+        callback_query_id: callbackId,
+        ...(text ? { text } : {}),
+      }).catch(() => {});
+
+    if (!chatId || !data) {
+      await answerCallback();
+      return;
+    }
+
+    if (updateId) {
+      const claimed = await claimTelegramUpdateOnce(
+        this.getTokenFingerprint(),
+        updateId,
+        chatId,
+        messageId
+      );
+      if (!claimed) {
+        await answerCallback();
+        return;
+      }
+    }
+
+    if (data === "cmd:cancel") {
+      this.clearPendingMenuCommand(chatId, senderId);
+      await answerCallback("Đã hủy lệnh");
+      if (messageId) {
+        await this.telegramApiCall(this.botToken, "editMessageText", {
+          chat_id: chatId,
+          message_id: messageId,
+          text: "❌ Đã hủy thao tác vừa chọn.",
+        }).catch(() => {});
+      }
+      return;
+    }
+
+    if (
+      data === "cmd:exec:giaoban" ||
+      data === "cmd:exec:giaoban_yesterday" ||
+      data === "cmd:exec:tomtat" ||
+      data === "cmd:exec:tomtat_yesterday"
+    ) {
+      this.clearPendingMenuCommand(chatId, senderId);
+      await answerCallback("Đang tổng hợp báo cáo...");
+      if (messageId) {
+        const label =
+          data === "cmd:exec:giaoban"
+            ? "✅ Đã xác nhận gửi Báo cáo Giao ban đầy đủ & đánh giá."
+            : data === "cmd:exec:giaoban_yesterday"
+            ? "✅ Đã xác nhận gửi Báo cáo Giao ban chi tiết hôm qua."
+            : data === "cmd:exec:tomtat_yesterday"
+            ? "✅ Đã xác nhận gửi Báo cáo tóm tắt số liệu hôm qua."
+            : "✅ Đã xác nhận gửi Báo cáo số liệu kèm công việc & người nghỉ vắn tắt.";
+        await this.telegramApiCall(this.botToken, "editMessageText", {
+          chat_id: chatId,
+          message_id: messageId,
+          text: label,
+        }).catch(() => {});
+      }
+
+      let typingTimer: NodeJS.Timeout | null = null;
+      try {
+        const sendTyping = () =>
+          this.telegramApiCall(this.botToken, "sendChatAction", {
+            chat_id: chatId,
+            action: "typing",
+          }).catch(() => {});
+        await sendTyping();
+        typingTimer = setInterval(() => {
+          void sendTyping();
+        }, 4500);
+
+        if (data === "cmd:exec:giaoban" || data === "cmd:exec:giaoban_yesterday") {
+          const { generateInteractiveBriefingReport } = await import("./scheduledAlerts");
+          const queryText =
+            data === "cmd:exec:giaoban_yesterday" ? "/giaoban hôm qua" : "/giaoban";
+          const report = await generateInteractiveBriefingReport({
+            queryText,
+            liveContext: this.liveContext,
+          });
+          await this.sendMessage(chatId, report.telegramMarkdown);
+          this.totalAnswered += 1;
+          this.lastError = undefined;
+        } else {
+          const { generateCompactSummaryReport } = await import("./scheduledAlerts");
+          const queryText =
+            data === "cmd:exec:tomtat_yesterday" ? "/tomtat hôm qua" : "/tomtat";
+          const report = await generateCompactSummaryReport({
+            queryText,
+            liveContext: this.liveContext,
+          });
+          await this.sendMessage(chatId, report.telegramMarkdown);
+          this.totalAnswered += 1;
+          this.lastError = undefined;
+        }
+      } catch (err: any) {
+        this.lastError = err?.message || "Lỗi xử lý xác nhận lệnh Telegram";
+        await this.sendMessage(
+          chatId,
+          `Xin lỗi ${senderName}, tôi gặp lỗi khi xử lý lệnh (${this.lastError}).`
+        ).catch(() => {});
+      } finally {
+        if (typingTimer) clearInterval(typingTimer);
+      }
+      return;
+    }
+
+    await answerCallback();
+  }
+
   private clearStandbyTimer() {
     if (this.standbyTimer) {
       clearTimeout(this.standbyTimer);
@@ -1100,6 +1446,7 @@ class TelegramAssistantManager {
       update?.message?.chat?.id ||
         update?.edited_message?.chat?.id ||
         update?.channel_post?.chat?.id ||
+        update?.callback_query?.message?.chat?.id ||
         "global"
     );
     const prev = this.chatWorkerChains.get(chatId) || Promise.resolve();
@@ -1297,6 +1644,11 @@ class TelegramAssistantManager {
         this.botUsername = me.username;
         this.botFirstName = me.first_name;
 
+        await this.telegramApiCall(tokenSnapshot, "setMyCommands", {
+          commands: this.getBotMenuCommands(),
+        }).catch(() => {});
+        if (myGen !== this.pollLoopGeneration) return;
+
         const webhookInfo = await this.telegramApiCall(tokenSnapshot, "getWebhookInfo").catch(() => null);
         if (myGen !== this.pollLoopGeneration) return;
 
@@ -1359,7 +1711,13 @@ class TelegramAssistantManager {
           const url = `https://api.telegram.org/bot${tokenSnapshot}/getUpdates?offset=${
             this.lastUpdateOffset
           }&timeout=${pollTimeoutSec}&allowed_updates=${encodeURIComponent(
-            JSON.stringify(["message", "edited_message", "channel_post", "my_chat_member"])
+            JSON.stringify([
+              "message",
+              "edited_message",
+              "channel_post",
+              "callback_query",
+              "my_chat_member",
+            ])
           )}`;
 
           const res = await fetch(url, { signal: this.pollAbortController.signal });

@@ -3,6 +3,7 @@ import { Building2, X, AlertTriangle } from 'lucide-react';
 import { DepartmentUnit, EquipmentItem, ParaclinicalRoom, StaffProfile } from '../../types/hospital';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
+import { formatUniqueUnitLabel } from '../../utils/roomDisplay';
 
 interface RoomModalProps {
   isOpen: boolean;
@@ -104,7 +105,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
         value: s.fullName,
         label: s.fullName,
         badge: s.title || 'Nhân viên',
-        subLabel: [s.departmentSection, s.room].filter(Boolean).join(' • ')
+        subLabel: formatUniqueUnitLabel([s.departmentSection, s.room], ' • ')
       })),
     [activeStaffList]
   );

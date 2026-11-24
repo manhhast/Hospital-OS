@@ -21,7 +21,7 @@ import { OeeReliabilityTab } from './OeeReliabilityTab';
 import { DepreciationUtilizationTab } from './DepreciationUtilizationTab';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
-import { formatRoomStorageValue, resolveRoomDisplay } from '../../utils/roomDisplay';
+import { formatRoomStorageValue, formatUniqueUnitLabel, resolveRoomDisplay } from '../../utils/roomDisplay';
 import { checkEquipmentSafetyInterlock, calculateEquipmentOEE, calculateEquipmentDepreciation } from '../../utils/equipmentAnalytics';
 import {
   scanEquipmentExpirations,
@@ -171,7 +171,7 @@ export const EquipmentManagementView: React.FC = () => {
         value: s.fullName,
         label: s.fullName,
         badge: s.title || 'Nhân viên',
-        subLabel: [s.departmentSection, s.room].filter(Boolean).join(' • ')
+        subLabel: formatUniqueUnitLabel([s.departmentSection, s.room], ' • ')
       })),
     [activeStaffProfiles]
   );

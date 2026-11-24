@@ -16,6 +16,65 @@ export const formatRoomStorageValue = (
   return name || code;
 };
 
+const normalizeUnitComparisonKey = (val: string): string => {
+  return val
+    .trim()
+    .replace(/\s+/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/^(phong|bo phan|phan khoa)\s+/i, '')
+    .trim();
+};
+
+export const formatUniqueUnitLabel = (
+  parts: Array<string | undefined | null>,
+  separator = ' · '
+): string => {
+  const cleaned = parts
+    .map((p) => {
+      const normalized = String(p || '').trim().replace(/\s+/g, ' ');
+      const splitDup = normalized.match(/^(.+?)\s*[-–·•]\s*(.+)$/);
+      if (splitDup) {
+        const left = splitDup[1].trim();
+        const right = splitDup[2].trim();
+        const leftKey = normalizeUnitComparisonKey(left);
+        const rightKey = normalizeUnitComparisonKey(right);
+        if (leftKey && leftKey === rightKey) {
+          return left.length >= right.length ? left : right;
+        }
+      }
+      return normalized;
+    })
+    .filter(
+      (p) =>
+        p.length > 0 &&
+        p !== '—' &&
+        p !== '-' &&
+        p.toLowerCase() !== 'chưa phân công' &&
+        p.toLowerCase() !== 'chưa phân phòng'
+    );
+
+  const uniqueByKey: Array<{ text: string; key: string; exactKey: string }> = [];
+  for (const item of cleaned) {
+    const exactKey = item.toLowerCase();
+    const key = normalizeUnitComparisonKey(item) || exactKey;
+    const existingIdx = uniqueByKey.findIndex(
+      (u) => u.exactKey === exactKey || u.key === key
+    );
+    if (existingIdx === -1) {
+      uniqueByKey.push({ text: item, key, exactKey });
+    } else if (item.length > uniqueByKey[existingIdx].text.length) {
+      // Prefer the more descriptive label (e.g., "Phòng Siêu âm" over "Siêu âm")
+      uniqueByKey[existingIdx] = { text: item, key, exactKey };
+    }
+  }
+
+  return uniqueByKey.map((u) => u.text).join(separator);
+};
+
 export const isEquipmentInRoom = (
   equipmentRoom: string | undefined,
   room: Pick<ParaclinicalRoom, 'code' | 'name'>

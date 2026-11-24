@@ -14,6 +14,7 @@ import {
 import { formatDateVN, toInputDateFormat, normalizeFlexibleDateVN, normalizeVietnamesePhone } from '../../utils/dateUtils';
 import { LeaveCalendarTab } from './LeaveCalendarTab';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
+import { formatUniqueUnitLabel } from '../../utils/roomDisplay';
 import {
   canApproveLeaveRequest,
   filterActiveStaffProfiles,
@@ -497,7 +498,7 @@ export const StaffManagementView: React.FC = () => {
         value: p.userId,
         label: p.fullName,
         badge: p.title || 'Nhân viên',
-        subLabel: [p.departmentSection, p.room].filter(Boolean).join(' · ')
+        subLabel: formatUniqueUnitLabel([p.departmentSection, p.room])
       })),
     [activeProfiles]
   );
@@ -510,7 +511,7 @@ export const StaffManagementView: React.FC = () => {
           value: p.fullName,
           label: p.fullName,
           badge: p.title || 'Nhân viên',
-          subLabel: [p.departmentSection, p.room].filter(Boolean).join(' · ')
+          subLabel: formatUniqueUnitLabel([p.departmentSection, p.room])
         })),
     [activeProfiles, leaveApplicantId, currentUser.id]
   );

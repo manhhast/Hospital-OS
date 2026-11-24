@@ -1,5 +1,6 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { isValidServiceName } from "../src/utils/caseReportParser";
+import { formatUniqueUnitLabel } from "../src/utils/roomDisplay";
 import {
   isPostgresConfigured,
   loadCloudBucketsForServer,
@@ -1412,6 +1413,7 @@ interface NormalizedLeaveEntry {
   userRole: string;
   departmentSection: string;
   room: string;
+  unitLabel: string;
   leaveType: string;
   startDate: string;
   endDate: string;
@@ -1454,12 +1456,15 @@ function collectNormalizedLeaves(liveContext: any): NormalizedLeaveEntry[] {
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
 
+    const departmentSection = String(l?.departmentSection || prof?.departmentSection || "");
+    const room = String(l?.room || prof?.room || "");
     result.push({
       id: String(l?.id || key),
       userName,
       userRole: String(l?.userRole || prof?.title || ""),
-      departmentSection: String(l?.departmentSection || prof?.departmentSection || ""),
-      room: String(l?.room || prof?.room || ""),
+      departmentSection,
+      room,
+      unitLabel: formatUniqueUnitLabel([room, departmentSection]),
       leaveType: String(l?.leaveType || "Nghỉ phép"),
       startDate: startIso,
       endDate: endIso,
@@ -1487,12 +1492,15 @@ function collectNormalizedLeaves(liveContext: any): NormalizedLeaveEntry[] {
     );
     if (alreadyCovered) continue;
     const prof = profileByName.get(uName.toLowerCase());
+    const departmentSection = String(prof?.departmentSection || "");
+    const room = String(s?.room || prof?.room || "");
     result.push({
       id: `shift-off-${uName}-${dIso}`,
       userName: uName,
       userRole: String(prof?.title || ""),
-      departmentSection: String(prof?.departmentSection || ""),
-      room: String(s?.room || prof?.room || ""),
+      departmentSection,
+      room,
+      unitLabel: formatUniqueUnitLabel([room, departmentSection]),
       leaveType: String(s?.title || "Nghỉ theo lịch phân ca"),
       startDate: dIso,
       endDate: dIso,
@@ -2151,7 +2159,7 @@ export function buildDeterministicAssistantAnswer(
             l.startDate === l.endDate
               ? formatIsoToVN(l.startDate)
               : `${formatIsoToVN(l.startDate)} → ${formatIsoToVN(l.endDate)}`;
-          const unit = [l.room, l.departmentSection].filter(Boolean).join(" · ");
+          const unit = l.unitLabel || formatUniqueUnitLabel([l.room, l.departmentSection]);
           const sub = l.substituteUserName ? ` · Thay thế: ${l.substituteUserName}` : "";
           return `• **${l.userName}**${unit ? ` (${unit})` : ""}: **${l.leaveType}** (${dateRange}, ${l.totalDays} ngày) — **${l.status}**${l.reason ? ` · Lý do: ${l.reason}` : ""}${sub}`;
         });
@@ -2172,7 +2180,7 @@ export function buildDeterministicAssistantAnswer(
               l.startDate === l.endDate
                 ? formatIsoToVN(l.startDate)
                 : `${formatIsoToVN(l.startDate)} – ${formatIsoToVN(l.endDate)}`;
-            const unit = l.room || l.departmentSection || l.userRole || "Khoa CLS";
+            const unit = l.unitLabel || formatUniqueUnitLabel([l.room, l.departmentSection]) || l.userRole || "Khoa CLS";
             const sub = l.substituteUserName || "—";
             return `| **${l.userName}** | ${unit} | ${l.leaveType}${l.reason ? ` *(${l.reason})*` : ""} | ${dateRange} | ${l.totalDays}N | **${l.status}** | ${sub} |`;
           })
@@ -2276,9 +2284,10 @@ export function buildDeterministicAssistantAnswer(
         const personShifts = (sh.todayAndUpcoming || []).filter(
           (x: any) => normalizeText(x.assignedUserName || "") === sNorm
         );
+        const unitSummary = formatUniqueUnitLabel([s.departmentSection, s.room]);
         parts.push(
           `👤 **Thông tin nhân sự — ${s.fullName}:**\n` +
-            `  • Chức danh: ${s.title || "—"} | Bộ phận: ${s.departmentSection || "—"} | Phòng: ${s.room || "—"}\n` +
+            `  • Chức danh: ${s.title || "—"} | Đơn vị: ${unitSummary || "—"}\n` +
             `  • Trạng thái: **${s.currentStatus || "Đang công tác"}** | Chuyên môn: ${s.specialty || "—"}\n` +
             (personLeaves.length > 0
               ? `  • Lịch nghỉ (${personLeaves.length}): ${personLeaves
@@ -2547,6 +2556,17 @@ function parseAssistantResponseWithMeta(
   };
 }
 
+export function isCompactSummaryRequest(rawText: string): boolean {
+  const clean = String(rawText || "").trim();
+  if (!clean) return false;
+  if (/^\/tomtat(?:@\S+)?(?:\s|$)/i.test(clean)) return true;
+
+  const q = normalizeText(clean);
+  return /^(tom tat(\s+(nhanh|giao ban|so lieu|tinh hinh|toan khoa))+)(\s+(hom nay|hom qua|hom kia|ngay.*))?$/.test(
+    q
+  );
+}
+
 export function isBriefingStatsRequest(rawText: string): boolean {
   const clean = String(rawText || "").trim();
   if (!clean) return false;
@@ -2595,6 +2615,33 @@ export async function askHospitalAssistant(params: {
         .filter((m) => m.content.trim().length > 0)
     : [];
 
+  if (isCompactSummaryRequest(question)) {
+    const { generateCompactSummaryReport } = await import("./scheduledAlerts");
+    const report = await generateCompactSummaryReport({
+      queryText: question,
+      liveContext: rawLiveContext,
+    });
+    return {
+      answer: report.telegramMarkdown,
+      highlightedMetrics: (report.stats || []).slice(0, 4).map((s) => ({
+        label: s.label,
+        value: s.value,
+        tone: s.tone === "good" ? "emerald" : s.tone === "warn" ? "amber" : s.tone === "danger" ? "rose" : "blue",
+      })),
+      actionChecklist: [],
+      dataSourcesUsed: report.dataSourceNotes || ["Google Sheet + Kho báo cáo"],
+      webSources: [],
+      searchQueries: [],
+      usedWebSearch: false,
+      suggestedFollowUps: [
+        "/giaoban",
+        "Số liệu giao ban hôm qua?",
+      ],
+      modelUsed: "live-data-engine",
+      usedLiveContext: true,
+    };
+  }
+
   if (isBriefingStatsRequest(question)) {
     const { generateInteractiveBriefingReport } = await import("./scheduledAlerts");
     const report = await generateInteractiveBriefingReport({
@@ -2606,7 +2653,7 @@ export async function askHospitalAssistant(params: {
       highlightedMetrics: (report.stats || []).slice(0, 4).map((s) => ({
         label: s.label,
         value: s.value,
-        tone: s.tone === "good" ? "emerald" : s.tone === "warn" ? "amber" : "blue",
+        tone: s.tone === "good" ? "emerald" : s.tone === "warn" ? "amber" : s.tone === "danger" ? "rose" : "blue",
       })),
       actionChecklist: [],
       dataSourcesUsed: report.dataSourceNotes || ["Google Sheet + Kho báo cáo"],
@@ -2615,7 +2662,7 @@ export async function askHospitalAssistant(params: {
       usedWebSearch: false,
       suggestedFollowUps: [
         "Số liệu giao ban hôm qua?",
-        "Tóm tắt toàn khoa hiện tại?",
+        "/tomtat",
       ],
       modelUsed: "live-data-engine",
       usedLiveContext: true,
@@ -2709,7 +2756,7 @@ NGUỒN DỮ LIỆU KẾT HỢP (NỘI BỘ ỨNG DỤNG + INTERNET):
    - TUYỆT ĐỐI KHÔNG tự bịa số liệu nội bộ, tên nhân viên, trạng thái đơn nghỉ, tên máy hoặc ngày không có trong dữ liệu.
    - Chú ý đặc biệt tới khối \`queryAnalysis\` đã được hệ thống tính toán chuẩn xác theo múi giờ Việt Nam:
      • \`requestedTimeWindow\`: khoảng thời gian chính xác của câu hỏi (VD: "Tuần hiện tại: 16/11/2026 - 22/11/2026").
-     • \`leavesInWindow\` & \`leaveStatsInWindow\` & \`staff.leaveRequests\`: ĐÂY LÀ TOÀN BỘ LỊCH ĐĂNG KÝ NGHỈ (bao gồm cả **Đã phê duyệt**, **Chờ duyệt**, **Từ chối**). Tuyệt đối phân biệt rạch ròi **Lịch nghỉ phép** với **Lịch trực (\`shifts\`)** — khi hỏi lịch đăng ký nghỉ, phải trả lời bằng \`leavesInWindow\` / \`staff.leaveRequests\`, không được nói nhầm sang lịch trực!
+     • \`leavesInWindow\` & \`leaveStatsInWindow\` & \`staff.leaveRequests\`: ĐÂY LÀ TOÀN BỘ LỊCH ĐĂNG KÝ NGHỈ (bao gồm cả **Đã phê duyệt**, **Chờ duyệt**, **Từ chối**). Tuyệt đối phân biệt rạch ròi **Lịch nghỉ phép** với **Lịch trực (\`shifts\`)** — khi hỏi lịch đăng ký nghỉ, phải trả lời bằng \`leavesInWindow\` / \`staff.leaveRequests\`, không được nói nhầm sang lịch trực! Khi ghi tên đơn vị/bộ phận của nhân sự, ưu tiên dùng \`unitLabel\` và KHÔNG lặp lại hai lần cùng một tên nếu \`room\` và \`departmentSection\` giống nhau (tránh viết \`Siêu âm · Siêu âm\` hay \`Nội soi - Nội soi\`).
      • \`matchedServiceHistory\`, \`matchedRequestedDays\` & \`recentRecordedDays[].services\`: dùng cho câu hỏi số ca theo kỹ thuật/ngày. Nếu ngày mới nhất chưa ghi nhận kỹ thuật được hỏi (0 ca), hãy nêu rõ và trình bày đầy đủ N ngày gần nhất có dữ liệu thực tế.
 2. **Tri thức & Tra cứu Internet (Google Search)**:
    - ${

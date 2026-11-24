@@ -7,7 +7,7 @@ import {
 import { EquipmentItem, EquipmentStatus, MaintenanceLog, RepairLog, ParaclinicalRoom, StaffProfile, DepartmentUnit } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
 import { formatDateVN, formatDateTimeVN, getTodayISODateVN, getNowVNString, isDatePastVN, addMonthsToISODate } from '../../utils/dateUtils';
-import { formatRoomStorageValue, resolveRoomDisplay } from '../../utils/roomDisplay';
+import { formatRoomStorageValue, formatUniqueUnitLabel, resolveRoomDisplay } from '../../utils/roomDisplay';
 import { SearchableCombobox, ComboboxOption } from '../common/SearchableCombobox';
 import { filterActiveStaffDisplayName, filterActiveStaffProfiles, getInactiveStaffMatchers } from '../../utils/staffStatus';
 import {
@@ -90,7 +90,7 @@ export const EquipmentDetailModal: React.FC<EquipmentDetailModalProps> = ({
         value: s.fullName,
         label: s.fullName,
         badge: s.title || 'Nhân viên',
-        subLabel: [s.departmentSection, s.room].filter(Boolean).join(' • ')
+        subLabel: formatUniqueUnitLabel([s.departmentSection, s.room], ' • ')
       })),
     [activeStaffProfiles]
   );

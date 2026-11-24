@@ -296,7 +296,9 @@ app.post("/api/telegram/webhook", async (req, res) => {
       typeof body === "object" &&
       !Array.isArray(body) &&
       (typeof body.update_id === "number" ||
-        Boolean(body.message || body.edited_message || body.channel_post));
+        Boolean(
+          body.message || body.edited_message || body.channel_post || body.callback_query
+        ));
     if (!isValidUpdate) {
       return res.status(400).json({ ok: false, error: "Invalid Telegram update payload" });
     }
