@@ -8,6 +8,7 @@ import { storageService } from '../../services/storageService';
 import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
 import { User } from '../../types/hospital';
 import { removeVietnameseTones } from '../../services/searchService';
+import { filterActiveLoginUsers } from '../../utils/staffStatus';
 import loginClsHero from '../../assets/images/login_cls_hero_1795182757386.jpg';
 
 interface LoginScreenProps {
@@ -24,6 +25,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onToggleTheme
 }) => {
   const [users, setUsers] = useState<User[]>(() => storageService.getUsers());
+  const [staffProfiles, setStaffProfiles] = useState(() => storageService.getStaffProfiles());
   const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -42,6 +44,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   useEffect(() => {
     setUsers(storageService.getUsers());
+    setStaffProfiles(storageService.getStaffProfiles());
     setSelectedUserId('');
     setPassword('');
     setSearchQuery('');
@@ -50,6 +53,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
     const unsubStorage = storageService.subscribe(() => {
       setUsers(storageService.getUsers());
+      setStaffProfiles(storageService.getStaffProfiles());
     });
     const unsubPg = postgresSyncService.subscribe(() => {
       setPgState(postgresSyncService.getState());
@@ -85,7 +89,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             avatar: s.avatar || localMatch?.avatar
           } as User;
         })
-      : users;
+      : filterActiveLoginUsers(users, staffProfiles);
 
   const selectedUser = effectiveUsers.find((u) => u.id === selectedUserId) || null;
 

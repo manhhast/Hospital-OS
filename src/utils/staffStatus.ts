@@ -7,6 +7,7 @@ const normalizeText = (value?: string | null): string =>
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase()
+    .replace(/\s+/g, ' ')
     .trim();
 
 /**
@@ -51,16 +52,14 @@ export const canApproveLeaveRequest = (
  * ("Đã nghỉ việc" / "Đã kết thúc hợp đồng / Nghỉ việc" / "Nghỉ không lương" / "Tạm nghỉ không hưởng lương").
  */
 export const isResignedOrEndedStaff = (
-  staff?: Pick<StaffProfile, 'currentStatus'> | null
+  staff?: (Pick<StaffProfile, 'currentStatus'> & { status?: string }) | null
 ): boolean => {
-  if (!staff?.currentStatus) return false;
-  if (
-    staff.currentStatus === 'Đã nghỉ việc' ||
-    staff.currentStatus === 'Nghỉ không lương'
-  ) {
+  const rawStatus = staff?.currentStatus || staff?.status;
+  if (!rawStatus) return false;
+  if (rawStatus === 'Đã nghỉ việc' || rawStatus === 'Nghỉ không lương') {
     return true;
   }
-  const normalized = normalizeText(String(staff.currentStatus));
+  const normalized = normalizeText(String(rawStatus));
   return (
     normalized.includes('nghi viec') ||
     normalized.includes('ket thuc hop dong') ||
@@ -76,6 +75,45 @@ export const isActiveEmployedStaff = (staff?: StaffProfile | null): boolean =>
 
 export const filterActiveStaffProfiles = (profiles: StaffProfile[]): StaffProfile[] =>
   profiles.filter(isActiveEmployedStaff);
+
+export interface LoginAccountCandidate {
+  id: string;
+  name: string;
+  role?: string;
+  status?: string;
+}
+
+/**
+ * Returns true if a login account should be hidden from the login picker and blocked from signing in
+ * because the user is marked Inactive or their matched StaffProfile indicates they resigned/stopped working.
+ */
+export const isUserAccountBlockedOrResigned = (
+  user?: LoginAccountCandidate | null,
+  staffProfiles: Array<Pick<StaffProfile, 'userId' | 'fullName' | 'currentStatus'> & { status?: string }> = []
+): boolean => {
+  if (!user) return true;
+  if (user.id === 'USR-ADMIN' || user.role === 'Admin') return false;
+  if (String(user.status || '').trim().toLowerCase() === 'inactive') return true;
+
+  const userIdTrimmed = (user.id || '').trim();
+  const matchedById = userIdTrimmed
+    ? staffProfiles.find((s) => (s.userId || '').trim() === userIdTrimmed)
+    : undefined;
+  if (matchedById) {
+    return isResignedOrEndedStaff(matchedById);
+  }
+
+  const userNameNorm = normalizeText(user.name);
+  const matchedByName = userNameNorm
+    ? staffProfiles.find((s) => normalizeText(s.fullName) === userNameNorm)
+    : undefined;
+  return matchedByName ? isResignedOrEndedStaff(matchedByName) : false;
+};
+
+export const filterActiveLoginUsers = <T extends LoginAccountCandidate>(
+  users: T[],
+  staffProfiles: Array<Pick<StaffProfile, 'userId' | 'fullName' | 'currentStatus'> & { status?: string }> = []
+): T[] => users.filter((u) => !isUserAccountBlockedOrResigned(u, staffProfiles));
 
 export interface InactiveStaffMatchers {
   ids: Set<string>;

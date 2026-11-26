@@ -21,6 +21,10 @@ import {
   isAdminIdentity,
   resolveEffectiveUserAccess,
 } from "../src/utils/rbac";
+import {
+  filterActiveLoginUsers,
+  isUserAccountBlockedOrResigned,
+} from "../src/utils/staffStatus";
 
 export const ALLOWED_CLOUD_BUCKETS = new Set<string>([
   "tasks",
@@ -907,6 +911,19 @@ async function getStoredUsers(pool: Pool): Promise<{ users: StaffLoginRecord[]; 
     (u): u is StaffLoginRecord => Boolean(u && typeof u === "object" && (u as StaffLoginRecord).id)
   );
   return { users: list, existsInDb: list.length > 0 };
+}
+
+async function getStoredStaffProfiles(pool: Pool): Promise<StaffProfile[]> {
+  await ensureSchema(pool);
+  const res = await pool.query<{ items: unknown }>(
+    `SELECT items FROM app_buckets WHERE bucket_key = 'staff_profiles' LIMIT 1`
+  );
+  if (!res.rows[0] || !Array.isArray(res.rows[0].items)) {
+    return [];
+  }
+  return res.rows[0].items.filter(
+    (s): s is StaffProfile => Boolean(s && typeof s === "object")
+  );
 }
 
 const RBAC_GUARDED_BUCKETS = new Set<string>([
@@ -1889,10 +1906,21 @@ export function registerPostgresSyncRoutes(app: Express): void {
     }
 
     try {
-      const { users, existsInDb } = await getStoredUsers(pool);
+      const [{ users, existsInDb }, staffProfiles] = await Promise.all([
+        getStoredUsers(pool),
+        getStoredStaffProfiles(pool),
+      ]);
       const { session } = await resolveSession(req);
 
-      const safeStaff = users.map((u) => ({
+      const activeUsers = filterActiveLoginUsers(
+        users.map((u) => ({
+          ...u,
+          status: typeof u.status === "string" ? u.status : undefined,
+        })),
+        staffProfiles
+      );
+
+      const safeStaff = activeUsers.map((u) => ({
         id: u.id,
         name: u.name,
         role: u.role,
@@ -1951,7 +1979,10 @@ export function registerPostgresSyncRoutes(app: Express): void {
         return res.status(400).json({ success: false, error: "Vui lòng nhập mật khẩu." });
       }
 
-      const { users, existsInDb } = await getStoredUsers(pool);
+      const [{ users, existsInDb }, staffProfiles] = await Promise.all([
+        getStoredUsers(pool),
+        getStoredStaffProfiles(pool),
+      ]);
       const candidatePool = existsInDb ? users : [FALLBACK_ADMIN_RECORD];
 
       let matched: StaffLoginRecord | undefined;
@@ -1970,10 +2001,20 @@ export function registerPostgresSyncRoutes(app: Express): void {
         });
       }
 
-      if (matched.status === "Inactive") {
+      if (
+        isUserAccountBlockedOrResigned(
+          {
+            id: matched.id,
+            name: matched.name,
+            role: matched.role as User["role"],
+            status: typeof matched.status === "string" ? matched.status : undefined,
+          },
+          staffProfiles
+        )
+      ) {
         return res.status(403).json({
           success: false,
-          error: "Tài khoản này đã ngừng hoạt động. Vui lòng liên hệ Quản trị viên.",
+          error: "Tài khoản nhân viên đã nghỉ việc hoặc ngừng hoạt động. Vui lòng liên hệ Quản trị viên.",
         });
       }
 

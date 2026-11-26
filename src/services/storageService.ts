@@ -12,7 +12,7 @@ import {
   initialMeetings, initialIntegrationEndpoints, initialIntegrationPayloads, ADMIN_DEFAULT_AVATAR
 } from './mockData';
 import * as sampleDemoData from './sampleDemoData';
-import { isResignedOrEndedStaff } from '../utils/staffStatus';
+import { isResignedOrEndedStaff, isUserAccountBlockedOrResigned } from '../utils/staffStatus';
 
 const PRODUCTION_MODE_KEY = 'cls_workhub_prod_clean_state_v2';
 
@@ -1635,6 +1635,10 @@ class HospitalStorageService {
       return { success: false, message: 'Email không tồn tại trong hệ thống' };
     }
 
+    if (isUserAccountBlockedOrResigned(user, this.getStaffProfiles())) {
+      return { success: false, message: 'Tài khoản nhân viên đã nghỉ việc hoặc ngừng hoạt động.' };
+    }
+
     const validPassword = user.password || '123456';
     if (password !== validPassword) {
       return { success: false, message: 'Mật khẩu không chính xác' };
@@ -1652,6 +1656,10 @@ class HospitalStorageService {
 
     if (!user) {
       return { success: false, message: 'Không tìm thấy thông tin cán bộ trong hệ thống' };
+    }
+
+    if (isUserAccountBlockedOrResigned(user, this.getStaffProfiles())) {
+      return { success: false, message: 'Tài khoản nhân viên đã nghỉ việc hoặc ngừng hoạt động.' };
     }
 
     const validPassword = user.password || '123456';

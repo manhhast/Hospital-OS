@@ -1029,14 +1029,11 @@ class TelegramAssistantManager {
           this.setPendingMenuCommand(chatId, senderId, "nho");
           await this.sendMessage(
             chatId,
-            "🧠 **Bạn đã chọn lệnh /nho**\nHãy nhập quy ước hoặc kiến thức muốn Trợ lý ghi nhớ bên dưới rồi nhấn **Gửi đi** để xác nhận (hoặc gõ `Hủy`):",
+            "🧠 **Bạn đã chọn lệnh `/nho`**\nHãy nhập quy ước hoặc kiến thức muốn Trợ lý ghi nhớ rồi nhấn **Gửi đi** (hoặc bấm nút Hủy bên dưới):",
             undefined,
             {
-              reply_to_message_id: message.message_id,
               reply_markup: {
-                force_reply: true,
-                selective: true,
-                input_field_placeholder: "Nhập nội dung cần ghi nhớ rồi nhấn Gửi đi...",
+                inline_keyboard: [[{ text: "❌ Hủy bỏ", callback_data: "cmd:cancel" }]],
               },
             }
           );
@@ -1103,14 +1100,11 @@ class TelegramAssistantManager {
         this.setPendingMenuCommand(chatId, senderId, "hoi");
         await this.sendMessage(
           chatId,
-          "💬 **Bạn đã chọn lệnh `/hoi`**\nHãy nhập câu hỏi của bạn rồi nhấn **Gửi đi** để xác nhận hỏi Trợ lý AI (hoặc gõ `Hủy`):",
+          "💬 **Bạn đã chọn lệnh `/hoi`**\nHãy nhập câu hỏi của bạn rồi nhấn **Gửi đi** để hỏi Trợ lý AI (hoặc bấm nút Hủy bên dưới):",
           undefined,
           {
-            reply_to_message_id: message.message_id,
             reply_markup: {
-              force_reply: true,
-              selective: true,
-              input_field_placeholder: "Nhập câu hỏi rồi nhấn Gửi đi...",
+              inline_keyboard: [[{ text: "❌ Hủy bỏ", callback_data: "cmd:cancel" }]],
             },
           }
         );
