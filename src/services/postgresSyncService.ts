@@ -14,6 +14,7 @@ import {
   type ArchivedCaseReportItem
 } from './reportArchiveService';
 import type { User, UserRole } from '../types/hospital';
+import { parseDbStatusPayload } from '../utils/postgresStatus';
 
 const PG_SESSION_TOKEN_KEY = 'cls_workhub_pg_session_token_v1';
 
@@ -84,6 +85,7 @@ class PostgresSyncService {
   private visibilityHandler: (() => void) | null = null;
   private onlineHandler: (() => void) | null = null;
   private pageHideHandler: (() => void) | null = null;
+  private statusRetryTimer: number | null = null;
 
   private state: PostgresSyncState = {
     configured: false,
@@ -184,6 +186,10 @@ class PostgresSyncService {
   public destroy(): void {
     this.stopPolling();
     this.clearPendingTimers();
+    if (this.statusRetryTimer !== null) {
+      window.clearTimeout(this.statusRetryTimer);
+      this.statusRetryTimer = null;
+    }
     this.initialized = false;
   }
 
@@ -215,7 +221,20 @@ class PostgresSyncService {
     this.updatePendingChangesCount();
   }
 
+  private scheduleStatusRetryIfNeeded(): void {
+    if (typeof window === 'undefined' || this.statusRetryTimer !== null) return;
+    this.statusRetryTimer = window.setTimeout(() => {
+      this.statusRetryTimer = null;
+      void this.refreshServerStatus();
+    }, 2500);
+  }
+
   public async refreshServerStatus(): Promise<PostgresSyncState> {
+    if (this.statusRetryTimer !== null) {
+      window.clearTimeout(this.statusRetryTimer);
+      this.statusRetryTimer = null;
+    }
+
     try {
       const [statusRes, dirRes] = await Promise.all([
         fetch('/api/db/status', {
@@ -228,10 +247,22 @@ class PostgresSyncService {
         })
       ]);
 
-      const statusData = await statusRes.json();
-      const dirData = await dirRes.json().catch(() => ({ staff: [] }));
+      const rawStatusData = await statusRes.json().catch(() => null);
+      const parsed = parseDbStatusPayload(statusRes.ok, statusRes.status, rawStatusData);
 
-      if (!statusData?.configured) {
+      if (parsed.kind === 'http_error') {
+        this.setState({
+          configured: this.state.configured,
+          connected: false,
+          driver: this.state.configured ? 'postgres' : 'none',
+          status: 'error',
+          errorMessage: parsed.errorMessage
+        });
+        this.scheduleStatusRetryIfNeeded();
+        return this.state;
+      }
+
+      if (parsed.kind === 'unconfigured') {
         this.stopPolling();
         this.setState({
           configured: false,
@@ -245,24 +276,25 @@ class PostgresSyncService {
         return this.state;
       }
 
+      const dirData = await dirRes.json().catch(() => ({ staff: [] }));
       this.activateStorageHooks();
 
       const directory: PublicStaffDirectoryItem[] = Array.isArray(dirData?.staff)
         ? dirData.staff
         : [];
-      const hasValidSession = Boolean(statusData.authenticated) && this.hasExplicitSessionLogin;
+      const hasValidSession = parsed.authenticated && this.hasExplicitSessionLogin;
 
-      if (!statusData.connected) {
+      if (!parsed.connected) {
         this.setState({
           configured: true,
           connected: false,
           authenticated: false,
           driver: 'postgres',
           status: 'error',
-          serverBucketCount: Number(statusData.bucketCount || 0),
-          serverReportArchiveCount: Number(statusData.reportArchiveCount || 0),
+          serverBucketCount: parsed.bucketCount,
+          serverReportArchiveCount: parsed.reportArchiveCount,
           publicStaffDirectory: directory,
-          errorMessage: statusData.error || 'Không thể kết nối tới PostgreSQL.'
+          errorMessage: parsed.errorMessage || 'Không thể kết nối tới PostgreSQL.'
         });
         return this.state;
       }
@@ -277,8 +309,8 @@ class PostgresSyncService {
           authenticated: false,
           driver: 'postgres',
           status: 'needs_login',
-          serverBucketCount: Number(statusData.bucketCount || 0),
-          serverReportArchiveCount: Number(statusData.reportArchiveCount || 0),
+          serverBucketCount: parsed.bucketCount,
+          serverReportArchiveCount: parsed.reportArchiveCount,
           publicStaffDirectory: directory,
           sessionUserName: null,
           sessionUserRole: null,
@@ -293,25 +325,26 @@ class PostgresSyncService {
         authenticated: true,
         driver: 'postgres',
         status: 'syncing',
-        serverBucketCount: Number(statusData.bucketCount || 0),
-        serverReportArchiveCount: Number(statusData.reportArchiveCount || 0),
+        serverBucketCount: parsed.bucketCount,
+        serverReportArchiveCount: parsed.reportArchiveCount,
         publicStaffDirectory: directory,
-        sessionUserName: statusData.sessionUser?.name || null,
-        sessionUserRole: statusData.sessionUser?.role || null,
+        sessionUserName: parsed.sessionUser?.name || null,
+        sessionUserRole: parsed.sessionUser?.role || null,
         errorMessage: null
       });
 
       await this.hydrateInitialFromServer();
       this.startPolling();
       return this.state;
-    } catch (err) {
+    } catch {
       this.setState({
-        configured: false,
+        configured: this.state.configured,
         connected: false,
-        driver: 'none',
-        status: 'unconfigured',
-        errorMessage: null
+        driver: this.state.configured ? 'postgres' : 'none',
+        status: 'error',
+        errorMessage: 'Không thể kết nối tới máy chủ ứng dụng để kiểm tra PostgreSQL. Vui lòng thử lại.'
       });
+      this.scheduleStatusRetryIfNeeded();
       return this.state;
     }
   }
@@ -404,7 +437,12 @@ class PostgresSyncService {
   }
 
   public async refreshDirectory(): Promise<void> {
-    if (!this.state.configured) return;
+    if (!this.state.configured) {
+      if (this.state.status === 'error') {
+        await this.refreshServerStatus();
+      }
+      return;
+    }
     try {
       const res = await fetch('/api/auth/staff-directory', {
         headers: this.authHeaders(),

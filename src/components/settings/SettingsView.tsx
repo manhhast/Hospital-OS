@@ -97,6 +97,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       }
     });
     void aiService.getTelegramBotStatus().then((st) => setTelegramStatus(st)).catch(() => {});
+    const curPg = postgresSyncService.getState();
+    if (!curPg.configured || !curPg.connected || !curPg.authenticated) {
+      void postgresSyncService.refreshServerStatus();
+    }
     return () => {
       unsubDrive();
       unsubPg();
@@ -154,6 +158,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       );
     } catch (err) {
       onShowToast('Lỗi tải dữ liệu PostgreSQL', err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setIsPgBusy(false);
+    }
+  };
+
+  const handlePgRefreshStatus = async () => {
+    setIsPgBusy(true);
+    try {
+      const next = await postgresSyncService.refreshServerStatus();
+      if (next.configured && next.connected && next.authenticated) {
+        onShowToast(
+          'PostgreSQL đang hoạt động',
+          `Đã kết nối máy chủ PostgreSQL (${next.serverBucketCount} phân hệ dữ liệu).`,
+          'success'
+        );
+      } else if (next.configured && next.connected && !next.authenticated) {
+        onShowToast(
+          'Máy chủ PostgreSQL đã sẵn sàng',
+          'Vui lòng đăng xuất và đăng nhập lại để kích hoạt phiên đồng bộ hai chiều.',
+          'info'
+        );
+      } else if (next.status === 'error') {
+        onShowToast(
+          'Chưa kết nối được máy chủ',
+          next.errorMessage || 'Không thể kiểm tra trạng thái PostgreSQL lúc này.',
+          'warning'
+        );
+      } else {
+        onShowToast(
+          'Chưa phát hiện biến môi trường',
+          'Máy chủ hiện chưa nhận biến EXTERNAL_DATABASE_URL. Nếu vừa thêm Secrets, hãy khởi động lại ứng dụng.',
+          'warning'
+        );
+      }
     } finally {
       setIsPgBusy(false);
     }
@@ -436,6 +474,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             pgState.status === 'checking' ||
             pgState.pendingChangesCount > 0;
           const isSyncedLive = pgState.status === 'synced' && !isSyncingOrPending;
+          const isNeedsLogin = pgState.configured && pgState.connected && pgState.status === 'needs_login';
+          const isConnectionError = pgState.status === 'error';
 
           return (
             <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-[#DFE7F0] dark:border-emerald-900/50 shadow-xs space-y-4">
@@ -444,33 +484,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <Database className="w-4 h-4 text-emerald-600 mr-2 shrink-0" />
                   Đồng Bộ Live PostgreSQL (Tự Động Hai Chiều)
                 </h3>
-                <span
-                  className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border ${
-                    isSyncingOrPending
-                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300/60'
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border ${
+                      isSyncingOrPending
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300/60'
+                        : isSyncedLive
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300/60'
+                        : isNeedsLogin
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300/60'
+                        : isConnectionError || pgState.configured
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300/60'
+                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300/60'
+                    }`}
+                  >
+                    {isSyncedLive && pgState.liveStreamConnected && (
+                      <span className="relative inline-flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600" />
+                      </span>
+                    )}
+                    {isSyncingOrPending
+                      ? 'Đang tự động đồng bộ...'
+                      : isSyncedLive && pgState.liveStreamConnected
+                      ? 'Đồng bộ Live (SSE) · Tức thì'
                       : isSyncedLive
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300/60'
-                      : pgState.configured
-                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300/60'
-                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300/60'
-                  }`}
-                >
-                  {isSyncedLive && pgState.liveStreamConnected && (
-                    <span className="relative inline-flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600" />
-                    </span>
-                  )}
-                  {isSyncingOrPending
-                    ? 'Đang tự động đồng bộ...'
-                    : isSyncedLive && pgState.liveStreamConnected
-                    ? 'Đồng bộ Live (SSE) · Tức thì'
-                    : isSyncedLive
-                    ? 'Tự động đồng bộ · Đang bật'
-                    : pgState.configured
-                    ? 'Lỗi kết nối PostgreSQL'
-                    : 'Chưa cấu hình biến môi trường'}
-                </span>
+                      ? 'Tự động đồng bộ · Đang bật'
+                      : isNeedsLogin
+                      ? 'Cần đăng nhập lại để đồng bộ'
+                      : isConnectionError
+                      ? pgState.configured
+                        ? 'Lỗi kết nối PostgreSQL'
+                        : 'Lỗi kết nối máy chủ'
+                      : 'Chưa cấu hình biến môi trường'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isPgBusy}
+                    onClick={() => void handlePgRefreshStatus()}
+                    title="Kiểm tra lại kết nối máy chủ PostgreSQL"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isPgBusy ? 'animate-spin' : ''}`} />
+                    <span>Kiểm tra lại</span>
+                  </button>
+                </div>
               </div>
 
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -479,36 +537,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {pgState.configured ? (
                 <>
-                  {/* Live Auto-Sync Active Banner */}
-                  <div className="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start gap-2.5 text-xs">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  {/* Live Auto-Sync Active or Needs Re-Login Banner */}
+                  {isNeedsLogin ? (
+                    <div className="p-3.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/70 flex items-start gap-2.5 text-xs">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                       <div className="space-y-0.5">
-                        <div className="font-bold text-emerald-900 dark:text-emerald-200">
-                          Chế độ Live Sync đang chạy ngầm — Không cần nhấn nút đồng bộ
+                        <div className="font-bold text-amber-900 dark:text-amber-200">
+                          Máy chủ PostgreSQL đã kết nối, nhưng phiên làm việc hiện tại chưa xác thực với PostgreSQL
                         </div>
-                        <p className="text-[11.5px] text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
-                          Mọi thao tác thêm/sửa/xóa được tự động đẩy lên PostgreSQL sau ~0,25 giây và phát tức thì tới các tab/thiết bị khác qua kênh SSE (tự thử lại khi rớt mạng &amp; tự xả hàng đợi khi đóng tab).
+                        <p className="text-[11.5px] text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+                          Có thể bạn đã đăng nhập khi máy chủ đang khởi động lại. Vui lòng đăng xuất và đăng nhập lại bằng tài khoản nội bộ để bật đồng bộ hai chiều.
                         </p>
                       </div>
                     </div>
-                    <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between gap-1 text-[11px] pl-6 sm:pl-0">
-                      <span
-                        className={`font-bold ${
-                          pgState.liveStreamConnected
-                            ? 'text-emerald-700 dark:text-emerald-400'
-                            : 'text-amber-700 dark:text-amber-400'
-                        }`}
-                      >
-                        {pgState.liveStreamConnected
-                          ? 'Kênh Live (SSE): Đang nối'
-                          : 'Kênh Live (SSE): Đang nối lại...'}
-                      </span>
-                      <span className="text-slate-600 dark:text-slate-400 tabular-nums">
-                        Chờ đồng bộ: <strong>{pgState.pendingChangesCount}</strong> mục
-                      </span>
+                  ) : (
+                    <div className="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5 text-xs">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-emerald-900 dark:text-emerald-200">
+                            Chế độ Live Sync đang chạy ngầm — Không cần nhấn nút đồng bộ
+                          </div>
+                          <p className="text-[11.5px] text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
+                            Mọi thao tác thêm/sửa/xóa được tự động đẩy lên PostgreSQL sau ~0,25 giây và phát tức thì tới các tab/thiết bị khác qua kênh SSE (tự thử lại khi rớt mạng &amp; tự xả hàng đợi khi đóng tab).
+                          </p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between gap-1 text-[11px] pl-6 sm:pl-0">
+                        <span
+                          className={`font-bold ${
+                            pgState.liveStreamConnected
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : 'text-amber-700 dark:text-amber-400'
+                          }`}
+                        >
+                          {pgState.liveStreamConnected
+                            ? 'Kênh Live (SSE): Đang nối'
+                            : 'Kênh Live (SSE): Đang nối lại...'}
+                        </span>
+                        <span className="text-slate-600 dark:text-slate-400 tabular-nums">
+                          Chờ đồng bộ: <strong>{pgState.pendingChangesCount}</strong> mục
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
@@ -520,7 +592,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
                       <div className="text-[11px] text-slate-500 dark:text-slate-400">Phân hệ &amp; Báo cáo</div>
                       <div className="font-bold text-slate-800 dark:text-slate-100 mt-1 tabular-nums">
-                        {pgState.syncedBucketsCount} phân hệ · {pgState.syncedReportMonthsCount} tháng
+                        {pgState.syncedBucketsCount || pgState.serverBucketCount} phân hệ · {pgState.syncedReportMonthsCount || pgState.serverReportArchiveCount} tháng
                       </div>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
@@ -569,17 +641,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
                   </div>
                 </>
+              ) : isConnectionError ? (
+                <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-xs space-y-2 text-rose-800 dark:text-rose-200">
+                  <div className="font-bold">
+                    Không thể liên lạc với máy chủ ứng dụng để kiểm tra trạng thái PostgreSQL
+                  </div>
+                  <p className="text-[11.5px] leading-relaxed">
+                    {pgState.errorMessage || 'Máy chủ có thể đang khởi động lại hoặc kết nối mạng tạm thời gián đoạn. Hãy nhấn "Kiểm tra lại" sau vài giây.'}
+                  </p>
+                </div>
               ) : (
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs space-y-2 text-slate-700 dark:text-slate-300">
-              <div className="font-bold text-slate-900 dark:text-slate-100">
-                Cách kích hoạt trong 2 phút (hiện tại hệ thống đang lưu trữ an toàn cục bộ bằng IndexedDB &amp; LocalStorage):
-              </div>
-              <ol className="list-decimal list-inside space-y-1 text-[11.5px] leading-relaxed">
-                <li>Tạo 1 dự án PostgreSQL miễn phí trên <strong>Neon</strong> (<span className="font-mono">neon.tech</span>) hoặc <strong>Supabase</strong> (<span className="font-mono">supabase.com</span>) và sao chép chuỗi kết nối (Connection String dạng <span className="font-mono">postgresql://...</span>).</li>
-                <li>Thêm biến môi trường tên <code className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono font-bold">EXTERNAL_DATABASE_URL</code> vào mục <strong>Secrets</strong> / cấu hình môi trường của hệ thống.</li>
-                <li>Khởi động lại ứng dụng: chế độ đồng bộ PostgreSQL không cần Google Login sẽ tự động được kích hoạt và tự tạo bảng dữ liệu.</li>
-              </ol>
-            </div>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs space-y-2 text-slate-700 dark:text-slate-300">
+                  <div className="font-bold text-slate-900 dark:text-slate-100">
+                    Cách kích hoạt trong 2 phút (hiện tại hệ thống đang lưu trữ an toàn cục bộ bằng IndexedDB &amp; LocalStorage):
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11.5px] leading-relaxed">
+                    <li>Tạo 1 dự án PostgreSQL miễn phí trên <strong>Neon</strong> (<span className="font-mono">neon.tech</span>) hoặc <strong>Supabase</strong> (<span className="font-mono">supabase.com</span>) và sao chép chuỗi kết nối (Connection String dạng <span className="font-mono">postgresql://...</span>).</li>
+                    <li>Thêm biến môi trường tên <code className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono font-bold">EXTERNAL_DATABASE_URL</code> vào mục <strong>Secrets</strong> / cấu hình môi trường của hệ thống.</li>
+                    <li>Khởi động lại ứng dụng: chế độ đồng bộ PostgreSQL không cần Google Login sẽ tự động được kích hoạt và tự tạo bảng dữ liệu.</li>
+                  </ol>
+                </div>
               )}
             </div>
           );
