@@ -67,6 +67,72 @@ interface ReminderRecord {
 const TASK_REMINDER_LOG_KEY = 'cls_task_reminder_logs';
 const EQUIPMENT_REMINDER_LOG_KEY = 'cls_equipment_reminder_logs';
 
+let serverReminderMode = false;
+let serverTaskReminders: Record<string, ReminderRecord> = {};
+let serverEquipmentReminders: Record<string, ReminderRecord> = {};
+let cloudReminderSaveHandler:
+  | ((scope: 'task' | 'equipment', targetId: string, lastRemindedAt: string, channel: NotificationChannel) => void)
+  | null = null;
+
+export function setServerReminderMode(enabled: boolean): void {
+  serverReminderMode = enabled;
+}
+
+export function registerCloudReminderHandler(
+  handler:
+    | ((scope: 'task' | 'equipment', targetId: string, lastRemindedAt: string, channel: NotificationChannel) => void)
+    | null
+): void {
+  cloudReminderSaveHandler = handler;
+}
+
+export function hydrateServerReminderLogs(logs: {
+  task?: Record<string, { lastRemindedAt: string; count: number; channel?: string }>;
+  equipment?: Record<string, { lastRemindedAt: string; count: number; channel?: string }>;
+}): void {
+  if (logs.task && typeof logs.task === 'object') {
+    const next: Record<string, ReminderRecord> = {};
+    for (const [k, v] of Object.entries(logs.task)) {
+      if (v) {
+        next[k] = {
+          lastRemindedAt: v.lastRemindedAt,
+          count: Number(v.count || 1),
+          channel: (v.channel as NotificationChannel) || 'Telegram'
+        };
+      }
+    }
+    serverTaskReminders = next;
+  }
+  if (logs.equipment && typeof logs.equipment === 'object') {
+    const next: Record<string, ReminderRecord> = {};
+    for (const [k, v] of Object.entries(logs.equipment)) {
+      if (v) {
+        next[k] = {
+          lastRemindedAt: v.lastRemindedAt,
+          count: Number(v.count || 1),
+          channel: (v.channel as NotificationChannel) || 'Telegram'
+        };
+      }
+    }
+    serverEquipmentReminders = next;
+  }
+}
+
+export function applyServerReminderEntry(entry: {
+  scope: 'task' | 'equipment';
+  targetId: string;
+  lastRemindedAt: string;
+  count: number;
+  channel?: string;
+}): void {
+  const targetMap = entry.scope === 'task' ? serverTaskReminders : serverEquipmentReminders;
+  targetMap[entry.targetId] = {
+    lastRemindedAt: entry.lastRemindedAt,
+    count: Number(entry.count || 1),
+    channel: (entry.channel as NotificationChannel) || 'Telegram'
+  };
+}
+
 function parseISOToMidnightMs(dateInput?: string | null): number | null {
   const iso = toInputDateFormat(dateInput);
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
@@ -185,6 +251,9 @@ export function scanEquipmentExpirations(
 }
 
 function loadReminderMap(storageKey: string): Record<string, ReminderRecord> {
+  if (serverReminderMode) {
+    return storageKey === TASK_REMINDER_LOG_KEY ? serverTaskReminders : serverEquipmentReminders;
+  }
   try {
     const raw = localStorage.getItem(storageKey);
     return raw ? JSON.parse(raw) : {};
@@ -194,11 +263,26 @@ function loadReminderMap(storageKey: string): Record<string, ReminderRecord> {
 }
 
 function recordReminder(storageKey: string, id: string, channel: NotificationChannel): void {
+  const nowStr = getNowVNString();
+  if (serverReminderMode) {
+    const scope = storageKey === TASK_REMINDER_LOG_KEY ? 'task' : 'equipment';
+    const map = scope === 'task' ? serverTaskReminders : serverEquipmentReminders;
+    const prev = map[id];
+    map[id] = {
+      lastRemindedAt: nowStr,
+      count: (prev?.count || 0) + 1,
+      channel
+    };
+    if (cloudReminderSaveHandler) {
+      cloudReminderSaveHandler(scope, id, nowStr, channel);
+    }
+    return;
+  }
   try {
     const map = loadReminderMap(storageKey);
     const prev = map[id];
     map[id] = {
-      lastRemindedAt: getNowVNString(),
+      lastRemindedAt: nowStr,
       count: (prev?.count || 0) + 1,
       channel
     };

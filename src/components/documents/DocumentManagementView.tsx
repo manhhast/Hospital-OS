@@ -13,6 +13,7 @@ import {
   isValidGoogleDriveId,
   type GoogleDriveAuthState
 } from '../../services/googleDriveService';
+import { postgresSyncService, type PostgresSyncState } from '../../services/postgresSyncService';
 import { GoogleSignInButton } from '../common/GoogleSignInButton';
 import { DriveSyncDiagnosticModal } from './DriveSyncDiagnosticModal';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
@@ -45,8 +46,9 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
   const [versionDoc, setVersionDoc] = useState<DocumentItem | null>(null);
   const [localUploadOpen, setLocalUploadOpen] = useState(false);
 
-  // Google Drive Auth State
+  // Google Drive & PostgreSQL Auth State
   const [driveAuth, setDriveAuth] = useState<GoogleDriveAuthState>(() => googleDriveService.getState());
+  const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const [pendingDeleteDoc, setPendingDeleteDoc] = useState<DocumentItem | null>(null);
   const [isDeletingDocId, setIsDeletingDocId] = useState<string | null>(null);
 
@@ -71,9 +73,16 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
   const [isDriveDiagOpen, setIsDriveDiagOpen] = useState(false);
 
   useEffect(() => {
-    return googleDriveService.subscribe(() => {
+    const unsubDrive = googleDriveService.subscribe(() => {
       setDriveAuth(googleDriveService.getState());
     });
+    const unsubPg = postgresSyncService.subscribe(() => {
+      setPgState(postgresSyncService.getState());
+    });
+    return () => {
+      unsubDrive();
+      unsubPg();
+    };
   }, []);
 
   const currentUser = storageService.getCurrentUser();
@@ -85,8 +94,14 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
     : 'https://drive.google.com/drive/my-drive';
   const showUploadModal = isUploadOpen || localUploadOpen;
   const hasWriteSession = driveAuth.isSignedIn && driveAuth.hasAccessToken;
+  const hasPostgresFileUpload = pgState.configured && pgState.authenticated && pgState.connected;
+  const canUploadDocument = hasWriteSession || hasPostgresFileUpload;
   const realDriveCount = useMemo(
     () => documents.filter((d) => isValidGoogleDriveId(d.driveFileId)).length,
+    [documents]
+  );
+  const serverFileCount = useMemo(
+    () => documents.filter((d) => Boolean(d.serverFileUrl) || isValidGoogleDriveId(d.driveFileId)).length,
     [documents]
   );
 
@@ -237,20 +252,23 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
     }
   };
 
-  // Upload New Document to Google Drive (Requires Google Auth)
+  // Upload New Document to PostgreSQL / Google Drive
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!googleDriveService.hasActiveWriteSession()) {
+    const pgReady = postgresSyncService.isActiveBackend() && postgresSyncService.isAuthenticatedSession();
+    const driveReady = googleDriveService.hasActiveWriteSession();
+
+    if (!pgReady && !driveReady) {
       onShowToast(
-        'Yêu cầu đăng nhập Google',
-        'Vui lòng đăng nhập tài khoản Google trước khi tải hồ sơ lên Google Drive.',
+        'Yêu cầu kết nối lưu trữ',
+        'Vui lòng đăng nhập Google hoặc kết nối PostgreSQL trước khi tải tài liệu lên.',
         'warning'
       );
       return;
     }
 
     if (!selectedFile) {
-      onShowToast('Chưa chọn tệp', 'Vui lòng chọn tệp tài liệu từ máy tính để tải lên Google Drive.', 'error');
+      onShowToast('Chưa chọn tệp', 'Vui lòng chọn tệp tài liệu từ máy tính để tải lên.', 'error');
       return;
     }
 
@@ -265,26 +283,58 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
 
     setIsUploadingToDrive(true);
     try {
-      const uploadResult = await googleDriveService.uploadFileToDrive({
-        file: selectedFile,
-        targetFileName: finalTitle,
-        description: newDocData.note || `${newDocData.docType} - ${currentUser.name}`,
-        configuredFolderId: rawFolderId
-      });
+      let serverMeta: { id: string; url: string; sha256: string; sizeBytes: number } | null = null;
+      let driveMeta: {
+        driveFileId: string;
+        driveUrl: string;
+        sizeBytes: number;
+        checksum: string;
+        folderUsed: string | null;
+        shareWarning?: string;
+      } | null = null;
+
+      if (driveReady) {
+        driveMeta = await googleDriveService.uploadFileToDrive({
+          file: selectedFile,
+          targetFileName: finalTitle,
+          description: newDocData.note || `${newDocData.docType} - ${currentUser.name}`,
+          configuredFolderId: rawFolderId
+        });
+        if (pgReady && selectedFile.size <= 15 * 1024 * 1024) {
+          try {
+            serverMeta = await postgresSyncService.uploadFile(selectedFile, 'documents');
+          } catch {
+            // Keep Google Drive upload even if optional server mirror fails
+          }
+        }
+      } else if (pgReady) {
+        serverMeta = await postgresSyncService.uploadFile(selectedFile, 'documents');
+      }
 
       const newDocId = `DOC-${Date.now().toString().slice(-6)}`;
       if (filePreview) {
         setCachedFileUrl(newDocId, filePreview);
       }
 
+      const uploadedByLabel = driveReady
+        ? (driveAuth.userEmail || currentUser.name)
+        : currentUser.name;
+      const storageTargetLabel = driveMeta && serverMeta
+        ? 'Google Drive & PostgreSQL'
+        : driveMeta
+          ? 'Google Drive'
+          : 'Máy chủ PostgreSQL';
+
       const createdDoc: DocumentItem = {
         id: newDocId,
         title: finalTitle,
         docType: newDocData.docType,
         fileExtension: newDocData.fileExtension,
-        fileSize: uploadResult.sizeBytes,
-        driveFileId: uploadResult.driveFileId,
-        driveUrl: uploadResult.driveUrl,
+        fileSize: driveMeta?.sizeBytes ?? serverMeta?.sizeBytes ?? selectedFile.size,
+        driveFileId: driveMeta?.driveFileId || `server_${serverMeta?.id || newDocId}`,
+        driveUrl: driveMeta?.driveUrl || serverMeta?.url || '#',
+        serverFileId: serverMeta?.id,
+        serverFileUrl: serverMeta?.url,
         rawFileData: undefined,
         isUserUploaded: true,
         uploadDate: new Date().toISOString().split('T')[0],
@@ -293,15 +343,15 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
         version: 'v1.0',
         syncStatus: 'synced',
         lastSyncedAt: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16),
-        checksum: uploadResult.checksum,
-        driveFolderId: uploadResult.folderUsed || undefined,
+        checksum: driveMeta?.checksum || serverMeta?.sha256,
+        driveFolderId: driveMeta?.folderUsed || undefined,
         versionHistory: [
           {
             version: 'v1.0',
             updatedAt: new Date().toISOString().split('T')[0],
-            updatedBy: driveAuth.userEmail || currentUser.name,
-            note: `Tải lên Google Drive (${selectedFile.name})`,
-            fileUrl: uploadResult.driveUrl
+            updatedBy: uploadedByLabel,
+            note: `Tải lên ${storageTargetLabel} (${selectedFile.name})`,
+            fileUrl: driveMeta?.driveUrl || serverMeta?.url || '#'
           }
         ],
         tags: newDocData.tags.split(',').map(t => t.trim()).filter(Boolean),
@@ -312,16 +362,16 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       storageService.saveDocument(createdDoc);
       onDocumentsUpdated();
 
-      if (uploadResult.shareWarning) {
+      if (driveMeta?.shareWarning) {
         onShowToast(
-          'Đã tải lên Google Drive (Lưu ý phân quyền)',
-          uploadResult.shareWarning,
+          'Đã tải lên (Lưu ý phân quyền Drive)',
+          driveMeta.shareWarning,
           'warning'
         );
       } else {
         onShowToast(
-          'Tải lên Google Drive thành công',
-          `Đã lưu "${createdDoc.title}" lên Google Drive; mọi nhân viên đều có thể xem trước & tải về.`,
+          'Tải tài liệu thành công',
+          `Đã lưu "${createdDoc.title}" lên ${storageTargetLabel}; mọi nhân viên trên các thiết bị đều có thể xem & tải về.`,
           'success'
         );
       }
@@ -341,8 +391,8 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       onCloseUploadModal();
     } catch (err) {
       onShowToast(
-        'Lỗi tải lên Google Drive',
-        err instanceof Error ? err.message : 'Không thể tải tệp lên Google Drive. Vui lòng thử lại.',
+        'Lỗi tải lên tài liệu',
+        err instanceof Error ? err.message : 'Không thể tải tệp lên hệ thống. Vui lòng thử lại.',
         'error'
       );
     } finally {
@@ -357,7 +407,7 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
       if (outcome.method === 'metadata_fallback') {
         onShowToast(
           'Đã tải phiếu thông tin hồ sơ',
-          `"${doc.title}" là hồ sơ mẫu chưa có tệp nhị phân trên Google Drive; đã tải bản tóm tắt thông tin.`,
+          `"${doc.title}" là hồ sơ mẫu chưa có tệp nhị phân; đã tải bản tóm tắt thông tin.`,
           'info'
         );
       } else {
@@ -366,31 +416,37 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
     } catch (err) {
       onShowToast(
         'Không thể tải xuống',
-        err instanceof Error ? err.message : 'Vui lòng mở trực tiếp trên Google Drive để tải tệp.',
+        err instanceof Error ? err.message : 'Vui lòng thử tải lại hoặc mở trên Google Drive.',
         'error'
       );
     }
   };
 
-  // Trigger explicit confirmation dialog after verifying Google account login
+  // Trigger explicit confirmation dialog before deleting
   const triggerConfirmedDelete = (doc: DocumentItem) => {
     const isRealDrive = isValidGoogleDriveId(doc.driveFileId);
     onConfirmAction(
-      'Xóa tài liệu trên Google Drive',
+      isRealDrive ? 'Xóa tài liệu trên Google Drive' : 'Xóa tài liệu hệ thống',
       isRealDrive
         ? `Bạn có chắc chắn muốn xóa tài liệu "${doc.title}"? Thao tác này sẽ xóa tệp trên Google Drive (${driveAuth.userEmail || 'Tài khoản Google'}) và gỡ khỏi danh mục hệ thống.`
         : `Bạn có chắc chắn muốn xóa hồ sơ "${doc.title}" khỏi danh mục hệ thống?`,
       async () => {
         setIsDeletingDocId(doc.id);
         try {
-          const res = await googleDriveService.deleteFileFromDrive(doc.driveFileId);
-          storageService.deleteDocument(doc.id);
-          onDocumentsUpdated();
-          onShowToast('Đã xóa tài liệu', res.note, 'warning');
+          if (isRealDrive) {
+            const res = await googleDriveService.deleteFileFromDrive(doc.driveFileId);
+            storageService.deleteDocument(doc.id);
+            onDocumentsUpdated();
+            onShowToast('Đã xóa tài liệu', res.note, 'warning');
+          } else {
+            storageService.deleteDocument(doc.id);
+            onDocumentsUpdated();
+            onShowToast('Đã xóa tài liệu', `Đã xóa "${doc.title}" khỏi kho tài liệu hệ thống.`, 'warning');
+          }
         } catch (err) {
           onShowToast(
-            'Không thể xóa tài liệu trên Google Drive',
-            err instanceof Error ? err.message : 'Xóa tệp trên Google Drive thất bại.',
+            'Không thể xóa tài liệu',
+            err instanceof Error ? err.message : 'Xóa tài liệu thất bại.',
             'error'
           );
         } finally {
@@ -402,10 +458,10 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
   };
 
   const handleRequestDeleteDoc = (doc: DocumentItem) => {
-    if (!googleDriveService.hasActiveWriteSession()) {
+    if (isValidGoogleDriveId(doc.driveFileId) && !googleDriveService.hasActiveWriteSession()) {
       onShowToast(
         'Yêu cầu đăng nhập Google',
-        'Để xóa tài liệu lưu trên Google Drive, bạn cần đăng nhập tài khoản Google trước.',
+        'Để xóa tệp đồng bộ trên Google Drive, bạn cần đăng nhập tài khoản Google trước.',
         'warning'
       );
       setPendingDeleteDoc(doc);
@@ -481,11 +537,13 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
 
             <p className="text-xs text-[#718096] dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
               <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                {documents.length} tài liệu ({realDriveCount} tệp trên Drive)
+                {documents.length} tài liệu ({serverFileCount} tệp lưu trên máy chủ/Drive · {realDriveCount} Drive)
               </span>
               <span>•</span>
               <span className="text-[#1976D2] dark:text-blue-400 font-semibold">
-                Mọi người có thể Xem trước &amp; Tải về · Cần đăng nhập Google để Tải lên hoặc Xóa
+                {hasPostgresFileUpload
+                  ? 'Lưu trữ trực tiếp trên PostgreSQL (không cần đăng nhập Google)'
+                  : 'Mọi người có thể Xem trước & Tải về · Cần đăng nhập Google để Tải lên hoặc Xóa'}
               </span>
             </p>
           </div>
@@ -641,6 +699,11 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                           <Check className="w-2.5 h-2.5 text-emerald-500 stroke-[3]" />
                           Google Drive
                         </span>
+                      ) : doc.serverFileUrl ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-50 text-[#155A9C] dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60">
+                          <Check className="w-2.5 h-2.5 text-[#1976D2] stroke-[3]" />
+                          PostgreSQL
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-[#F4F7FB] text-[#718096] dark:bg-slate-800 dark:text-slate-300 border border-[#DFE7F0] dark:border-slate-700">
                           Mẫu hệ thống
@@ -760,8 +823,28 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
               </button>
             </div>
 
-            {/* Google Auth Gate Banner */}
-            {!hasWriteSession ? (
+            {/* Storage Mode Banner */}
+            {!hasWriteSession && hasPostgresFileUpload ? (
+              <div className="p-3.5 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-[#1976D2] dark:text-blue-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-[#155A9C] dark:text-blue-200">
+                      Lưu trữ trực tiếp trên Máy chủ PostgreSQL (tối đa 15MB/tệp)
+                    </p>
+                    <p className="text-[11px] text-[#718096] dark:text-slate-300 leading-relaxed">
+                      Tệp được đồng bộ ngay cho mọi trình duyệt &amp; thiết bị. Có thể đăng nhập Google để lưu thêm bản sao trên Drive.
+                    </p>
+                  </div>
+                </div>
+                <GoogleSignInButton
+                  compact
+                  loading={driveAuth.isSigningIn}
+                  onClick={() => void handleGoogleSignIn()}
+                  label="Kết nối Drive (tuỳ chọn)"
+                />
+              </div>
+            ) : !hasWriteSession ? (
               <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 space-y-3 text-xs">
                 <div className="flex items-start gap-2.5">
                   <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -1022,18 +1105,18 @@ export const DocumentManagementView: React.FC<DocumentManagementViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={!hasWriteSession || !selectedFile || isUploadingToDrive}
+                  disabled={!canUploadDocument || !selectedFile || isUploadingToDrive}
                   className="px-5 py-2 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-2xs transition-all flex items-center gap-1.5"
                 >
                   {isUploadingToDrive ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Đang tải lên Drive...</span>
+                      <span>Đang tải lên...</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-4 h-4" />
-                      <span>Tải lên Google Drive</span>
+                      <span>{hasWriteSession ? 'Tải lên Google Drive' : 'Lưu lên Máy chủ'}</span>
                     </>
                   )}
                 </button>

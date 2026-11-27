@@ -29,7 +29,7 @@ import { AuthModal } from './components/auth/AuthModal';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { QuickLockScreen } from './components/auth/QuickLockScreen';
 import { storageService } from './services/storageService';
-import { postgresSyncService, type PostgresSyncState } from './services/postgresSyncService';
+import { postgresSyncService, PREFERENCES_UPDATED_EVENT, type PostgresSyncState } from './services/postgresSyncService';
 import { runThreeDaySmartSync } from './services/googleSheetReportService';
 import { scheduleLiveContextSync, syncLiveContextToServer } from './services/aiContextService';
 import { REPORT_ARCHIVE_UPDATED_EVENT } from './services/reportArchiveService';
@@ -44,8 +44,12 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => storageService.isAuthenticated());
   const [activeModule, setActiveModule] = useState<string>('dashboard');
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
-    const saved = localStorage.getItem('theme_mode') as 'light' | 'dark' | 'system';
-    if (saved) return saved;
+    const serverPref = postgresSyncService.getPreference<'light' | 'dark' | 'system'>('theme_mode');
+    if (serverPref === 'light' || serverPref === 'dark' || serverPref === 'system') return serverPref;
+    if (!postgresSyncService.isActiveBackend()) {
+      const saved = localStorage.getItem('theme_mode') as 'light' | 'dark' | 'system';
+      if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+    }
     const settings = storageService.getSettings();
     return settings.theme === 'dark' ? 'dark' : 'light';
   });
@@ -84,7 +88,11 @@ export default function App() {
 
   const handleThemeModeChange = (newMode: 'light' | 'dark' | 'system') => {
     setThemeMode(newMode);
-    localStorage.setItem('theme_mode', newMode);
+    if (postgresSyncService.isActiveBackend()) {
+      void postgresSyncService.savePreference('theme_mode', newMode);
+    } else {
+      localStorage.setItem('theme_mode', newMode);
+    }
     const currentSettings = storageService.getSettings();
     storageService.saveSettings({ ...currentSettings, theme: newMode });
     
@@ -153,14 +161,24 @@ export default function App() {
       setCurrentUser(storageService.getCurrentUser());
       setIsAuthenticated(storageService.isAuthenticated());
       if (storageService.getIsApplyingRemote()) {
-        const remoteTheme = storageService.getSettings().theme;
+        const remoteTheme =
+          postgresSyncService.getPreference<'light' | 'dark' | 'system'>('theme_mode') ||
+          storageService.getSettings().theme;
         if (remoteTheme === 'light' || remoteTheme === 'dark' || remoteTheme === 'system') {
           setThemeMode(remoteTheme);
-          localStorage.setItem('theme_mode', remoteTheme);
+          if (!postgresSyncService.isActiveBackend()) {
+            localStorage.setItem('theme_mode', remoteTheme);
+          }
         }
       }
       scheduleLiveContextSync(1200);
     });
+    const handlePrefsUpdated = () => {
+      const prefTheme = postgresSyncService.getPreference<'light' | 'dark' | 'system'>('theme_mode');
+      if (prefTheme === 'light' || prefTheme === 'dark' || prefTheme === 'system') {
+        setThemeMode(prefTheme);
+      }
+    };
     const unsubPg = postgresSyncService.subscribe(() => {
       const next = postgresSyncService.getState();
       setPgState(next);
@@ -184,12 +202,14 @@ export default function App() {
       setIsBrowserOnline(false);
     };
     window.addEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
+    window.addEventListener(PREFERENCES_UPDATED_EVENT, handlePrefsUpdated);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
       unsubscribe();
       unsubPg();
       window.removeEventListener(REPORT_ARCHIVE_UPDATED_EVENT, handleReportArchiveUpdated);
+      window.removeEventListener(PREFERENCES_UPDATED_EVENT, handlePrefsUpdated);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       postgresSyncService.destroy();
@@ -446,6 +466,23 @@ export default function App() {
       isDanger
     });
   };
+
+  // Avoid flashing LoginScreen while checking/restoring HttpOnly cookie session on F5 or new tabs
+  if (!isAuthenticated && (pgState.status === 'checking' || (pgState.configured && pgState.authenticated && pgState.status === 'syncing'))) {
+    return (
+      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen flex items-center justify-center bg-[#F4F7FB] dark:bg-[#0F172A] text-[#263445] dark:text-slate-100 p-6`}>
+        <div className="bg-white dark:bg-slate-900 border border-[#DFE7F0] dark:border-slate-800 rounded-xl px-6 py-5 shadow-2xs flex items-center gap-3.5 max-w-md w-full">
+          <RefreshCw className="w-5 h-5 text-[#1976D2] animate-spin shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">Đang khôi phục phiên làm việc...</p>
+            <p className="text-xs text-[#718096] dark:text-slate-400 truncate mt-0.5">
+              Đang kết nối và đồng bộ dữ liệu từ PostgreSQL
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Full-screen Login Portal when user starts app or logs out
   if (!isAuthenticated) {

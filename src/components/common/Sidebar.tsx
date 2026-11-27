@@ -36,6 +36,7 @@ import { CONFIG_MODULE_IDS } from '../settings/SystemConfigHubView';
 import { resolveEffectiveUserAccess } from '../../utils/rbac';
 import {
   DEFAULT_PINNED_MENU_IDS,
+  QUICK_ACCESS_PINS_CHANGED_EVENT,
   loadPinnedMenuIds,
   movePinnedMenuId,
   savePinnedMenuIds,
@@ -211,11 +212,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     loadPinnedMenuIds(currentUser.id, allowedIdSet)
   );
 
-  // Sync pinned menu items when active user or permission set changes
+  // Sync pinned menu items when active user, permissions, or server preferences change
   useEffect(() => {
     setPinnedIds(loadPinnedMenuIds(currentUser.id, allowedIdSet));
     setIsEditingPins(false);
-  }, [currentUser.id, canOpenConfigHub, isAdmin]);
+  }, [currentUser.id, canOpenConfigHub, isAdmin, allowedIdSet]);
+
+  useEffect(() => {
+    const onPinsChanged = () => {
+      setPinnedIds(loadPinnedMenuIds(currentUser.id, allowedIdSet));
+    };
+    window.addEventListener(QUICK_ACCESS_PINS_CHANGED_EVENT, onPinsChanged);
+    return () => window.removeEventListener(QUICK_ACCESS_PINS_CHANGED_EVENT, onPinsChanged);
+  }, [currentUser.id, allowedIdSet]);
 
   const updatePinnedIds = (updater: (prev: string[]) => string[]) => {
     setPinnedIds((prev) => {

@@ -18,6 +18,11 @@ import {
   EquipmentItem
 } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
+import {
+  getKnownReportYears,
+  REPORT_ARCHIVE_UPDATED_EVENT,
+  reportArchiveService
+} from '../../services/reportArchiveService';
 import { formatDateVN, getTodayISODateVN } from '../../utils/dateUtils';
 import {
   scanEquipmentExpirations,
@@ -65,6 +70,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
   const currentUser = storageService.getCurrentUser();
 
+  const [archiveTick, setArchiveTick] = useState(0);
+
   const loadAllData = () => {
     setShifts(storageService.getShifts());
     setMeetings(storageService.getMeetings());
@@ -78,22 +85,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   useEffect(() => {
     loadAllData();
     const unsubscribe = storageService.subscribe(loadAllData);
-    return () => unsubscribe();
+    const onArchiveUpdated = () => setArchiveTick((n) => n + 1);
+    window.addEventListener(REPORT_ARCHIVE_UPDATED_EVENT, onArchiveUpdated);
+    return () => {
+      unsubscribe();
+      window.removeEventListener(REPORT_ARCHIVE_UPDATED_EVENT, onArchiveUpdated);
+    };
   }, []);
 
   const todayStr = getTodayISODateVN();
 
-  // Read latest daily statistical snapshot from Reports storage
+  // Read latest daily statistical snapshot from reportArchiveService (PostgreSQL-backed in server mode)
   const dailySnapshot = useMemo<DailySnapshotSummary | null>(() => {
+    const todayYear = Number(todayStr.split('-')[0]) || 2026;
+    const settings = storageService.getSettings();
+    const knownYears = getKnownReportYears(settings, [todayYear, settings.reportSheetYear || todayYear]);
+    const yearsToTry = Array.from(new Set([todayYear, ...(settings.reportSheetYear ? [settings.reportSheetYear] : []), ...[...knownYears].sort((a, b) => b - a)]));
+
     const nowVNMonth = Number(todayStr.split('-')[1]) || 1;
     const monthsToTry = [nowVNMonth, ...Array.from({ length: 12 }, (_, idx) => 12 - idx).filter((m) => m !== nowVNMonth)];
 
-    for (const m of monthsToTry) {
-      const monthLabel = `Tháng ${m}`;
-      try {
-        const raw = localStorage.getItem(`google_sheet_data_${monthLabel}`);
-        if (!raw) continue;
-        const items = JSON.parse(raw);
+    for (const yr of yearsToTry) {
+      const yearStore = reportArchiveService.loadYearArchiveSync(yr);
+      for (const m of monthsToTry) {
+        const monthLabel = `Tháng ${m}`;
+        const items = yearStore[monthLabel];
         if (!Array.isArray(items) || items.length === 0) continue;
 
         for (let d = 31; d >= 1; d--) {
@@ -117,7 +133,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           if (totalCases > 0) {
             return {
-              monthLabel,
+              monthLabel: `${monthLabel}/${yr}`,
               dayNum: d,
               totalCases,
               bhTotal,
@@ -126,12 +142,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             };
           }
         }
-      } catch {
-        // ignore invalid localStorage JSON
       }
     }
     return null;
-  }, [todayStr, tasks.length, notifications.length]);
+  }, [todayStr, archiveTick, tasks.length, notifications.length]);
 
   // Compliance & Task Reminder Scans
   const eqCompliance = useMemo(() => scanEquipmentExpirations(equipmentList, 60), [equipmentList]);

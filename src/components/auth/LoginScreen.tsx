@@ -74,22 +74,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const effectiveUsers: User[] =
-    pgState.configured && pgState.publicStaffDirectory.length > 0
-      ? pgState.publicStaffDirectory.map((s) => {
-          const localMatch = users.find((u) => u.id === s.id);
-          return {
-            ...(localMatch || {}),
-            id: s.id,
-            name: s.name,
-            email: localMatch?.email || '',
-            role: s.role,
-            department: s.department || localMatch?.department || 'Khoa Cận Lâm Sàng',
-            title: (s.title || localMatch?.title || s.role) as User['title'],
-            avatar: s.avatar || localMatch?.avatar
-          } as User;
-        })
-      : filterActiveLoginUsers(users, staffProfiles);
+  const isPostgresBlocked = pgState.configured && !pgState.connected;
+
+  const effectiveUsers: User[] = pgState.configured
+    ? pgState.publicStaffDirectory.map((s) => {
+        const localMatch = users.find((u) => u.id === s.id);
+        return {
+          ...(localMatch || {}),
+          id: s.id,
+          name: s.name,
+          email: localMatch?.email || '',
+          role: s.role,
+          department: s.department || localMatch?.department || 'Khoa Cận Lâm Sàng',
+          title: (s.title || localMatch?.title || s.role) as User['title'],
+          avatar: s.avatar || localMatch?.avatar
+        } as User;
+      })
+    : filterActiveLoginUsers(users, staffProfiles);
 
   const selectedUser = effectiveUsers.find((u) => u.id === selectedUserId) || null;
 
@@ -134,6 +135,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPostgresBlocked) {
+      const msg = 'Không thể kết nối PostgreSQL — Vui lòng thử lại.';
+      setErrorMsg(msg);
+      onShowToast('Mất kết nối máy chủ', msg, 'error');
+      return;
+    }
     if (!selectedUserId) {
       const msg = 'Vui lòng chọn tài khoản cán bộ trước khi đăng nhập.';
       setErrorMsg(msg);
@@ -301,10 +308,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </p>
               </div>
 
-              {!errorMsg && pgState.errorMessage && !pgState.authenticated && (
-                <div className="px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-xs font-medium">
-                  {pgState.errorMessage}
+              {isPostgresBlocked ? (
+                <div className="px-3 py-2.5 rounded-lg border border-rose-300 dark:border-rose-800/70 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 text-xs flex items-center justify-between gap-2">
+                  <span className="font-medium">
+                    Không thể kết nối PostgreSQL — Vui lòng thử lại
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void postgresSyncService.refreshServerStatus()}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-semibold shrink-0 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Thử lại</span>
+                  </button>
                 </div>
+              ) : (
+                !errorMsg &&
+                pgState.errorMessage &&
+                !pgState.authenticated && (
+                  <div className="px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-800/70 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-xs font-medium">
+                    {pgState.errorMessage}
+                  </div>
+                )
               )}
 
               <form onSubmit={handleLogin} className="space-y-4">
@@ -502,7 +527,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 {/* Primary CTA */}
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || isPostgresBlocked}
                   className="w-full h-10 px-4 bg-[#1976D2] hover:bg-[#155A9C] dark:bg-[#1976D2] dark:hover:bg-[#155A9C] text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#1976D2] focus-visible:ring-offset-2"
                 >
                   {loading ? (

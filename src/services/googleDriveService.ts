@@ -11,6 +11,7 @@ import {
 import oauthAppletConfig from '../../firebase-applet-config.json';
 import type { DocumentItem } from '../types/hospital';
 import { getCachedFileUrl } from './fileStorageCache';
+import { postgresSyncService } from './postgresSyncService';
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const PLACEHOLDER_FOLDER_ID = '1CLSWorkHub_MainFolder_GoogleDrive_ID';
@@ -90,6 +91,7 @@ export function isValidGoogleDriveId(id?: string | null): boolean {
   if (!id) return false;
   const trimmed = id.trim();
   if (!trimmed || trimmed === PLACEHOLDER_FOLDER_ID) return false;
+  if (trimmed === 'server_file' || trimmed.startsWith('server_')) return false;
   if (trimmed.startsWith('1Drive_') || trimmed.startsWith('drive_')) return false;
   // Google Drive file/folder IDs are alphanumeric + _/- and typically >= 15 characters
   return /^[a-zA-Z0-9_-]{15,}$/.test(trimmed);
@@ -601,10 +603,9 @@ class GoogleDriveService {
 
   /**
    * Download document for ANY Hospital OS user (does NOT require Google login).
-   * If user is already authenticated with Google & no local cache exists, streams clean Blob via Drive API;
-   * otherwise triggers direct public Drive download link or local blob download.
+   * Priority: local cache -> PostgreSQL server file -> Google Drive API/public link -> URL/metadata fallback.
    */
-  public async downloadDocument(doc: DocumentItem): Promise<{ started: boolean; method: 'cache' | 'drive_api' | 'public_link' | 'metadata_fallback' }> {
+  public async downloadDocument(doc: DocumentItem): Promise<{ started: boolean; method: 'cache' | 'server_file' | 'drive_api' | 'public_link' | 'metadata_fallback' }> {
     const cached = getCachedFileUrl(doc.id, doc.rawFileData || '');
     if (cached) {
       const a = document.createElement('a');
@@ -614,6 +615,17 @@ class GoogleDriveService {
       a.click();
       document.body.removeChild(a);
       return { started: true, method: 'cache' };
+    }
+
+    const serverUrl =
+      doc.serverFileUrl && doc.serverFileUrl.startsWith('/api/files/')
+        ? doc.serverFileUrl
+        : doc.driveUrl && doc.driveUrl.startsWith('/api/files/')
+          ? doc.driveUrl
+          : null;
+    if (serverUrl) {
+      await postgresSyncService.downloadServerFile(serverUrl, doc.title);
+      return { started: true, method: 'server_file' };
     }
 
     if (isValidGoogleDriveId(doc.driveFileId)) {

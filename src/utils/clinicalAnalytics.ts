@@ -45,11 +45,36 @@ export const DEFAULT_PINNED_SERVICE_NAMES = [
 ];
 
 const PINNED_STORAGE_KEY = 'cls_pinned_clinical_services_v1';
+let serverPinnedServicesMode = false;
+let serverPinnedServicesCache: string[] | null = null;
+let cloudSavePinnedServicesHandler: ((names: string[]) => void) | null = null;
+
+export function setServerPinnedServicesMode(enabled: boolean): void {
+  serverPinnedServicesMode = enabled;
+}
+
+export function registerCloudPinnedServicesHandler(
+  handler: ((names: string[]) => void) | null
+): void {
+  cloudSavePinnedServicesHandler = handler;
+}
+
+export function hydrateServerPinnedServiceNames(names: unknown): void {
+  if (!Array.isArray(names)) return;
+  const clean = names.filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
+  serverPinnedServicesCache = clean;
+}
 
 /**
- * Get list of pinned service names or IDs from localStorage
+ * Get list of pinned service names or IDs
  */
 export function getPinnedServiceNames(): string[] {
+  if (serverPinnedServicesMode) {
+    if (serverPinnedServicesCache && serverPinnedServicesCache.length > 0) {
+      return serverPinnedServicesCache;
+    }
+    return DEFAULT_PINNED_SERVICE_NAMES;
+  }
   try {
     const raw = localStorage.getItem(PINNED_STORAGE_KEY);
     if (raw) {
@@ -63,9 +88,16 @@ export function getPinnedServiceNames(): string[] {
 }
 
 /**
- * Save list of pinned service names to localStorage
+ * Save list of pinned service names to server preference (or localStorage when unconfigured)
  */
 export function savePinnedServiceNames(names: string[]): void {
+  if (serverPinnedServicesMode) {
+    serverPinnedServicesCache = [...names];
+    if (cloudSavePinnedServicesHandler) {
+      cloudSavePinnedServicesHandler(names);
+    }
+    return;
+  }
   try {
     localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(names));
   } catch (e) {

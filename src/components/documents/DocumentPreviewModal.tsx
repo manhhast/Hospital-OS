@@ -12,6 +12,7 @@ import {
 import { storageService } from '../../services/storageService';
 import { getCachedFileUrl } from '../../services/fileStorageCache';
 import { googleDriveService, isValidGoogleDriveId } from '../../services/googleDriveService';
+import { postgresSyncService } from '../../services/postgresSyncService';
 
 interface DocumentPreviewModalProps {
   doc: DocumentItem | null;
@@ -69,10 +70,37 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
   const [activeSheetTab, setActiveSheetTab] = useState<string>('tab-eqa-q2');
   const [sheetSearch, setSheetSearch] = useState<string>('');
 
+  const [resolvedServerUrl, setResolvedServerUrl] = useState<string | null>(null);
+
   const settings = storageService.getSettings();
   const folderId = doc.driveFolderId || settings.googleDriveFolderId || 'Chưa cấu hình Folder ID';
   const hasRealDriveId = isValidGoogleDriveId(doc.driveFileId);
-  const realFileUrl = getCachedFileUrl(doc.id, doc.rawFileData || '');
+  const serverFileUrl =
+    doc.serverFileUrl && doc.serverFileUrl.startsWith('/api/files/')
+      ? doc.serverFileUrl
+      : doc.driveUrl && doc.driveUrl.startsWith('/api/files/')
+        ? doc.driveUrl
+        : null;
+  const hasServerFile = Boolean(serverFileUrl);
+
+  React.useEffect(() => {
+    let active = true;
+    setResolvedServerUrl(null);
+    if (!serverFileUrl) return;
+    postgresSyncService
+      .fetchFileAsBlobUrl(serverFileUrl)
+      .then((blobUrl) => {
+        if (active) setResolvedServerUrl(blobUrl);
+      })
+      .catch(() => {
+        if (active) setResolvedServerUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [serverFileUrl]);
+
+  const realFileUrl = resolvedServerUrl || getCachedFileUrl(doc.id, doc.rawFileData || '');
   const driveEmbedUrl = hasRealDriveId
     ? `https://drive.google.com/file/d/${doc.driveFileId}/preview`
     : null;
@@ -178,6 +206,11 @@ const DocumentPreviewModalContent: React.FC<DocumentPreviewModalContentProps> = 
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.2 rounded-md border border-emerald-200 dark:border-emerald-800/60">
                     <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                     Lưu trên Google Drive
+                  </span>
+                ) : hasServerFile ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#155A9C] dark:text-blue-300 bg-[#EAF4FF] dark:bg-blue-950/60 px-2 py-0.2 rounded-md border border-[#1976D2]/25 dark:border-blue-800/60">
+                    <CheckCircle2 className="w-3 h-3 text-[#1976D2]" />
+                    Lưu trên Máy chủ PostgreSQL
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#718096] dark:text-slate-300 bg-white dark:bg-slate-800 px-2 py-0.2 rounded-md border border-[#DFE7F0] dark:border-slate-700">

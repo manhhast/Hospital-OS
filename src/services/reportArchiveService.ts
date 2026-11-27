@@ -70,14 +70,75 @@ export function toReportArchiveKey(year: number, monthKey: string): string {
 
 export const REPORT_ARCHIVE_UPDATED_EVENT = 'cls-report-archive-updated';
 
+const memoryArchives = new Map<string, ArchivedCaseReportItem[]>();
+const memoryKnownYears = new Set<number>();
+const memoryYearMeta = new Map<number, YearArchiveMeta>();
+let serverArchiveModeEnabled = false;
+
 let cloudReportArchiveHandler:
   | ((year: number, monthKey: string, items: ArchivedCaseReportItem[]) => void)
   | null = null;
+
+let cloudKnownYearsHandler: ((years: number[]) => void) | null = null;
+
+export interface ReportCellPatchInput {
+  serviceId: string;
+  category: string;
+  name: string;
+  day: number;
+  bh: number | string;
+  nd: number | string;
+  isManual?: boolean;
+  manualBy?: string;
+  manualAt?: string;
+  forceOverwrite?: boolean;
+}
+
+let cloudReportCellsHandler:
+  | ((year: number, monthKey: string, cells: ReportCellPatchInput[], fullItems: ArchivedCaseReportItem[]) => void)
+  | null = null;
+
+export function setServerReportArchiveMode(enabled: boolean): void {
+  serverArchiveModeEnabled = enabled;
+}
+
+export function clearReportArchiveMemoryCache(): void {
+  memoryArchives.clear();
+  memoryKnownYears.clear();
+  memoryYearMeta.clear();
+}
+
+export function applyServerKnownYears(years: number[]): void {
+  years.forEach((y) => {
+    if (isValidReportYear(Number(y))) {
+      memoryKnownYears.add(Number(y));
+    }
+  });
+}
 
 export function registerCloudReportArchiveHandler(
   handler: ((year: number, monthKey: string, items: ArchivedCaseReportItem[]) => void) | null
 ): void {
   cloudReportArchiveHandler = handler;
+}
+
+export function registerCloudReportCellsHandler(
+  handler:
+    | ((
+        year: number,
+        monthKey: string,
+        cells: ReportCellPatchInput[],
+        fullItems: ArchivedCaseReportItem[]
+      ) => void)
+    | null
+): void {
+  cloudReportCellsHandler = handler;
+}
+
+export function registerCloudKnownYearsHandler(
+  handler: ((years: number[]) => void) | null
+): void {
+  cloudKnownYearsHandler = handler;
 }
 
 function openArchiveDB(): Promise<IDBDatabase | null> {
@@ -190,7 +251,11 @@ export function getReportSheetConfigForYear(
   // Backward-compatible fallback for default/legacy year when reportGoogleSheetsByYear has not been saved for this year
   const activeLegacyYear = settings.reportSheetYear || DEFAULT_REPORT_YEAR;
   if (year === activeLegacyYear) {
-    const legacyUrl = settings.googleSheetUrl?.trim() || localStorage.getItem('google_sheet_url') || '';
+    const legacyUrl =
+      settings.googleSheetUrl?.trim() ||
+      (!serverArchiveModeEnabled && typeof localStorage !== 'undefined'
+        ? localStorage.getItem('google_sheet_url') || ''
+        : '');
     const legacyId = settings.reportGoogleSheetId?.trim() || extractSpreadsheetIdFromInput(legacyUrl);
     if (legacyUrl || legacyId) {
       return {
@@ -203,8 +268,16 @@ export function getReportSheetConfigForYear(
   return { url: '', sheetId: '' };
 }
 
-function rememberKnownYear(year: number): void {
-  if (!isValidReportYear(year) || typeof window === 'undefined') return;
+function rememberKnownYear(year: number, skipCloudPush = false): void {
+  if (!isValidReportYear(year)) return;
+  const added = !memoryKnownYears.has(year);
+  memoryKnownYears.add(year);
+
+  if (added && !skipCloudPush && cloudKnownYearsHandler) {
+    cloudKnownYearsHandler(Array.from(memoryKnownYears).sort((a, b) => a - b));
+  }
+
+  if (serverArchiveModeEnabled || typeof window === 'undefined') return;
   try {
     const raw = localStorage.getItem(KNOWN_YEARS_STORAGE_KEY);
     const parsed: number[] = raw ? JSON.parse(raw) : [];
@@ -220,6 +293,14 @@ function rememberKnownYear(year: number): void {
 
 export function getKnownReportYears(settings?: AppSettings, extraYears: number[] = []): number[] {
   const set = new Set<number>([2024, 2025, 2026, 2027, DEFAULT_REPORT_YEAR, new Date().getFullYear()]);
+
+  memoryKnownYears.forEach((y) => {
+    if (isValidReportYear(y)) set.add(y);
+  });
+  for (const key of memoryArchives.keys()) {
+    const y = parseInt(key.split('__')[0] || '', 10);
+    if (isValidReportYear(y)) set.add(y);
+  }
 
   if (settings?.reportSheetYear && isValidReportYear(settings.reportSheetYear)) {
     set.add(settings.reportSheetYear);
@@ -239,7 +320,7 @@ export function getKnownReportYears(settings?: AppSettings, extraYears: number[]
     if (isValidReportYear(y)) set.add(y);
   });
 
-  if (typeof window !== 'undefined') {
+  if (!serverArchiveModeEnabled && typeof window !== 'undefined') {
     try {
       const rawKnown = localStorage.getItem(KNOWN_YEARS_STORAGE_KEY);
       if (rawKnown) {
@@ -324,6 +405,19 @@ export const reportArchiveService = {
     const store: YearlyMonthlyStore = {};
 
     REPORT_MONTHS.forEach((monthKey) => {
+      const memKey = getIdbKey(year, monthKey);
+      if (memoryArchives.has(memKey)) {
+        const items = memoryArchives.get(memKey);
+        if (items && items.length > 0) {
+          store[monthKey] = items;
+        }
+        return;
+      }
+
+      if (serverArchiveModeEnabled || typeof localStorage === 'undefined') {
+        return;
+      }
+
       const yearKey = getYearMonthStorageKey(year, monthKey);
       let raw = localStorage.getItem(yearKey);
 
@@ -334,7 +428,6 @@ export const reportArchiveService = {
           try {
             const parsedLegacy = JSON.parse(legacyRaw);
             if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
-              // Sanity guard used historically for Month 2 corrupt total column
               const saTim = parsedLegacy.find((i: any) => i.name && String(i.name).includes('Siêu âm tim'));
               const isCorruptFeb =
                 monthKey === 'Tháng 2' &&
@@ -357,6 +450,7 @@ export const reportArchiveService = {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed) && parsed.length > 0) {
             store[monthKey] = parsed;
+            memoryArchives.set(memKey, parsed);
           }
         } catch {
           // ignore
@@ -368,10 +462,12 @@ export const reportArchiveService = {
   },
 
   /**
-   * Async hydration from IndexedDB: if IndexedDB contains months that are missing from localStorage
-   * (e.g., user cleared browser cache or hit localStorage limits), restore them cleanly.
+   * Async hydration from IndexedDB (used only in offline/local-only mode when PostgreSQL is not active).
    */
   async hydrateYearArchiveFromIDB(year: number): Promise<YearlyMonthlyStore> {
+    if (serverArchiveModeEnabled) {
+      return this.loadYearArchiveSync(year);
+    }
     const idbStore = await readYearFromIDB(year);
     const currentSync = this.loadYearArchiveSync(year);
     const combined: YearlyMonthlyStore = { ...currentSync };
@@ -379,6 +475,7 @@ export const reportArchiveService = {
     for (const monthKey of REPORT_MONTHS) {
       if ((!combined[monthKey] || combined[monthKey].length === 0) && idbStore[monthKey]?.length) {
         combined[monthKey] = idbStore[monthKey];
+        memoryArchives.set(getIdbKey(year, monthKey), idbStore[monthKey]);
         try {
           localStorage.setItem(getYearMonthStorageKey(year, monthKey), JSON.stringify(idbStore[monthKey]));
         } catch {
@@ -390,6 +487,9 @@ export const reportArchiveService = {
   },
 
   async getAllKnownYearsFromIDB(): Promise<number[]> {
+    if (serverArchiveModeEnabled) {
+      return getKnownReportYears();
+    }
     const db = await openArchiveDB();
     if (!db) return [];
     return new Promise((resolve) => {
@@ -424,123 +524,74 @@ export const reportArchiveService = {
     items: ArchivedCaseReportItem[],
     skipCloudPush = false
   ): void {
-    rememberKnownYear(year);
-    try {
-      localStorage.setItem(getYearMonthStorageKey(year, monthKey), JSON.stringify(items));
-    } catch (err) {
-      console.warn(`Unable to persist ${monthKey}/${year} in localStorage:`, err);
+    rememberKnownYear(year, skipCloudPush);
+    memoryArchives.set(getIdbKey(year, monthKey), items);
+
+    if (!serverArchiveModeEnabled) {
+      try {
+        localStorage.setItem(getYearMonthStorageKey(year, monthKey), JSON.stringify(items));
+      } catch (err) {
+        console.warn(`Unable to persist ${monthKey}/${year} in localStorage:`, err);
+      }
+      void writeToIDB(year, monthKey, items);
     }
-    void writeToIDB(year, monthKey, items);
+
     if (!skipCloudPush && cloudReportArchiveHandler) {
       cloudReportArchiveHandler(year, monthKey, items);
     }
   },
 
   /**
-   * Non-destructive merge when receiving a monthly report archive from the PostgreSQL backend server.
-   * Preserves all locally recorded and manual-locked days and takes whichever manual edit is newer.
+   * Authoritative server application: replaces local cached month with PostgreSQL snapshot so
+   * cleared cells, corrected values, and manual edits propagate identically across all browsers.
    */
   applyCloudMonthArchive(
     year: number,
     monthKey: string,
     cloudItems: ArchivedCaseReportItem[]
   ): ArchivedCaseReportItem[] {
-    if (!Array.isArray(cloudItems) || cloudItems.length === 0) {
+    if (!Array.isArray(cloudItems)) {
       return this.loadYearArchiveSync(year)[monthKey] || [];
     }
 
-    const existingStore = this.loadYearArchiveSync(year);
-    const localItems = existingStore[monthKey] || [];
+    const normalizedCloud = cloudItems.map((c) => ({
+      ...c,
+      dailyData: { ...(c.dailyData || {}) },
+      manualDays: c.manualDays ? { ...c.manualDays } : undefined
+    }));
 
-    let merged: ArchivedCaseReportItem[];
-
-    if (localItems.length === 0) {
-      merged = cloudItems;
-    } else {
-      const localByFullKey = new Map<string, ArchivedCaseReportItem>();
-      const localByName = new Map<string, ArchivedCaseReportItem>();
-      for (const loc of localItems) {
-        localByFullKey.set(normalizeServiceKey(loc.category, loc.name), loc);
-        localByName.set(loc.name.trim().toLowerCase(), loc);
-      }
-
-      const matchedCloudKeys = new Set<string>();
-      merged = localItems.map((loc) => {
-        const fullKey = normalizeServiceKey(loc.category, loc.name);
-        const cloudMatch = cloudItems.find(
-          (c) =>
-            normalizeServiceKey(c.category, c.name) === fullKey ||
-            c.name.trim().toLowerCase() === loc.name.trim().toLowerCase()
-        );
-        if (!cloudMatch) return loc;
-
-        matchedCloudKeys.add(normalizeServiceKey(cloudMatch.category, cloudMatch.name));
-        const nextDaily: { [day: number]: DailyCaseCount } = { ...(loc.dailyData || {}) };
-        const nextManual: { [day: number]: ManualDayAudit } = { ...(loc.manualDays || {}) };
-
-        for (let d = 1; d <= 31; d++) {
-          const localVal = loc.dailyData?.[d];
-          const cloudVal = cloudMatch.dailyData?.[d];
-          const localManual = loc.manualDays?.[d];
-          const cloudManual = cloudMatch.manualDays?.[d];
-
-          if (cloudManual && (!localManual || cloudManual.updatedAt >= localManual.updatedAt)) {
-            if (cloudVal) nextDaily[d] = { ...cloudVal };
-            nextManual[d] = { ...cloudManual };
-          } else if (!hasRecordedDayValue(localVal) && hasRecordedDayValue(cloudVal) && cloudVal) {
-            nextDaily[d] = { ...cloudVal };
-          }
-        }
-
-        return {
-          ...loc,
-          dailyData: nextDaily,
-          manualDays: Object.keys(nextManual).length > 0 ? nextManual : loc.manualDays,
-          lastSyncedAt:
-            cloudMatch.lastSyncedAt && (!loc.lastSyncedAt || cloudMatch.lastSyncedAt > loc.lastSyncedAt)
-              ? cloudMatch.lastSyncedAt
-              : loc.lastSyncedAt
-        };
-      });
-
-      for (const cloudItem of cloudItems) {
-        const cKey = normalizeServiceKey(cloudItem.category, cloudItem.name);
-        if (!matchedCloudKeys.has(cKey)) {
-          const existsByName = merged.some(
-            (m) => m.name.trim().toLowerCase() === cloudItem.name.trim().toLowerCase()
-          );
-          if (!existsByName) {
-            merged.push(cloudItem);
-          }
-        }
-      }
-    }
-
-    this.persistMonthArchive(year, monthKey, merged, true);
+    this.persistMonthArchive(year, monthKey, normalizedCloud, true);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent(REPORT_ARCHIVE_UPDATED_EVENT, { detail: { year, monthKey } })
       );
     }
-    return merged;
+    return normalizedCloud;
   },
 
   getYearMeta(year: number): YearArchiveMeta {
-    try {
-      const raw = localStorage.getItem(getYearMetaStorageKey(year));
-      if (raw) return JSON.parse(raw) as YearArchiveMeta;
-    } catch {
-      // ignore
+    const mem = memoryYearMeta.get(year);
+    if (mem) return mem;
+    if (!serverArchiveModeEnabled && typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(getYearMetaStorageKey(year));
+        if (raw) return JSON.parse(raw) as YearArchiveMeta;
+      } catch {
+        // ignore
+      }
     }
     return { year };
   },
 
   updateYearMeta(year: number, patch: Partial<YearArchiveMeta>): void {
     const next: YearArchiveMeta = { ...this.getYearMeta(year), ...patch, year };
-    try {
-      localStorage.setItem(getYearMetaStorageKey(year), JSON.stringify(next));
-    } catch {
-      // ignore
+    memoryYearMeta.set(year, next);
+    if (!serverArchiveModeEnabled && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(getYearMetaStorageKey(year), JSON.stringify(next));
+      } catch {
+        // ignore
+      }
     }
   },
 
@@ -1041,7 +1092,34 @@ export const reportArchiveService = {
       targetItem.lastSyncedAt = nowIso;
     }
 
-    this.persistMonthArchive(year, monthKey, nextItems);
+    const cellPatches: ReportCellPatchInput[] = [];
+    for (const disc of approvedDiscrepancies) {
+      if (disc.year !== year || disc.monthKey !== monthKey) continue;
+      const targetKey = normalizeServiceKey(disc.category, disc.serviceName);
+      const targetName = disc.serviceName.trim().toLowerCase();
+      const matched = nextItems.find(
+        (item) =>
+          normalizeServiceKey(item.category, item.name) === targetKey ||
+          item.name.trim().toLowerCase() === targetName
+      );
+      if (matched) {
+        cellPatches.push({
+          serviceId: matched.id,
+          category: matched.category,
+          name: matched.name,
+          day: disc.day,
+          bh: disc.sheetValue.bh,
+          nd: disc.sheetValue.nd,
+          isManual: false,
+          forceOverwrite: true
+        });
+      }
+    }
+
+    this.persistMonthArchive(year, monthKey, nextItems, Boolean(cloudReportCellsHandler && cellPatches.length > 0));
+    if (cloudReportCellsHandler && cellPatches.length > 0) {
+      cloudReportCellsHandler(year, monthKey, cellPatches, nextItems);
+    }
     this.updateYearMeta(year, { lastSyncedAt: nowIso });
     return nextItems;
   },
@@ -1058,10 +1136,24 @@ export const reportArchiveService = {
     updatedBy: string
   ): ArchivedCaseReportItem[] {
     const nowIso = new Date().toISOString();
+    const cellPatches: ReportCellPatchInput[] = [];
     const stamped = updatedItems.map((item) => {
       const nextManualDays = { ...(item.manualDays || {}) };
       for (const d of editedDays) {
         nextManualDays[d] = { updatedAt: nowIso, updatedBy };
+        const cellVal = item.dailyData?.[d] || { bh: 0, nd: 0 };
+        cellPatches.push({
+          serviceId: item.id,
+          category: item.category,
+          name: item.name,
+          day: d,
+          bh: cellVal.bh,
+          nd: cellVal.nd,
+          isManual: true,
+          manualBy: updatedBy,
+          manualAt: nowIso,
+          forceOverwrite: true
+        });
       }
       return {
         ...item,
@@ -1069,7 +1161,10 @@ export const reportArchiveService = {
       };
     });
 
-    this.persistMonthArchive(year, monthKey, stamped);
+    this.persistMonthArchive(year, monthKey, stamped, Boolean(cloudReportCellsHandler && cellPatches.length > 0));
+    if (cloudReportCellsHandler && cellPatches.length > 0) {
+      cloudReportCellsHandler(year, monthKey, cellPatches, stamped);
+    }
     this.updateYearMeta(year, { lastManualEditAt: nowIso });
     return stamped;
   },

@@ -229,6 +229,7 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
   const [yearInputStr, setYearInputStr] = useState<string>(() => String(initialYear));
   const [pgState, setPgState] = useState<PostgresSyncState>(() => postgresSyncService.getState());
   const isPgSynced = pgState.configured && pgState.authenticated && pgState.connected;
+  const [liveOpsRevision, setLiveOpsRevision] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'google_sheet' | 'sync_history'>('google_sheet');
   const [timePeriod, setTimePeriod] = useState<string>(`${initialLatest.month}/${initialYear}`);
   const [sheetTab, setSheetTab] = useState<string>('Báo cáo ngày');
@@ -257,6 +258,13 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
       setSheetUrl(currentUrl);
     }
   }, [activeTab, selectedYear]);
+
+  // Keep live task/shift/equipment charts in sync with storageService
+  useEffect(() => {
+    return storageService.subscribe(() => {
+      setLiveOpsRevision(prev => prev + 1);
+    });
+  }, []);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -2738,37 +2746,217 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     setEditValue('');
   };
 
-  // Charts Data derived from caseReports
-  const equipmentUsageData = [
+  // Charts Data derived from live storageService & caseReports
+  const equipmentUsageData = useMemo(() => [
     { name: 'Siêu âm', cases: caseReports.filter(i => i.category === 'Siêu Âm').reduce((acc, i) => acc + getRowTotal(i), 0), color: '#8b5cf6' },
     { name: 'Nội soi', cases: caseReports.filter(i => i.category === 'Nội Soi').reduce((acc, i) => acc + getRowTotal(i), 0), color: '#f59e0b' },
     { name: 'X-quang KTS', cases: caseReports.filter(i => i.category === 'X quang').reduce((acc, i) => acc + getRowTotal(i), 0), color: '#10b981' },
     { name: 'Điện tim & LHN', cases: caseReports.filter(i => i.category === 'Điện tim & LHN').reduce((acc, i) => acc + getRowTotal(i), 0), color: '#ec4899' },
     { name: 'Xét nghiệm', cases: caseReports.filter(i => i.category === 'Xét nghiệm').reduce((acc, i) => acc + getRowTotal(i), 0), color: '#06b6d4' },
-  ];
+  ], [caseReports]);
 
-  const taskCompletionData = [
-    { week: 'Tuần 27', completed: 28, pending: 4, rate: 87.5 },
-    { week: 'Tuần 28', completed: 32, pending: 3, rate: 91.4 },
-    { week: 'Tuần 29', completed: 35, pending: 2, rate: 94.5 },
-    { week: 'Tuần 30', completed: 40, pending: 1, rate: 97.5 },
-  ];
+  const {
+    taskCompletionData,
+    taskOverviewKpi,
+    shiftCountData,
+    shiftOverviewKpi,
+    casesOverviewDelta,
+    maintenanceCostData,
+    maintenanceOverviewKpi
+  } = useMemo(() => {
+    const tasks = storageService.getTasks().filter(t => t.status !== 'Hủy');
+    const shifts = storageService.getShifts();
+    const equipmentList = storageService.getEquipment();
 
-  const shiftCountData = [
-    { name: 'TS. BS. Thành', shifts: 12, nightShifts: 3 },
-    { name: 'ThS. BS. Nam', shifts: 14, nightShifts: 4 },
-    { name: 'CN. Hương', shifts: 16, nightShifts: 5 },
-    { name: 'KTV. Hải', shifts: 18, nightShifts: 6 },
-    { name: 'BS. Hà', shifts: 15, nightShifts: 4 },
-  ];
+    // 1. Live Task Completion by week
+    const weekBuckets = new Map<string, { sortKey: number; week: string; completed: number; pending: number }>();
+    let totalCompleted = 0;
+    let totalActiveTasks = 0;
 
-  const maintenanceCostData = [
-    { month: 'Tháng 3', cost: 12.5, repairs: 1 },
-    { month: 'Tháng 4', cost: 8.2, repairs: 2 },
-    { month: 'Tháng 5', cost: 18.5, repairs: 1 },
-    { month: 'Tháng 6', cost: 5.0, repairs: 0 },
-    { month: 'Tháng 7', cost: 14.0, repairs: 1 },
-  ];
+    for (const task of tasks) {
+      totalActiveTasks += 1;
+      const isDone = task.status === 'Đã hoàn thành';
+      if (isDone) totalCompleted += 1;
+
+      const dateStr = (task.dueDate || task.createdDate || '').slice(0, 10);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+      let bucketKey = 'current';
+      let bucketLabel = 'Hiện tại';
+      let sortKey = 999999;
+
+      if (match) {
+        const yr = parseInt(match[1], 10);
+        const mo = parseInt(match[2], 10);
+        const dy = parseInt(match[3], 10);
+        const wk = getWeekNumberForDate(yr, mo, dy);
+        bucketKey = `${yr}-W${String(wk).padStart(2, '0')}`;
+        bucketLabel = `Tuần ${wk}/${String(yr).slice(-2)}`;
+        sortKey = yr * 100 + wk;
+      }
+
+      const entry = weekBuckets.get(bucketKey) || { sortKey, week: bucketLabel, completed: 0, pending: 0 };
+      if (isDone) entry.completed += 1;
+      else entry.pending += 1;
+      weekBuckets.set(bucketKey, entry);
+    }
+
+    const computedTaskCompletionData = Array.from(weekBuckets.values())
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .slice(-6)
+      .map(b => {
+        const total = b.completed + b.pending;
+        const rate = total > 0 ? Math.round((b.completed / total) * 1000) / 10 : 0;
+        return {
+          week: b.week,
+          completed: b.completed,
+          pending: b.pending,
+          rate
+        };
+      });
+
+    const overallTaskRate = totalActiveTasks > 0 ? Math.round((totalCompleted / totalActiveTasks) * 1000) / 10 : 0;
+    let taskDeltaText: string | null = null;
+    let taskDeltaPositive = true;
+    if (computedTaskCompletionData.length >= 2) {
+      const latest = computedTaskCompletionData[computedTaskCompletionData.length - 1];
+      const prev = computedTaskCompletionData[computedTaskCompletionData.length - 2];
+      const diff = Math.round((latest.rate - prev.rate) * 10) / 10;
+      taskDeltaPositive = diff >= 0;
+      taskDeltaText = `${diff >= 0 ? '+' : ''}${diff}% vs ${prev.week}`;
+    }
+
+    // 2. Live Staff Shift Distribution (filtered to selectedReportMonth/selectedYear or fallback to all active shifts)
+    const selectedMonthNum = getMonthNumber(selectedReportMonth);
+    const selectedMonthPrefix = `${selectedYear}-${String(selectedMonthNum).padStart(2, '0')}`;
+    const activeShiftsAll = shifts.filter(s => s.workType !== 'Nghỉ');
+    const monthShifts = activeShiftsAll.filter(s => (s.date || '').startsWith(selectedMonthPrefix));
+    const targetShifts = monthShifts.length > 0 ? monthShifts : activeShiftsAll;
+    const isUsingMonthScope = monthShifts.length > 0;
+
+    const shiftByStaff = new Map<string, { name: string; shifts: number; nightShifts: number }>();
+    let totalNightShifts = 0;
+
+    for (const s of targetShifts) {
+      const staffName = (s.assignedUserName || s.userName || 'Chưa phân công').trim();
+      const typeLabel = `${s.shiftType || ''} ${s.shiftName || ''} ${s.title || ''}`;
+      const startHour = s.startTime ? parseInt(s.startTime.slice(0, 2), 10) : NaN;
+      const isNight = /trực đêm|ca đêm|đêm/i.test(typeLabel) || (!Number.isNaN(startHour) && startHour >= 18);
+      if (isNight) totalNightShifts += 1;
+
+      const cur = shiftByStaff.get(staffName) || { name: staffName, shifts: 0, nightShifts: 0 };
+      cur.shifts += 1;
+      if (isNight) cur.nightShifts += 1;
+      shiftByStaff.set(staffName, cur);
+    }
+
+    const computedShiftCountData = Array.from(shiftByStaff.values())
+      .sort((a, b) => b.shifts - a.shifts)
+      .slice(0, 10);
+
+    // 3. Cases Delta vs Previous Month (only when previous month exists and has > 0 cases)
+    const currentCasesTotal = caseReports.reduce((acc, item) => acc + getRowTotal(item), 0);
+    let casesDeltaBadge: { text: string; positive: boolean } | null = null;
+    if (selectedMonthNum > 1) {
+      const prevMonthKey = `Tháng ${selectedMonthNum - 1}`;
+      const prevItems = monthlyDataStore[prevMonthKey];
+      if (prevItems && prevItems.length > 0) {
+        const prevTotal = prevItems.reduce((acc, item) => acc + getRowTotal(item), 0);
+        if (prevTotal > 0) {
+          const pct = Math.round(((currentCasesTotal - prevTotal) / prevTotal) * 1000) / 10;
+          casesDeltaBadge = {
+            text: `${pct >= 0 ? '+' : ''}${pct}% vs T${selectedMonthNum - 1}`,
+            positive: pct >= 0
+          };
+        }
+      }
+    }
+
+    // 4. Live Maintenance & Repair Cost History (from Equipment logs)
+    const costByMonth = new Map<string, { sortKey: string; month: string; cost: number; repairs: number; events: number }>();
+    const toMillionVnd = (rawCost?: number) => {
+      if (!rawCost || Number.isNaN(rawCost) || rawCost <= 0) return 0;
+      return rawCost >= 1000 ? rawCost / 1_000_000 : rawCost;
+    };
+    const extractYearMonth = (rawDate?: string): string | null => {
+      if (!rawDate) return null;
+      const isoMatch = /^(\d{4})-(\d{2})/.exec(rawDate.trim());
+      if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}`;
+      const vnMatch = /(\d{2})\/(\d{2})\/(\d{4})/.exec(rawDate.trim());
+      if (vnMatch) return `${vnMatch[3]}-${vnMatch[2]}`;
+      return null;
+    };
+
+    for (const eq of equipmentList) {
+      for (const m of eq.maintenanceHistory || []) {
+        const ym = extractYearMonth(m.date);
+        if (!ym) continue;
+        const [y, mo] = ym.split('-');
+        const label = `T${parseInt(mo, 10)}/${y.slice(-2)}`;
+        const entry = costByMonth.get(ym) || { sortKey: ym, month: label, cost: 0, repairs: 0, events: 0 };
+        entry.cost += toMillionVnd(m.cost);
+        entry.events += 1;
+        if (m.type === 'Sửa chữa') entry.repairs += 1;
+        costByMonth.set(ym, entry);
+      }
+      for (const r of eq.repairHistory || []) {
+        const ym = extractYearMonth(r.resolvedAt || r.reportedAt);
+        if (!ym) continue;
+        const [y, mo] = ym.split('-');
+        const label = `T${parseInt(mo, 10)}/${y.slice(-2)}`;
+        const entry = costByMonth.get(ym) || { sortKey: ym, month: label, cost: 0, repairs: 0, events: 0 };
+        entry.cost += toMillionVnd(r.cost);
+        entry.repairs += 1;
+        entry.events += 1;
+        costByMonth.set(ym, entry);
+      }
+    }
+
+    const computedMaintenanceData = Array.from(costByMonth.values())
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+      .slice(-6)
+      .map(m => ({
+        month: m.month,
+        cost: Math.round(m.cost * 100) / 100,
+        repairs: m.repairs
+      }));
+
+    const selectedCostBucket = costByMonth.get(selectedMonthPrefix);
+    const totalCostMillion = selectedCostBucket
+      ? selectedCostBucket.cost
+      : Array.from(costByMonth.values()).reduce((sum, b) => sum + b.cost, 0);
+    const totalRepairCount = selectedCostBucket
+      ? selectedCostBucket.repairs
+      : Array.from(costByMonth.values()).reduce((sum, b) => sum + b.repairs, 0);
+    const totalMaintEvents = selectedCostBucket
+      ? selectedCostBucket.events
+      : Array.from(costByMonth.values()).reduce((sum, b) => sum + b.events, 0);
+
+    return {
+      taskCompletionData: computedTaskCompletionData,
+      taskOverviewKpi: {
+        rate: overallTaskRate,
+        completed: totalCompleted,
+        total: totalActiveTasks,
+        deltaText: taskDeltaText,
+        deltaPositive: taskDeltaPositive
+      },
+      shiftCountData: computedShiftCountData,
+      shiftOverviewKpi: {
+        totalShifts: targetShifts.length,
+        totalNightShifts,
+        staffCount: shiftByStaff.size,
+        scopeLabel: isUsingMonthScope ? `${selectedReportMonth}/${selectedYear}` : 'Toàn bộ lịch trực'
+      },
+      casesOverviewDelta: casesDeltaBadge,
+      maintenanceCostData: computedMaintenanceData,
+      maintenanceOverviewKpi: {
+        costMillion: Math.round(totalCostMillion * 100) / 100,
+        repairs: totalRepairCount,
+        events: totalMaintEvents,
+        isMonthScoped: Boolean(selectedCostBucket)
+      }
+    };
+  }, [liveOpsRevision, caseReports, monthlyDataStore, selectedReportMonth, selectedYear]);
 
   const handleExportExcel = async () => {
     try {
@@ -4688,40 +4876,65 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
               <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Tỷ Lệ Hoàn Thành Task</p>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-2xl font-bold text-[#263445] dark:text-slate-100">97.5%</h3>
-                <span className="text-xs font-bold text-emerald-600 flex items-center">
-                  +3.0% <TrendingUp className="w-3.5 h-3.5 ml-0.5" />
-                </span>
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-2xl font-bold text-[#263445] dark:text-slate-100">{taskOverviewKpi.rate}%</h3>
+                {taskOverviewKpi.deltaText && (
+                  <span className={`text-xs font-bold flex items-center ${taskOverviewKpi.deltaPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {taskOverviewKpi.deltaText}
+                    {taskOverviewKpi.deltaPositive ? <TrendingUp className="w-3.5 h-3.5 ml-0.5" /> : <ArrowDownRight className="w-3.5 h-3.5 ml-0.5" />}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-[#718096] dark:text-slate-400">40/41 công việc hoàn thành đúng hạn</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">
+                {taskOverviewKpi.total > 0
+                  ? `${taskOverviewKpi.completed}/${taskOverviewKpi.total} công việc hoàn thành`
+                  : 'Chưa có công việc nào được ghi nhận'}
+              </p>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
-              <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Tổng Ca Trực Đêm Tháng</p>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-2xl font-bold text-[#1976D2] dark:text-blue-400">22 Ca</h3>
-                <span className="text-xs text-[#718096] dark:text-slate-400">100% Phủ kín</span>
+              <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Tổng Ca Trực Đêm</p>
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-2xl font-bold text-[#1976D2] dark:text-blue-400">{shiftOverviewKpi.totalNightShifts} Ca</h3>
+                <span className="text-xs text-[#718096] dark:text-slate-400">{shiftOverviewKpi.totalShifts} tổng ca</span>
               </div>
-              <p className="text-xs text-[#718096] dark:text-slate-400">Phân bổ đều cho 5 nhân sự</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">
+                {shiftOverviewKpi.staffCount > 0
+                  ? `Phân bổ cho ${shiftOverviewKpi.staffCount} nhân sự (${shiftOverviewKpi.scopeLabel})`
+                  : 'Chưa có dữ liệu lịch trực'}
+              </p>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
               <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Tổng Lượt Chụp / Xét Nghiệm</p>
-              <div className="flex items-baseline justify-between">
+              <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{calculateGrandTotal().toLocaleString()} Ca</h3>
-                <span className="text-xs font-bold text-emerald-600 flex items-center">+12% vs T2</span>
+                {casesOverviewDelta && (
+                  <span className={`text-xs font-bold flex items-center ${casesOverviewDelta.positive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {casesOverviewDelta.text}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-[#718096] dark:text-slate-400">Đồng bộ từ Google Sheets Báo cáo giao ban</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">
+                Số liệu {selectedReportMonth}/{selectedYear} trên hệ thống
+              </p>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-[#DFE7F0] dark:border-slate-700 shadow-xs space-y-1.5">
               <p className="text-xs font-semibold text-[#718096] dark:text-slate-400 uppercase tracking-wider">Chi Phí Bảo Trì & Sửa Chữa</p>
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-2xl font-bold text-[#263445] dark:text-slate-100">14.0 Triệu</h3>
-                <span className="text-xs text-[#718096] dark:text-slate-400">Trong ngân sách</span>
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-2xl font-bold text-[#263445] dark:text-slate-100">
+                  {maintenanceOverviewKpi.costMillion.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} Triệu
+                </h3>
+                <span className="text-xs text-[#718096] dark:text-slate-400">
+                  {maintenanceOverviewKpi.isMonthScoped ? selectedReportMonth : 'Lũy kế'}
+                </span>
               </div>
-              <p className="text-xs text-[#718096] dark:text-slate-400">1 lần sửa chữa cảm biến CT</p>
+              <p className="text-xs text-[#718096] dark:text-slate-400">
+                {maintenanceOverviewKpi.events > 0
+                  ? `${maintenanceOverviewKpi.events} lượt bảo trì/sự cố (${maintenanceOverviewKpi.repairs} sửa chữa)`
+                  : 'Chưa phát sinh chi phí bảo trì'}
+              </p>
             </div>
           </div>
 
@@ -4733,18 +4946,24 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <h3 className="font-bold text-[#263445] dark:text-slate-100 text-sm flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-[#1976D2]" /> Tiến Độ Hoàn Thành Công Việc Theo Tuần
                 </h3>
-                <span className="text-xs font-semibold text-[#718096]">% Đúng hạn</span>
+                <span className="text-xs font-semibold text-[#718096]">% Hoàn thành</span>
               </div>
               <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={taskCompletionData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="week" stroke="#64748b" fontSize={11} />
-                    <YAxis stroke="#64748b" fontSize={11} domain={[70, 100]} />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="rate" stroke="#1976D2" fill="#EAF4FF" strokeWidth={2} name="Tỷ lệ hoàn thành (%)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {taskCompletionData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={taskCompletionData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="week" stroke="#64748b" fontSize={11} />
+                      <YAxis stroke="#64748b" fontSize={11} domain={[0, 100]} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="rate" stroke="#1976D2" fill="#EAF4FF" strokeWidth={2} name="Tỷ lệ hoàn thành (%)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                    Chưa có dữ liệu công việc để thống kê
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4754,20 +4973,26 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <h3 className="font-bold text-[#263445] dark:text-slate-100 text-sm flex items-center gap-2">
                   <Users className="w-4 h-4 text-[#1976D2]" /> Thống Kê Ca Trực Theo Nhân Viên
                 </h3>
-                <span className="text-xs font-semibold text-[#718096]">Số ca / Tháng</span>
+                <span className="text-xs font-semibold text-[#718096]">{shiftOverviewKpi.scopeLabel}</span>
               </div>
               <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={shiftCountData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                    <YAxis stroke="#64748b" fontSize={11} />
-                    <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <Bar dataKey="shifts" fill="#1976D2" radius={[4, 4, 0, 0]} name="Tổng ca trực" />
-                    <Bar dataKey="nightShifts" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Ca trực đêm" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {shiftCountData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={shiftCountData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+                      <YAxis stroke="#64748b" fontSize={11} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Bar dataKey="shifts" fill="#1976D2" radius={[4, 4, 0, 0]} name="Tổng ca trực" />
+                      <Bar dataKey="nightShifts" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Ca trực đêm" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                    Chưa có lịch trực được phân công
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4801,15 +5026,21 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
                 <span className="text-xs font-semibold text-[#718096]">Theo tháng</span>
               </div>
               <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={maintenanceCostData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="month" stroke="#64748b" fontSize={11} />
-                    <YAxis stroke="#64748b" fontSize={11} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="cost" stroke="#f59e0b" strokeWidth={3} dot={{ r: 5 }} name="Chi phí (Triệu VNĐ)" />
-                  </LineChart>
-                </ResponsiveContainer>
+                {maintenanceCostData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={maintenanceCostData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="month" stroke="#64748b" fontSize={11} />
+                      <YAxis stroke="#64748b" fontSize={11} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="cost" stroke="#f59e0b" strokeWidth={3} dot={{ r: 5 }} name="Chi phí (Triệu VNĐ)" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                    Chưa có nhật ký chi phí bảo trì hoặc sửa chữa
+                  </div>
+                )}
               </div>
             </div>
           </div>

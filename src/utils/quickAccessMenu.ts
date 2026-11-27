@@ -21,12 +21,50 @@ export const sanitizePinnedMenuIds = (
   return result;
 };
 
+let serverModeEnabled = false;
+const serverPinsCache = new Map<string, string[]>();
+let cloudSaveQuickAccessPinsHandler: ((ids: string[]) => void) | null = null;
+const QUICK_ACCESS_UPDATED_EVENT = 'cls-workhub-quick-access-updated';
+
+export const registerCloudQuickAccessPinsHandler = (
+  handler: ((ids: string[]) => void) | null
+): void => {
+  cloudSaveQuickAccessPinsHandler = handler;
+};
+
+export const setServerQuickAccessMode = (enabled: boolean): void => {
+  serverModeEnabled = enabled;
+};
+
+export const hydrateServerQuickAccessPins = (
+  userId: string | undefined | null,
+  ids: unknown
+): void => {
+  if (!Array.isArray(ids)) return;
+  const key = getQuickAccessStorageKey(userId);
+  const clean = ids.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  serverPinsCache.set(key, clean);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(QUICK_ACCESS_UPDATED_EVENT));
+  }
+};
+
+export const QUICK_ACCESS_PINS_CHANGED_EVENT = QUICK_ACCESS_UPDATED_EVENT;
+
 export const loadPinnedMenuIds = (
   userId: string | undefined | null,
   allowedIds: ReadonlySet<string>
 ): string[] => {
+  const key = getQuickAccessStorageKey(userId);
+  if (serverModeEnabled) {
+    const cached = serverPinsCache.get(key);
+    if (!cached) {
+      return DEFAULT_PINNED_MENU_IDS.filter((id) => allowedIds.has(id));
+    }
+    return sanitizePinnedMenuIds(cached, allowedIds);
+  }
   try {
-    const raw = localStorage.getItem(getQuickAccessStorageKey(userId));
+    const raw = localStorage.getItem(key);
     if (raw === null) {
       return DEFAULT_PINNED_MENU_IDS.filter((id) => allowedIds.has(id));
     }
@@ -40,8 +78,16 @@ export const savePinnedMenuIds = (
   userId: string | undefined | null,
   ids: string[]
 ): void => {
+  const key = getQuickAccessStorageKey(userId);
+  if (serverModeEnabled) {
+    serverPinsCache.set(key, [...ids]);
+    if (cloudSaveQuickAccessPinsHandler) {
+      cloudSaveQuickAccessPinsHandler(ids);
+    }
+    return;
+  }
   try {
-    localStorage.setItem(getQuickAccessStorageKey(userId), JSON.stringify(ids));
+    localStorage.setItem(key, JSON.stringify(ids));
   } catch {
     // ignore storage quota errors
   }

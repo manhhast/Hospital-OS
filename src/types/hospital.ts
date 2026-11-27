@@ -122,6 +122,8 @@ export interface DocumentItem {
   lastSyncedAt?: string;
   checksum?: string;
   driveFolderId?: string;
+  serverFileId?: string;
+  serverFileUrl?: string;
   rawFileData?: string;
   isUserUploaded?: boolean;
 }

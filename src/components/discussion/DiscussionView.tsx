@@ -14,6 +14,59 @@ import {
   TaskItem, DocumentItem, ShiftDuty, MessageType, ShareCardData, AnnouncementCategory 
 } from '../../types/hospital';
 import { storageService } from '../../services/storageService';
+import { postgresSyncService } from '../../services/postgresSyncService';
+
+const ResolvedServerImage: React.FC<{
+  src: string;
+  alt?: string;
+  className?: string;
+  onClick?: () => void;
+}> = ({ src, alt, className, onClick }) => {
+  const [resolvedUrl, setResolvedUrl] = useState<string>(() =>
+    src.startsWith('/api/files/') ? '' : src
+  );
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setFailed(false);
+    if (!src) {
+      setResolvedUrl('');
+      return;
+    }
+    if (!src.startsWith('/api/files/')) {
+      setResolvedUrl(src);
+      return;
+    }
+    postgresSyncService
+      .fetchFileAsBlobUrl(src)
+      .then((blobUrl) => {
+        if (active) setResolvedUrl(blobUrl);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [src]);
+
+  if (failed) {
+    return (
+      <div className="p-4 text-[11px] text-rose-500 bg-rose-50 dark:bg-rose-950/30 rounded-lg text-center">
+        Không thể tải ảnh đính kèm
+      </div>
+    );
+  }
+  if (!resolvedUrl) {
+    return (
+      <div className="h-36 w-full flex items-center justify-center bg-slate-100 dark:bg-slate-800/70 text-[11px] text-slate-400">
+        Đang tải ảnh...
+      </div>
+    );
+  }
+  return <img src={resolvedUrl} alt={alt || ''} onClick={onClick} className={className} />;
+};
 
 export const DiscussionView: React.FC = () => {
   // Navigation & View Mode
@@ -44,8 +97,10 @@ export const DiscussionView: React.FC = () => {
   const [showMentionMenu, setShowMentionMenu] = useState<boolean>(false);
   const [mentionQuery, setMentionQuery] = useState<string>('');
   
-  // File Upload State Simulation
+  // File Upload State (backed by PostgreSQL /api/files/upload when active)
   const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; size: string; type: MessageType } | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
+  const [fileUploadError, setFileUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modals & Panels
@@ -178,10 +233,18 @@ export const DiscussionView: React.FC = () => {
     setShowStickerPicker(false);
   };
 
-  // File Upload Handler Simulation
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // File Upload Handler (PostgreSQL /api/files/upload when active)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
+
+    setFileUploadError(null);
+    const maxBytes = 15 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setFileUploadError(`Tệp "${file.name}" vượt quá giới hạn tối đa 15MB.`);
+      return;
+    }
 
     const fileExt = file.name.split('.').pop()?.toLowerCase();
     let type: MessageType = 'doc';
@@ -192,10 +255,35 @@ export const DiscussionView: React.FC = () => {
     else if (['mp4', 'mov', 'avi'].includes(fileExt || '')) type = 'video';
     else if (['mp3', 'wav'].includes(fileExt || '')) type = 'audio';
 
+    const sizeLabel =
+      file.size >= 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+        : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+
+    if (postgresSyncService.isActiveBackend() && postgresSyncService.isAuthenticatedSession()) {
+      setIsUploadingFile(true);
+      try {
+        const uploaded = await postgresSyncService.uploadFile(file, 'chat');
+        setAttachedFile({
+          url: uploaded.url,
+          name: uploaded.filename || file.name,
+          size: sizeLabel,
+          type
+        });
+      } catch (err) {
+        setFileUploadError(
+          err instanceof Error ? err.message : 'Không thể tải tệp đính kèm lên máy chủ.'
+        );
+      } finally {
+        setIsUploadingFile(false);
+      }
+      return;
+    }
+
     setAttachedFile({
       url: URL.createObjectURL(file),
       name: file.name,
-      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      size: sizeLabel,
       type
     });
   };
@@ -720,40 +808,67 @@ export const DiscussionView: React.FC = () => {
                           {/* Image Attachment */}
                           {msg.msgType === 'image' && msg.fileUrl && (
                             <div className="mt-2 rounded-xl overflow-hidden border border-slate-200/50 dark:border-slate-700">
-                              <img 
-                                src={msg.fileUrl} 
-                                alt={msg.fileName} 
+                              <ResolvedServerImage
+                                src={msg.fileUrl}
+                                alt={msg.fileName}
                                 onClick={() => setPreviewImageModal(msg.fileUrl || null)}
-                                className="max-h-60 w-full object-cover cursor-pointer hover:scale-102 transition-transform" 
+                                className="max-h-60 w-full object-cover cursor-pointer hover:scale-102 transition-transform"
                               />
-                              <p className="p-1.5 text-[10px] opacity-80 flex items-center justify-between">
-                                <span>📷 {msg.fileName} ({msg.fileSize})</span>
-                                <span className="underline cursor-pointer">Xem phóng to</span>
+                              <p className="p-1.5 text-[10px] opacity-80 flex items-center justify-between gap-2">
+                                <span className="truncate">📷 {msg.fileName} ({msg.fileSize})</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewImageModal(msg.fileUrl || null)}
+                                  className="underline cursor-pointer shrink-0"
+                                >
+                                  Xem phóng to
+                                </button>
                               </p>
                             </div>
                           )}
 
                           {/* PDF & Document Cards */}
-                          {(msg.msgType === 'pdf' || msg.msgType === 'doc' || msg.msgType === 'excel' || msg.msgType === 'zip') && (
+                          {(msg.msgType === 'pdf' || msg.msgType === 'doc' || msg.msgType === 'excel' || msg.msgType === 'zip' || msg.msgType === 'video' || msg.msgType === 'audio') && (
                             <div className="mt-2 p-2.5 rounded-xl bg-white/10 dark:bg-slate-900/40 border border-white/20 dark:border-slate-700 flex items-center justify-between space-x-3">
                               <div className="flex items-center space-x-2 min-w-0">
                                 {msg.msgType === 'pdf' && <FileText className="w-6 h-6 text-red-400 shrink-0" />}
                                 {msg.msgType === 'excel' && <FileSpreadsheet className="w-6 h-6 text-emerald-400 shrink-0" />}
                                 {msg.msgType === 'doc' && <FileText className="w-6 h-6 text-blue-400 shrink-0" />}
                                 {msg.msgType === 'zip' && <FileArchive className="w-6 h-6 text-amber-400 shrink-0" />}
+                                {msg.msgType === 'video' && <Film className="w-6 h-6 text-indigo-400 shrink-0" />}
+                                {msg.msgType === 'audio' && <Music className="w-6 h-6 text-amber-300 shrink-0" />}
                                 <div className="truncate">
                                   <p className="font-bold text-xs truncate">{msg.fileName || 'Tài liệu đính kèm'}</p>
                                   <p className="text-[10px] opacity-75">{msg.fileSize || 'FILE'}</p>
                                 </div>
                               </div>
-                              <a 
-                                href={msg.fileUrl || '#'} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="px-2 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded text-[10px] font-bold shrink-0 hover:bg-slate-200"
-                              >
-                                Tải xuống
-                              </a>
+                              {msg.fileUrl && msg.fileUrl.startsWith('/api/files/') ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void postgresSyncService
+                                      .downloadServerFile(msg.fileUrl!, msg.fileName || 'tep-dinh-kem')
+                                      .catch((err) => {
+                                        setFileUploadError(
+                                          err instanceof Error ? err.message : 'Không thể tải tệp về.'
+                                        );
+                                      });
+                                  }}
+                                  className="px-2.5 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded text-[10px] font-bold shrink-0 hover:bg-slate-200 cursor-pointer"
+                                >
+                                  Tải xuống
+                                </button>
+                              ) : (
+                                <a
+                                  href={msg.fileUrl || '#'}
+                                  download={msg.fileName || 'attachment'}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2.5 py-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded text-[10px] font-bold shrink-0 hover:bg-slate-200"
+                                >
+                                  Tải xuống
+                                </a>
+                              )}
                             </div>
                           )}
 
@@ -872,7 +987,24 @@ export const DiscussionView: React.FC = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Attached File Preview Bar before Send */}
+            {/* Upload Progress / Error / Attached File Preview Bar before Send */}
+            {fileUploadError && (
+              <div className="px-4 py-2 bg-rose-50 dark:bg-rose-950/40 border-t border-rose-200 dark:border-rose-900 flex items-center justify-between text-xs text-rose-700 dark:text-rose-300 shrink-0">
+                <div className="flex items-center space-x-2 truncate">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span className="font-semibold truncate">{fileUploadError}</span>
+                </div>
+                <button type="button" onClick={() => setFileUploadError(null)} className="p-1 hover:bg-rose-100 rounded">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            {isUploadingFile && (
+              <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/40 border-t border-blue-100 dark:border-blue-900 flex items-center space-x-2 text-xs text-blue-700 dark:text-blue-300 shrink-0">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <span className="font-semibold">Đang tải tệp lên máy chủ PostgreSQL...</span>
+              </div>
+            )}
             {attachedFile && (
               <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-950/40 border-t border-indigo-100 dark:border-indigo-900 flex items-center justify-between text-xs text-[#464eb8] dark:text-indigo-300 shrink-0">
                 <div className="flex items-center space-x-2 truncate">
@@ -880,7 +1012,7 @@ export const DiscussionView: React.FC = () => {
                   <span className="font-bold truncate">{attachedFile.name}</span>
                   <span className="text-[10px] opacity-75">({attachedFile.size})</span>
                 </div>
-                <button onClick={() => setAttachedFile(null)} className="p-1 hover:bg-indigo-100 rounded">
+                <button type="button" onClick={() => setAttachedFile(null)} className="p-1 hover:bg-indigo-100 rounded">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1032,7 +1164,7 @@ export const DiscussionView: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={!inputText.trim() && !attachedFile}
+                  disabled={isUploadingFile || (!inputText.trim() && !attachedFile)}
                   className="px-4 py-2 bg-[#1976D2] hover:bg-[#155A9C] disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all flex items-center space-x-1 shrink-0"
                 >
                   <Send className="w-4 h-4" />
@@ -1433,8 +1565,8 @@ export const DiscussionView: React.FC = () => {
       {/* IMAGE PREVIEW LIGHTBOX MODAL */}
       {previewImageModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-6" onClick={() => setPreviewImageModal(null)}>
-          <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl">
-            <img src={previewImageModal} alt="" className="max-w-full max-h-[85vh] object-contain" />
+          <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <ResolvedServerImage src={previewImageModal} alt="Preview" className="max-w-full max-h-[85vh] object-contain" />
             <button onClick={() => setPreviewImageModal(null)} className="absolute top-3 right-3 p-2 bg-black/60 text-white rounded-full"><X className="w-5 h-5" /></button>
           </div>
         </div>

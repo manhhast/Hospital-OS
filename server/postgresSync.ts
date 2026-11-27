@@ -25,6 +25,19 @@ import {
   filterActiveLoginUsers,
   isUserAccountBlockedOrResigned,
 } from "../src/utils/staffStatus";
+import {
+  ensureNormalizedTablesAndMigrate,
+  extractEntityRecordId,
+  loadEntityVersionMap,
+  loadFileBlobFromDb,
+  rebuildAppBucketProjectionInTx,
+  saveFileBlobToDb,
+  syncNormalizedReportMonthInTx,
+  syncNormalizedRowsFromBucketInTx,
+  upsertReportCellsAndRebuildArchiveInTx,
+  type CellUpdateInput,
+  type StoredFileMeta,
+} from "./normalizedStore";
 
 export const ALLOWED_CLOUD_BUCKETS = new Set<string>([
   "tasks",
@@ -97,15 +110,24 @@ let schemaReadyPromise: Promise<void> | null = null;
 let cachedSessionSecret: string | null = null;
 
 interface PostgresLiveChangeEvent {
-  type: "bucket" | "report_archive" | "bulk" | "telegram_takeover";
+  type:
+    | "bucket"
+    | "report_archive"
+    | "bulk"
+    | "telegram_takeover"
+    | "entities"
+    | "preferences"
+    | "reminders";
   key: string;
   updatedAtMs: number;
   actorId: string;
   emitterId?: string;
+  entityTypes?: string[];
   meta?: Record<string, string>;
 }
 
 const SERVER_EMITTER_ID = crypto.randomUUID().slice(0, 8);
+const memoryFileBlobFallback = new Map<string, { meta: StoredFileMeta; content: Buffer }>();
 const syncStreamClients = new Set<(evt: PostgresLiveChangeEvent) => void>();
 const telegramTakeoverSubscribers = new Set<
   (evt: { tokenHash: string; winnerInstanceId: string; winnerHost?: string }) => void
@@ -266,6 +288,7 @@ async function ensureSchema(pool: Pool): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
+      await ensureNormalizedTablesAndMigrate(pool);
     })().catch((err) => {
       schemaReadyPromise = null;
       throw err;
@@ -1543,6 +1566,32 @@ async function enforceServerBucketRbac(
   return { allowed: true };
 }
 
+function verifyMutationOriginOrHeader(req: Request): boolean {
+  const method = req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return true;
+  }
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ") && authHeader.slice(7).trim().length > 10) {
+    return true;
+  }
+  if (req.headers["x-requested-with"]) {
+    return true;
+  }
+  const origin = String(req.headers.origin || "").trim();
+  if (!origin) return true;
+  const host = String(req.headers["x-forwarded-host"] || req.get("host") || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  if (!host) return false;
+  try {
+    return new URL(origin).host.toLowerCase() === host;
+  } catch {
+    return false;
+  }
+}
+
 async function resolveSession(req: Request): Promise<{
   pool: Pool | null;
   session: PgSessionPayload | null;
@@ -1555,6 +1604,34 @@ async function resolveSession(req: Request): Promise<{
 
   const secret = await getSessionSecret(pool);
   const session = verifySessionToken(token, secret);
+  if (!session) return { pool, session: null };
+
+  try {
+    const [{ users, existsInDb }, staffProfiles] = await Promise.all([
+      getStoredUsers(pool),
+      getStoredStaffProfiles(pool),
+    ]);
+    if (existsInDb) {
+      const matched = users.find((u) => u.id === session.userId);
+      if (
+        matched &&
+        isUserAccountBlockedOrResigned(
+          {
+            id: matched.id,
+            name: matched.name,
+            role: matched.role as User["role"],
+            status: typeof matched.status === "string" ? matched.status : undefined,
+          },
+          staffProfiles
+        )
+      ) {
+        return { pool, session: null };
+      }
+    }
+  } catch {
+    // Allow token verification fallback if table lookup transiently fails
+  }
+
   return { pool, session };
 }
 
@@ -1565,6 +1642,12 @@ async function requirePgAuth(req: AuthedRequest, res: Response, next: NextFuncti
       return res.status(503).json({
         success: false,
         error: "EXTERNAL_DATABASE_URL chưa được cấu hình trên server.",
+      });
+    }
+    if (!verifyMutationOriginOrHeader(req)) {
+      return res.status(403).json({
+        success: false,
+        error: "Yêu cầu không hợp lệ (Origin CSRF check).",
       });
     }
     const token = extractTokenFromRequest(req);
@@ -1801,6 +1884,15 @@ export async function saveTelegramConfigToDb(params: {
          updated_at_ms = EXCLUDED.updated_at_ms,
          updated_at = NOW()`,
       [JSON.stringify([nextSettings]), params.actorId, params.actorName, nowMs]
+    );
+    await syncNormalizedRowsFromBucketInTx(
+      client,
+      "settings",
+      [nextSettings],
+      params.actorId,
+      params.actorName,
+      nowMs,
+      true
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -2050,6 +2142,15 @@ export function registerPostgresSyncRoutes(app: Express): void {
               `UPDATE app_buckets SET items = $1::jsonb WHERE bucket_key = 'users'`,
               [JSON.stringify(nextUsers)]
             );
+            await syncNormalizedRowsFromBucketInTx(
+              client,
+              "users",
+              nextUsers as Record<string, unknown>[],
+              matched!.id,
+              matched!.name || "User",
+              Date.now(),
+              false
+            );
           }
           await client.query("COMMIT");
         } catch {
@@ -2162,6 +2263,15 @@ export function registerPostgresSyncRoutes(app: Express): void {
          WHERE bucket_key = 'users'`,
         [JSON.stringify(nextUsers), nextUsers.length, session.userId, session.name, nowMs]
       );
+      await syncNormalizedRowsFromBucketInTx(
+        client,
+        "users",
+        nextUsers as Record<string, unknown>[],
+        session.userId,
+        session.name,
+        nowMs,
+        false
+      );
       await client.query("COMMIT");
 
       broadcastPostgresChange(pool, {
@@ -2258,6 +2368,15 @@ export function registerPostgresSyncRoutes(app: Express): void {
          WHERE bucket_key = 'users'`,
         [JSON.stringify(nextUsers), nextUsers.length, session.userId, session.name, nowMs]
       );
+      await syncNormalizedRowsFromBucketInTx(
+        client,
+        "users",
+        nextUsers as Record<string, unknown>[],
+        session.userId,
+        session.name,
+        nowMs,
+        false
+      );
       await client.query("COMMIT");
 
       broadcastPostgresChange(pool, {
@@ -2333,6 +2452,15 @@ export function registerPostgresSyncRoutes(app: Express): void {
           `UPDATE app_buckets SET items = $1::jsonb, updated_at_ms = $2, updated_at = NOW() WHERE bucket_key = 'users'`,
           [JSON.stringify(nextUsers), nowMs]
         );
+        await syncNormalizedRowsFromBucketInTx(
+          client,
+          "users",
+          nextUsers as Record<string, unknown>[],
+          "RESET_REQ",
+          "Password Reset Request",
+          nowMs,
+          false
+        );
         await client.query("COMMIT");
         broadcastPostgresChange(pool, {
           type: "bucket",
@@ -2358,19 +2486,46 @@ export function registerPostgresSyncRoutes(app: Express): void {
     }
   });
 
+  // 3E. Session Validation & Memory Token Refresh on F5/New Tab (uses HttpOnly cookie)
+  app.get("/api/auth/session", async (req, res) => {
+    const pool = getPool();
+    if (!pool) {
+      return res.json({ configured: false, authenticated: false, sessionUser: null });
+    }
+    const { session } = await resolveSession(req);
+    if (!session) {
+      return res.json({ configured: true, authenticated: false, sessionUser: null });
+    }
+    const secret = await getSessionSecret(pool);
+    const refreshedPayload: PgSessionPayload = {
+      userId: session.userId,
+      role: session.role,
+      name: session.name,
+      exp: Date.now() + SESSION_TTL_MS,
+    };
+    const token = signSessionToken(refreshedPayload, secret);
+    setSessionCookie(req, res, token);
+    return res.json({
+      configured: true,
+      authenticated: true,
+      token,
+      sessionUser: { id: session.userId, name: session.name, role: session.role },
+    });
+  });
+
   // 4. Logout
   app.post("/api/auth/logout", (req, res) => {
     clearSessionCookie(req, res);
     res.json({ success: true });
   });
 
-  // 5. Full State Pull (authenticated + scrubbed credentials & secrets)
+  // 5. Full State Pull (authenticated + scrubbed credentials & secrets + row versions/prefs/reminders)
   app.get("/api/db/state", requirePgAuth, async (req: AuthedRequest, res) => {
     try {
       const pool = getPool()!;
       await ensureSchema(pool);
       const session = req.pgSession!;
-      const [bucketsRes, archivesRes, viewerIsAdmin] = await Promise.all([
+      const [bucketsRes, archivesRes, versionMap, prefsRes, remindersRes, viewerIsAdmin] = await Promise.all([
         pool.query<{
           bucket_key: string;
           items: Record<string, unknown>[];
@@ -2388,6 +2543,21 @@ export function registerPostgresSyncRoutes(app: Express): void {
         }>(
           `SELECT archive_key, year, month_key, items, updated_at_ms::text FROM app_report_archives`
         ),
+        loadEntityVersionMap(pool),
+        pool.query<{ user_id: string; pref_key: string; value: unknown; updated_at_ms: string }>(
+          `SELECT user_id, pref_key, value, updated_at_ms::text
+           FROM his_user_preferences
+           WHERE user_id = $1 OR user_id = '__global__'`,
+          [session.userId]
+        ),
+        pool.query<{
+          scope: string;
+          target_id: string;
+          last_reminded_at: string;
+          count: number;
+          channel: string | null;
+          updated_at_ms: string;
+        }>(`SELECT scope, target_id, last_reminded_at, count, channel, updated_at_ms::text FROM his_reminder_logs`),
         isSessionSystemAdmin(req),
       ]);
 
@@ -2412,10 +2582,32 @@ export function registerPostgresSyncRoutes(app: Express): void {
         updatedAtMs: Number(r.updated_at_ms || 0),
       }));
 
+      const preferences: Record<string, unknown> = {};
+      for (const p of prefsRes.rows) {
+        preferences[p.pref_key] = p.value;
+      }
+
+      const reminderLogs: {
+        task: Record<string, { lastRemindedAt: string; count: number; channel?: string }>;
+        equipment: Record<string, { lastRemindedAt: string; count: number; channel?: string }>;
+      } = { task: {}, equipment: {} };
+      for (const r of remindersRes.rows) {
+        if (r.scope === "task" || r.scope === "equipment") {
+          reminderLogs[r.scope][r.target_id] = {
+            lastRemindedAt: r.last_reminded_at,
+            count: Number(r.count || 1),
+            channel: r.channel || undefined,
+          };
+        }
+      }
+
       res.json({
         success: true,
         buckets,
+        versions: versionMap,
         reportArchives,
+        preferences,
+        reminderLogs,
         serverTimeMs: Date.now(),
         actorId: session.userId,
       });
@@ -2570,6 +2762,15 @@ export function registerPostgresSyncRoutes(app: Express): void {
              updated_at = NOW()`,
           [bucketKey, JSON.stringify(itemsToSave), itemsToSave.length, session.userId, session.name, nowMs]
         );
+        await syncNormalizedRowsFromBucketInTx(
+          client,
+          bucketKey,
+          itemsToSave,
+          session.userId,
+          session.name,
+          nowMs,
+          !APPEND_MERGE_BUCKETS.has(bucketKey)
+        );
         await client.query("COMMIT");
 
         res.json({
@@ -2669,6 +2870,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
              updated_at = NOW()`,
           [archiveKey, year, monthKey, JSON.stringify(safeItems), session.userId, session.name, nowMs]
         );
+        await syncNormalizedReportMonthInTx(client, archiveKey, year, monthKey, safeItems, nowMs);
         await client.query("COMMIT");
 
         res.json({
@@ -2761,6 +2963,15 @@ export function registerPostgresSyncRoutes(app: Express): void {
                updated_at = NOW()`,
             [bucketKey, JSON.stringify(safeItems), safeItems.length, session.userId, session.name, nowMs]
           );
+          await syncNormalizedRowsFromBucketInTx(
+            client,
+            bucketKey,
+            safeItems,
+            session.userId,
+            session.name,
+            nowMs,
+            true
+          );
           bucketsPushed++;
         }
 
@@ -2786,6 +2997,7 @@ export function registerPostgresSyncRoutes(app: Express): void {
                updated_at = NOW()`,
             [archiveKey, year, monthKey, JSON.stringify(safeItems), session.userId, session.name, nowMs]
           );
+          await syncNormalizedReportMonthInTx(client, archiveKey, year, monthKey, safeItems, nowMs);
           reportMonthsPushed++;
         }
 
@@ -2861,6 +3073,742 @@ export function registerPostgresSyncRoutes(app: Express): void {
       clearInterval(keepAliveTimer);
       syncStreamClients.delete(onChange);
     });
+  });
+
+  // 11. V2 Normalized Delta Changes Endpoint (row-level upserts + soft deletes + prefs + reminders)
+  app.get("/api/v2/changes", requirePgAuth, async (req: AuthedRequest, res) => {
+    try {
+      const pool = getPool()!;
+      await ensureSchema(pool);
+      const session = req.pgSession!;
+      const since = Math.max(0, Number(req.query.since || 0) || 0);
+
+      const [entitiesRes, archivesRes, prefsRes, remindersRes, viewerIsAdmin] = await Promise.all([
+        pool.query<{
+          entity_type: string;
+          entity_id: string;
+          sort_order: number;
+          data: Record<string, unknown>;
+          version: number;
+          updated_at_ms: string;
+          deleted_at_ms: string | null;
+        }>(
+          `SELECT entity_type, entity_id, sort_order, data, version, updated_at_ms::text, deleted_at_ms::text
+           FROM his_entities
+           WHERE updated_at_ms > $1
+           ORDER BY updated_at_ms ASC, sort_order ASC`,
+          [since]
+        ),
+        pool.query<{
+          archive_key: string;
+          year: number;
+          month_key: string;
+          items: unknown[];
+          updated_at_ms: string;
+        }>(
+          `SELECT archive_key, year, month_key, items, updated_at_ms::text
+           FROM app_report_archives
+           WHERE updated_at_ms > $1`,
+          [since]
+        ),
+        pool.query<{ pref_key: string; value: unknown; updated_at_ms: string }>(
+          `SELECT pref_key, value, updated_at_ms::text
+           FROM his_user_preferences
+           WHERE (user_id = $1 OR user_id = '__global__') AND updated_at_ms > $2`,
+          [session.userId, since]
+        ),
+        pool.query<{
+          scope: string;
+          target_id: string;
+          last_reminded_at: string;
+          count: number;
+          channel: string | null;
+          updated_at_ms: string;
+        }>(
+          `SELECT scope, target_id, last_reminded_at, count, channel, updated_at_ms::text
+           FROM his_reminder_logs
+           WHERE updated_at_ms > $1`,
+          [since]
+        ),
+        isSessionSystemAdmin(req),
+      ]);
+
+      const entityChanges = entitiesRes.rows
+        .filter((r) => ALLOWED_CLOUD_BUCKETS.has(r.entity_type))
+        .map((r) => {
+          const scrubbed = r.deleted_at_ms
+            ? null
+            : scrubBucketItemsForClient(r.entity_type, [r.data || {}], viewerIsAdmin)[0] || null;
+          return {
+            entityType: r.entity_type,
+            id: r.entity_id,
+            version: Number(r.version || 1),
+            updatedAtMs: Number(r.updated_at_ms || 0),
+            deletedAtMs: r.deleted_at_ms ? Number(r.deleted_at_ms) : null,
+            record: scrubbed,
+          };
+        });
+
+      const preferences: Record<string, unknown> = {};
+      for (const p of prefsRes.rows) {
+        preferences[p.pref_key] = p.value;
+      }
+
+      const reminderLogs: Array<{
+        scope: "task" | "equipment";
+        targetId: string;
+        lastRemindedAt: string;
+        count: number;
+        channel?: string;
+      }> = [];
+      for (const r of remindersRes.rows) {
+        if (r.scope === "task" || r.scope === "equipment") {
+          reminderLogs.push({
+            scope: r.scope,
+            targetId: r.target_id,
+            lastRemindedAt: r.last_reminded_at,
+            count: Number(r.count || 1),
+            channel: r.channel || undefined,
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        entities: entityChanges,
+        reportArchives: archivesRes.rows.map((r) => ({
+          archiveKey: r.archive_key,
+          year: Number(r.year),
+          monthKey: r.month_key,
+          items: Array.isArray(r.items) ? r.items : [],
+          updatedAtMs: Number(r.updated_at_ms || 0),
+        })),
+        preferences,
+        reminderLogs,
+        serverTimeMs: Date.now(),
+      });
+    } catch (err: any) {
+      console.error("[PostgresSync] /api/v2/changes error:", err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Lỗi kiểm tra thay đổi từ PostgreSQL.",
+      });
+    }
+  });
+
+  // 12. V2 Atomic Row-Level Transactional Mutations (supports cross-entity batch + row version lock)
+  app.post("/api/v2/mutations", requirePgAuth, async (req: AuthedRequest, res) => {
+    const rawOps = Array.isArray(req.body?.operations) ? req.body.operations : [];
+    if (rawOps.length === 0) {
+      return res.json({ success: true, results: [], serverTimeMs: Date.now() });
+    }
+    if (rawOps.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        error: "Số lượng thao tác trong một giao dịch vượt quá giới hạn (tối đa 1000).",
+      });
+    }
+
+    interface ParsedOp {
+      entityType: string;
+      op: "upsert" | "delete";
+      id: string;
+      record?: Record<string, unknown>;
+      expectedVersion: number;
+    }
+
+    const ops: ParsedOp[] = [];
+    for (const rawOp of rawOps) {
+      if (!rawOp || typeof rawOp !== "object") continue;
+      const entityType = String(rawOp.entityType || "").trim();
+      const op = rawOp.op === "delete" ? "delete" : "upsert";
+      if (!ALLOWED_CLOUD_BUCKETS.has(entityType)) {
+        return res.status(400).json({
+          success: false,
+          error: `Loại dữ liệu "${entityType}" không hợp lệ.`,
+        });
+      }
+      const record =
+        rawOp.record && typeof rawOp.record === "object" && !Array.isArray(rawOp.record)
+          ? { ...(rawOp.record as Record<string, unknown>) }
+          : undefined;
+      if (record) delete record.rawFileData;
+
+      const id = String(
+        rawOp.id || (record ? extractEntityRecordId(entityType, record, 0) : "")
+      ).trim();
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          error: `Thiếu định danh bản ghi cho "${entityType}".`,
+        });
+      }
+      if (op === "upsert" && !record) {
+        return res.status(400).json({
+          success: false,
+          error: `Thiếu nội dung bản ghi cho thao tác cập nhật "${entityType}/${id}".`,
+        });
+      }
+      ops.push({
+        entityType,
+        op,
+        id,
+        record,
+        expectedVersion: Math.max(0, Number(rawOp.expectedVersion || 0) || 0),
+      });
+    }
+
+    const pool = getPool()!;
+    await ensureSchema(pool);
+    const session = req.pgSession!;
+    const { actorAccess } = await resolveServerRbacContext(pool, session);
+    const actorIsAdmin = Boolean(actorAccess.isSystemAdmin);
+    const nowMs = Date.now();
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Group touched RBAC buckets & verify per-bucket RBAC on projected candidate lists before mutating
+      const touchedTypes = Array.from(new Set(ops.map((o) => o.entityType)));
+      const rbacTouchedTypes = touchedTypes.filter((t) => RBAC_GUARDED_BUCKETS.has(t));
+
+      for (const bucketKey of rbacTouchedTypes) {
+        const currentRowsRes = await client.query<{
+          entity_id: string;
+          data: Record<string, unknown>;
+        }>(
+          `SELECT entity_id, data FROM his_entities WHERE entity_type = $1 AND deleted_at_ms IS NULL ORDER BY sort_order ASC, updated_at_ms DESC`,
+          [bucketKey]
+        );
+        const candidateMap = new Map<string, Record<string, unknown>>();
+        for (const row of currentRowsRes.rows) {
+          candidateMap.set(row.entity_id, row.data);
+        }
+        for (const op of ops) {
+          if (op.entityType !== bucketKey) continue;
+          if (op.op === "delete") {
+            candidateMap.delete(op.id);
+          } else if (op.record) {
+            candidateMap.set(op.id, op.record);
+          }
+        }
+        const rbacCheck = await enforceServerBucketRbac(
+          pool,
+          session,
+          bucketKey,
+          Array.from(candidateMap.values())
+        );
+        if (rbacCheck.allowed === false) {
+          await client.query("ROLLBACK");
+          return res.status(rbacCheck.status).json({
+            success: false,
+            error: rbacCheck.error,
+          });
+        }
+      }
+
+      const conflicts: Array<{
+        entityType: string;
+        id: string;
+        serverVersion: number;
+        deletedAtMs: number | null;
+        serverRecord: Record<string, unknown> | null;
+      }> = [];
+      const results: Array<{
+        entityType: string;
+        id: string;
+        op: "upsert" | "delete";
+        version: number;
+        updatedAtMs: number;
+        deletedAtMs: number | null;
+        record: Record<string, unknown> | null;
+      }> = [];
+
+      for (const itemOp of ops) {
+        const existingRes = await client.query<{
+          data: Record<string, unknown>;
+          version: number;
+          sort_order: number;
+          deleted_at_ms: string | null;
+        }>(
+          `SELECT data, version, sort_order, deleted_at_ms::text
+           FROM his_entities
+           WHERE entity_type = $1 AND entity_id = $2
+           FOR UPDATE`,
+          [itemOp.entityType, itemOp.id]
+        );
+        const existingRow = existingRes.rows[0];
+        const currentVersion = existingRow ? Number(existingRow.version || 1) : 0;
+
+        if (
+          existingRow &&
+          itemOp.expectedVersion > 0 &&
+          currentVersion > itemOp.expectedVersion &&
+          !APPEND_MERGE_BUCKETS.has(itemOp.entityType)
+        ) {
+          conflicts.push({
+            entityType: itemOp.entityType,
+            id: itemOp.id,
+            serverVersion: currentVersion,
+            deletedAtMs: existingRow.deleted_at_ms ? Number(existingRow.deleted_at_ms) : null,
+            serverRecord: existingRow.deleted_at_ms
+              ? null
+              : scrubBucketItemsForClient(itemOp.entityType, [existingRow.data], actorIsAdmin)[0] ||
+                null,
+          });
+          continue;
+        }
+
+        if (itemOp.op === "delete") {
+          const nextVer = existingRow ? currentVersion + 1 : 1;
+          if (existingRow) {
+            await client.query(
+              `UPDATE his_entities
+               SET deleted_at_ms = $3, updated_at_ms = $3, version = $4,
+                   updated_by_id = $5, updated_by_name = $6, updated_at = NOW()
+               WHERE entity_type = $1 AND entity_id = $2`,
+              [itemOp.entityType, itemOp.id, nowMs, nextVer, session.userId, session.name]
+            );
+          } else {
+            await client.query(
+              `INSERT INTO his_entities (
+                 entity_type, entity_id, sort_order, data, version,
+                 updated_by_id, updated_by_name, updated_at_ms, deleted_at_ms, updated_at
+               )
+               VALUES ($1, $2, 0, '{}'::jsonb, 1, $3, $4, $5, $5, NOW())`,
+              [itemOp.entityType, itemOp.id, session.userId, session.name, nowMs]
+            );
+          }
+          results.push({
+            entityType: itemOp.entityType,
+            id: itemOp.id,
+            op: "delete",
+            version: nextVer,
+            updatedAtMs: nowMs,
+            deletedAtMs: nowMs,
+            record: null,
+          });
+          continue;
+        }
+
+        // Upsert
+        const reconciledList = reconcileSensitiveBucketOnSave(
+          itemOp.entityType,
+          [itemOp.record!],
+          existingRow?.data ? [existingRow.data] : [],
+          actorIsAdmin
+        );
+        const safeRecord = reconciledList[0] || itemOp.record!;
+        const sortOrder =
+          existingRow && Number.isFinite(existingRow.sort_order)
+            ? existingRow.sort_order
+            : itemOp.entityType === "notifications" ||
+                itemOp.entityType === "audit_logs" ||
+                itemOp.entityType === "sync_history" ||
+                itemOp.entityType === "announcements"
+              ? -Math.floor(nowMs / 1000)
+              : 1000;
+
+        const upsertRes = await client.query<{ version: number }>(
+          `INSERT INTO his_entities (
+             entity_type, entity_id, sort_order, data, version,
+             updated_by_id, updated_by_name, updated_at_ms, deleted_at_ms, updated_at
+           )
+           VALUES ($1, $2, $3, $4::jsonb, 1, $5, $6, $7, NULL, NOW())
+           ON CONFLICT (entity_type, entity_id)
+           DO UPDATE SET
+             data = EXCLUDED.data,
+             version = his_entities.version + 1,
+             updated_by_id = EXCLUDED.updated_by_id,
+             updated_by_name = EXCLUDED.updated_by_name,
+             updated_at_ms = EXCLUDED.updated_at_ms,
+             deleted_at_ms = NULL,
+             updated_at = NOW()
+           RETURNING version`,
+          [
+            itemOp.entityType,
+            itemOp.id,
+            sortOrder,
+            JSON.stringify(safeRecord),
+            session.userId,
+            session.name,
+            nowMs,
+          ]
+        );
+        const savedVersion = Number(upsertRes.rows[0]?.version || currentVersion + 1);
+        const scrubbed =
+          scrubBucketItemsForClient(itemOp.entityType, [safeRecord], actorIsAdmin)[0] ||
+          safeRecord;
+        results.push({
+          entityType: itemOp.entityType,
+          id: itemOp.id,
+          op: "upsert",
+          version: savedVersion,
+          updatedAtMs: nowMs,
+          deletedAtMs: null,
+          record: scrubbed,
+        });
+      }
+
+      if (conflicts.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          success: false,
+          conflict: true,
+          error:
+            "Bản ghi bạn đang sửa vừa được người khác cập nhật trước đó. Hệ thống đã tải phiên bản mới nhất.",
+          conflicts,
+        });
+      }
+
+      for (const bucketKey of touchedTypes) {
+        await rebuildAppBucketProjectionInTx(
+          client,
+          bucketKey,
+          session.userId,
+          session.name,
+          nowMs
+        );
+      }
+
+      await client.query("COMMIT");
+
+      res.json({
+        success: true,
+        results,
+        serverTimeMs: nowMs,
+      });
+
+      broadcastPostgresChange(pool, {
+        type: "entities",
+        key: touchedTypes.join(","),
+        entityTypes: touchedTypes,
+        updatedAtMs: nowMs,
+        actorId: session.userId,
+      });
+    } catch (err: any) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("[PostgresSync] /api/v2/mutations error:", err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Không thể ghi giao dịch dữ liệu vào PostgreSQL.",
+      });
+    } finally {
+      client.release();
+    }
+  });
+
+  // 13. V2 Cell-Level Report Archive Update (avoids whole-month overwrites across browsers)
+  app.put("/api/v2/reports/:archiveKey/cells", requirePgAuth, async (req: AuthedRequest, res) => {
+    try {
+      const archiveKey = String(req.params.archiveKey || "").trim();
+      if (!ARCHIVE_KEY_REGEX.test(archiveKey)) {
+        return res.status(400).json({ success: false, error: "Archive key không hợp lệ." });
+      }
+      const year = Number(req.body?.year);
+      const monthKey = String(req.body?.monthKey || "").trim().slice(0, 24);
+      const rawCells = Array.isArray(req.body?.cells) ? req.body.cells : [];
+      if (!Number.isInteger(year) || year < 1900 || year > 2100 || !monthKey) {
+        return res.status(400).json({ success: false, error: "Thông tin năm/tháng không hợp lệ." });
+      }
+      const cells: CellUpdateInput[] = rawCells
+        .filter((c: unknown): c is Record<string, unknown> => Boolean(c && typeof c === "object"))
+        .slice(0, 1500)
+        .map((c) => ({
+          serviceId: String(c.serviceId || "").trim(),
+          category: String(c.category || "Khác").trim(),
+          name: String(c.name || "").trim(),
+          sortOrder: typeof c.sortOrder === "number" ? c.sortOrder : undefined,
+          day: Number(c.day),
+          bh: c.bh === "LT" ? "LT" : Number(c.bh || 0),
+          nd: c.nd === "LT" ? "LT" : Number(c.nd || 0),
+          isManual: Boolean(c.isManual),
+          manualBy: typeof c.manualBy === "string" ? c.manualBy : undefined,
+          manualAt: typeof c.manualAt === "string" ? c.manualAt : undefined,
+          forceOverwrite: Boolean(c.forceOverwrite),
+        }))
+        .filter((c) => c.serviceId && Number.isInteger(c.day) && c.day >= 1 && c.day <= 31);
+
+      const pool = getPool()!;
+      await ensureSchema(pool);
+      const session = req.pgSession!;
+      const nowMs = Date.now();
+      const client = await pool.connect();
+      let updatedItems: Record<string, unknown>[] = [];
+      try {
+        await client.query("BEGIN");
+        updatedItems = await upsertReportCellsAndRebuildArchiveInTx(client, {
+          archiveKey,
+          year,
+          monthKey,
+          cells,
+          actorId: session.userId,
+          actorName: session.name,
+          nowMs,
+        });
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
+
+      res.json({
+        success: true,
+        archiveKey,
+        items: updatedItems,
+        updatedAtMs: nowMs,
+      });
+
+      broadcastPostgresChange(pool, {
+        type: "report_archive",
+        key: archiveKey,
+        updatedAtMs: nowMs,
+        actorId: session.userId,
+      });
+    } catch (err: any) {
+      console.error("[PostgresSync] PUT /api/v2/reports cells error:", err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Không thể lưu ô số liệu báo cáo.",
+      });
+    }
+  });
+
+  // 14. User Preferences & Global App UI Config (replaces client-only localStorage settings)
+  const ALLOWED_PREF_KEYS = new Set<string>([
+    "quick_access_pins",
+    "pinned_clinical_services",
+    "recent_searches",
+    "theme_mode",
+    "known_report_years",
+  ]);
+  const GLOBAL_PREF_KEYS = new Set<string>(["known_report_years"]);
+
+  app.get("/api/v2/preferences", requirePgAuth, async (req: AuthedRequest, res) => {
+    try {
+      const pool = getPool()!;
+      await ensureSchema(pool);
+      const session = req.pgSession!;
+      const rowsRes = await pool.query<{ pref_key: string; value: unknown; updated_at_ms: string }>(
+        `SELECT pref_key, value, updated_at_ms::text
+         FROM his_user_preferences
+         WHERE user_id = $1 OR user_id = '__global__'`,
+        [session.userId]
+      );
+      const preferences: Record<string, unknown> = {};
+      for (const r of rowsRes.rows) {
+        preferences[r.pref_key] = r.value;
+      }
+      res.json({ success: true, preferences });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || "Lỗi tải tùy chọn người dùng." });
+    }
+  });
+
+  app.put("/api/v2/preferences/:prefKey", requirePgAuth, async (req: AuthedRequest, res) => {
+    try {
+      const prefKey = String(req.params.prefKey || "").trim();
+      if (!ALLOWED_PREF_KEYS.has(prefKey)) {
+        return res.status(400).json({ success: false, error: "Preference key không hợp lệ." });
+      }
+      const pool = getPool()!;
+      await ensureSchema(pool);
+      const session = req.pgSession!;
+      const targetUserId = GLOBAL_PREF_KEYS.has(prefKey) ? "__global__" : session.userId;
+      const value = req.body?.value ?? null;
+      const nowMs = Date.now();
+
+      await pool.query(
+        `INSERT INTO his_user_preferences (user_id, pref_key, value, updated_at_ms, updated_at)
+         VALUES ($1, $2, $3::jsonb, $4, NOW())
+         ON CONFLICT (user_id, pref_key)
+         DO UPDATE SET value = EXCLUDED.value, updated_at_ms = EXCLUDED.updated_at_ms, updated_at = NOW()`,
+        [targetUserId, prefKey, JSON.stringify(value), nowMs]
+      );
+
+      res.json({ success: true, prefKey, value, updatedAtMs: nowMs });
+      broadcastPostgresChange(pool, {
+        type: "preferences",
+        key: prefKey,
+        updatedAtMs: nowMs,
+        actorId: session.userId,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || "Lỗi lưu tùy chọn người dùng." });
+    }
+  });
+
+  // 15. Reminder Logs Sync (replaces localStorage operationalAlerts logs)
+  app.get("/api/v2/reminders", requirePgAuth, async (_req: AuthedRequest, res) => {
+    try {
+      const pool = getPool()!;
+      await ensureSchema(pool);
+      const rowsRes = await pool.query<{
+        scope: string;
+        target_id: string;
+        last_reminded_at: string;
+        count: number;
+        channel: string | null;
+      }>(`SELECT scope, target_id, last_reminded_at, count, channel FROM his_reminder_logs`);
+      const task: Record<string, { lastRemindedAt: string; count: number; channel?: string }> = {};
+      const equipment: Record<string, { lastRemindedAt: string; count: number; channel?: string }> = {};
+      for (const r of rowsRes.rows) {
+        const entry = {
+          lastRemindedAt: r.last_reminded_at,
+          count: Number(r.count || 1),
+          channel: r.channel || undefined,
+        };
+        if (r.scope === "task") task[r.target_id] = entry;
+        else if (r.scope === "equipment") equipment[r.target_id] = entry;
+      }
+      res.json({ success: true, task, equipment });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || "Lỗi tải nhật ký nhắc nhở." });
+    }
+  });
+
+  app.post("/api/v2/reminders", requirePgAuth, async (req: AuthedRequest, res) => {
+    try {
+      const scope = req.body?.scope === "equipment" ? "equipment" : req.body?.scope === "task" ? "task" : "";
+      const targetId = String(req.body?.targetId || "").trim().slice(0, 120);
+      const lastRemindedAt = String(req.body?.lastRemindedAt || new Date().toISOString()).slice(0, 48);
+      const channel = typeof req.body?.channel === "string" ? req.body.channel.slice(0, 40) : null;
+      if (!scope || !targetId) {
+        return res.status(400).json({ success: false, error: "Thiếu scope hoặc targetId nhắc nhở." });
+      }
+      const pool = getPool()!;
+      await ensureSchema(pool);
+      const session = req.pgSession!;
+      const nowMs = Date.now();
+      const upsertRes = await pool.query<{ count: number }>(
+        `INSERT INTO his_reminder_logs (scope, target_id, last_reminded_at, count, channel, reminded_by_id, updated_at_ms)
+         VALUES ($1, $2, $3, 1, $4, $5, $6)
+         ON CONFLICT (scope, target_id)
+         DO UPDATE SET
+           last_reminded_at = EXCLUDED.last_reminded_at,
+           count = his_reminder_logs.count + 1,
+           channel = COALESCE(EXCLUDED.channel, his_reminder_logs.channel),
+           reminded_by_id = EXCLUDED.reminded_by_id,
+           updated_at_ms = EXCLUDED.updated_at_ms
+         RETURNING count`,
+        [scope, targetId, lastRemindedAt, channel, session.userId, nowMs]
+      );
+      const count = Number(upsertRes.rows[0]?.count || 1);
+      res.json({ success: true, scope, targetId, lastRemindedAt, count, channel });
+      broadcastPostgresChange(pool, {
+        type: "reminders",
+        key: `${scope}:${targetId}`,
+        updatedAtMs: nowMs,
+        actorId: session.userId,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || "Lỗi lưu nhật ký nhắc nhở." });
+    }
+  });
+
+  // 16. Server File Upload & Download (supports Chat Attachments & Documents across devices)
+  app.post("/api/files/upload", requireAppAuth, async (req, res) => {
+    try {
+      const pool = getPool();
+      if (pool) await ensureSchema(pool);
+      const session = (req as AuthedRequest).pgSession;
+
+      const filename = String(req.body?.filename || "attachment.bin").trim();
+      const mimeType = String(req.body?.mimeType || "application/octet-stream").trim();
+      const scope = String(req.body?.scope || "general").trim().slice(0, 40);
+      const rawBase64 = String(req.body?.dataBase64 || "");
+      if (!rawBase64) {
+        return res.status(400).json({ success: false, error: "Thiếu dữ liệu tệp tải lên." });
+      }
+      const commaIdx = rawBase64.indexOf(",");
+      const cleanB64 = rawBase64.startsWith("data:") && commaIdx >= 0 ? rawBase64.slice(commaIdx + 1) : rawBase64;
+      const content = Buffer.from(cleanB64, "base64");
+      const maxBytes = 15 * 1024 * 1024;
+      if (content.length === 0) {
+        return res.status(400).json({ success: false, error: "Tệp trống hoặc mã hóa không hợp lệ." });
+      }
+      if (content.length > maxBytes) {
+        return res.status(413).json({
+          success: false,
+          error: "Kích thước tệp vượt quá giới hạn 15MB cho lưu trữ trực tiếp trên máy chủ.",
+        });
+      }
+
+      const meta = await saveFileBlobToDb(pool, memoryFileBlobFallback, {
+        filename,
+        mimeType,
+        content,
+        uploaderId: session?.userId,
+        uploaderName: session?.name,
+        scope,
+      });
+
+      res.json({
+        success: true,
+        file: {
+          id: meta.id,
+          filename: meta.filename,
+          mimeType: meta.mimeType,
+          sizeBytes: meta.sizeBytes,
+          sha256: meta.sha256,
+          url: `/api/files/${meta.id}`,
+          createdAtMs: meta.createdAtMs,
+        },
+      });
+    } catch (err: any) {
+      console.error("[PostgresSync] File upload error:", err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Không thể lưu tệp lên máy chủ.",
+      });
+    }
+  });
+
+  app.get("/api/files/:id", requireAppAuth, async (req, res) => {
+    try {
+      const fileId = String(req.params.id || "").trim();
+      if (!fileId || !/^[a-zA-Z0-9_-]{4,80}$/.test(fileId)) {
+        return res.status(400).json({ success: false, error: "Mã tệp không hợp lệ." });
+      }
+      const pool = getPool();
+      if (pool) await ensureSchema(pool);
+      const found = await loadFileBlobFromDb(pool, memoryFileBlobFallback, fileId);
+      if (!found) {
+        return res.status(404).json({ success: false, error: "Không tìm thấy tệp trên máy chủ." });
+      }
+
+      const { meta, content } = found;
+      const lowerMime = meta.mimeType.toLowerCase();
+      const forceDownload = req.query.download === "1" || req.query.download === "true";
+      const isUnsafeActiveType =
+        lowerMime.includes("html") ||
+        lowerMime.includes("svg") ||
+        lowerMime.includes("xml") ||
+        lowerMime.includes("javascript") ||
+        /\.(html?|svg|js|mjs|xhtml)$/i.test(meta.filename);
+
+      const safeContentType = isUnsafeActiveType ? "application/octet-stream" : meta.mimeType;
+      const dispositionType = forceDownload || isUnsafeActiveType ? "attachment" : "inline";
+      const encodedName = encodeURIComponent(meta.filename);
+
+      res.setHeader("Content-Type", safeContentType);
+      res.setHeader(
+        "Content-Disposition",
+        `${dispositionType}; filename*=UTF-8''${encodedName}`
+      );
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      res.send(content);
+    } catch (err: any) {
+      console.error("[PostgresSync] File download error:", err);
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Không thể tải tệp từ máy chủ.",
+      });
+    }
   });
 }
 
@@ -3003,28 +3951,39 @@ export async function upsertReportArchiveMonthFromServer(
     await ensureSchema(pool);
     const safeItems = Array.isArray(items) ? items.slice(0, 500) : [];
     const nowMs = Date.now();
-    await pool.query(
-      `INSERT INTO app_report_archives (archive_key, year, month_key, items, updated_by_id, updated_by_name, updated_at_ms, updated_at)
-       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, NOW())
-       ON CONFLICT (archive_key)
-       DO UPDATE SET
-         year = EXCLUDED.year,
-         month_key = EXCLUDED.month_key,
-         items = EXCLUDED.items,
-         updated_by_id = EXCLUDED.updated_by_id,
-         updated_by_name = EXCLUDED.updated_by_name,
-         updated_at_ms = EXCLUDED.updated_at_ms,
-         updated_at = NOW()`,
-      [
-        archiveKey,
-        year,
-        monthKey,
-        JSON.stringify(safeItems),
-        "SYS-SCHEDULER",
-        "Hệ thống Cảnh báo Tự động",
-        nowMs,
-      ]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO app_report_archives (archive_key, year, month_key, items, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, NOW())
+         ON CONFLICT (archive_key)
+         DO UPDATE SET
+           year = EXCLUDED.year,
+           month_key = EXCLUDED.month_key,
+           items = EXCLUDED.items,
+           updated_by_id = EXCLUDED.updated_by_id,
+           updated_by_name = EXCLUDED.updated_by_name,
+           updated_at_ms = EXCLUDED.updated_at_ms,
+           updated_at = NOW()`,
+        [
+          archiveKey,
+          year,
+          monthKey,
+          JSON.stringify(safeItems),
+          "SYS-SCHEDULER",
+          "Hệ thống Cảnh báo Tự động",
+          nowMs,
+        ]
+      );
+      await syncNormalizedReportMonthInTx(client, archiveKey, year, monthKey, safeItems, nowMs);
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     broadcastPostgresChange(pool, {
       type: "report_archive",
@@ -3047,26 +4006,44 @@ export async function appendSystemNotificationToDb(
 
   try {
     await ensureSchema(pool);
-    const res = await pool.query<{ items: Record<string, unknown>[] }>(
-      `SELECT items FROM app_buckets WHERE bucket_key = 'notifications'`
-    );
-    const existing = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
-    const next = [notif, ...existing].slice(0, 200);
     const nowMs = Date.now();
-
-    await pool.query(
-      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
-       VALUES ('notifications', $1::jsonb, $2, 'SYS-SCHEDULER', 'Hệ thống Cảnh báo Tự động', $3, NOW())
-       ON CONFLICT (bucket_key)
-       DO UPDATE SET
-         items = EXCLUDED.items,
-         item_count = EXCLUDED.item_count,
-         updated_by_id = EXCLUDED.updated_by_id,
-         updated_by_name = EXCLUDED.updated_by_name,
-         updated_at_ms = EXCLUDED.updated_at_ms,
-         updated_at = NOW()`,
-      [JSON.stringify(next), next.length, nowMs]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const res = await client.query<{ items: Record<string, unknown>[] }>(
+        `SELECT items FROM app_buckets WHERE bucket_key = 'notifications' FOR UPDATE`
+      );
+      const existing = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+      const next = [notif, ...existing].slice(0, 200);
+      await client.query(
+        `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+         VALUES ('notifications', $1::jsonb, $2, 'SYS-SCHEDULER', 'Hệ thống Cảnh báo Tự động', $3, NOW())
+         ON CONFLICT (bucket_key)
+         DO UPDATE SET
+           items = EXCLUDED.items,
+           item_count = EXCLUDED.item_count,
+           updated_by_id = EXCLUDED.updated_by_id,
+           updated_by_name = EXCLUDED.updated_by_name,
+           updated_at_ms = EXCLUDED.updated_at_ms,
+           updated_at = NOW()`,
+        [JSON.stringify(next), next.length, nowMs]
+      );
+      await syncNormalizedRowsFromBucketInTx(
+        client,
+        "notifications",
+        next as unknown as Record<string, unknown>[],
+        "SYS-SCHEDULER",
+        "Hệ thống Cảnh báo Tự động",
+        nowMs,
+        true
+      );
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     broadcastPostgresChange(pool, {
       type: "bucket",
@@ -3089,30 +4066,48 @@ export async function saveScheduledAlertRulesToDb(
 
   try {
     await ensureSchema(pool);
-    const res = await pool.query<{ items: Record<string, unknown>[] }>(
-      `SELECT items FROM app_buckets WHERE bucket_key = 'settings'`
-    );
-    const currentList = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
-    const baseSettings =
-      currentList[0] && typeof currentList[0] === "object"
-        ? { ...currentList[0] }
-        : {};
-    const nextSettings = [{ ...baseSettings, scheduledAlertsConfig: rules }];
     const nowMs = Date.now();
-
-    await pool.query(
-      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
-       VALUES ('settings', $1::jsonb, 1, 'SYS-SCHEDULER', 'Cấu hình Cảnh báo Tự động', $2, NOW())
-       ON CONFLICT (bucket_key)
-       DO UPDATE SET
-         items = EXCLUDED.items,
-         item_count = EXCLUDED.item_count,
-         updated_by_id = EXCLUDED.updated_by_id,
-         updated_by_name = EXCLUDED.updated_by_name,
-         updated_at_ms = EXCLUDED.updated_at_ms,
-         updated_at = NOW()`,
-      [JSON.stringify(nextSettings), nowMs]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const res = await client.query<{ items: Record<string, unknown>[] }>(
+        `SELECT items FROM app_buckets WHERE bucket_key = 'settings' FOR UPDATE`
+      );
+      const currentList = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+      const baseSettings =
+        currentList[0] && typeof currentList[0] === "object"
+          ? { ...currentList[0] }
+          : {};
+      const nextSettings = [{ ...baseSettings, scheduledAlertsConfig: rules }];
+      await client.query(
+        `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+         VALUES ('settings', $1::jsonb, 1, 'SYS-SCHEDULER', 'Cấu hình Cảnh báo Tự động', $2, NOW())
+         ON CONFLICT (bucket_key)
+         DO UPDATE SET
+           items = EXCLUDED.items,
+           item_count = EXCLUDED.item_count,
+           updated_by_id = EXCLUDED.updated_by_id,
+           updated_by_name = EXCLUDED.updated_by_name,
+           updated_at_ms = EXCLUDED.updated_at_ms,
+           updated_at = NOW()`,
+        [JSON.stringify(nextSettings), nowMs]
+      );
+      await syncNormalizedRowsFromBucketInTx(
+        client,
+        "settings",
+        nextSettings,
+        "SYS-SCHEDULER",
+        "Cấu hình Cảnh báo Tự động",
+        nowMs,
+        true
+      );
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     broadcastPostgresChange(pool, {
       type: "bucket",
@@ -3135,34 +4130,53 @@ export async function appendSyncHistoryEntryToDb(
 
   try {
     await ensureSchema(pool);
-    const res = await pool.query<{ items: Record<string, unknown>[] }>(
-      `SELECT items FROM app_buckets WHERE bucket_key = 'sync_history'`
-    );
-    const existing = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
-    const trimmedEntry: SyncHistoryEntry = {
-      ...entry,
-      autoWrittenSamples: entry.autoWrittenSamples?.slice(0, 80),
-      discrepancies: entry.discrepancies?.slice(0, 250),
-    };
-    const next = [
-      trimmedEntry,
-      ...existing.filter((e: any) => e && e.id !== entry.id),
-    ].slice(0, 80);
     const nowMs = Date.now();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const res = await client.query<{ items: Record<string, unknown>[] }>(
+        `SELECT items FROM app_buckets WHERE bucket_key = 'sync_history' FOR UPDATE`
+      );
+      const existing = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+      const trimmedEntry: SyncHistoryEntry = {
+        ...entry,
+        autoWrittenSamples: entry.autoWrittenSamples?.slice(0, 80),
+        discrepancies: entry.discrepancies?.slice(0, 250),
+      };
+      const next = [
+        trimmedEntry,
+        ...existing.filter((e: any) => e && e.id !== entry.id),
+      ].slice(0, 80);
 
-    await pool.query(
-      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
-       VALUES ('sync_history', $1::jsonb, $2, 'SYS-SCHEDULER', 'Hệ thống Đồng bộ Tự động', $3, NOW())
-       ON CONFLICT (bucket_key)
-       DO UPDATE SET
-         items = EXCLUDED.items,
-         item_count = EXCLUDED.item_count,
-         updated_by_id = EXCLUDED.updated_by_id,
-         updated_by_name = EXCLUDED.updated_by_name,
-         updated_at_ms = EXCLUDED.updated_at_ms,
-         updated_at = NOW()`,
-      [JSON.stringify(next), next.length, nowMs]
-    );
+      await client.query(
+        `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+         VALUES ('sync_history', $1::jsonb, $2, 'SYS-SCHEDULER', 'Hệ thống Đồng bộ Tự động', $3, NOW())
+         ON CONFLICT (bucket_key)
+         DO UPDATE SET
+           items = EXCLUDED.items,
+           item_count = EXCLUDED.item_count,
+           updated_by_id = EXCLUDED.updated_by_id,
+           updated_by_name = EXCLUDED.updated_by_name,
+           updated_at_ms = EXCLUDED.updated_at_ms,
+           updated_at = NOW()`,
+        [JSON.stringify(next), next.length, nowMs]
+      );
+      await syncNormalizedRowsFromBucketInTx(
+        client,
+        "sync_history",
+        next as unknown as Record<string, unknown>[],
+        "SYS-SCHEDULER",
+        "Hệ thống Đồng bộ Tự động",
+        nowMs,
+        true
+      );
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     broadcastPostgresChange(pool, {
       type: "bucket",
@@ -3204,66 +4218,87 @@ export async function mergeSheetConfigIntoSettingsDbIfMissing(
 
   try {
     await ensureSchema(pool);
-    const res = await pool.query<{ items: Record<string, unknown>[] }>(
-      `SELECT items FROM app_buckets WHERE bucket_key = 'settings'`
-    );
-    const currentList = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
-    const baseSettings =
-      currentList[0] && typeof currentList[0] === "object"
-        ? ({ ...currentList[0] } as Partial<AppSettings>)
-        : ({} as Partial<AppSettings>);
-
-    let changed = false;
-
-    if (!String(baseSettings.googleSheetUrl || "").trim() && incomingUrl) {
-      baseSettings.googleSheetUrl = incomingUrl;
-      changed = true;
-    }
-    if (!String(baseSettings.reportGoogleSheetId || "").trim() && incomingSheetId) {
-      baseSettings.reportGoogleSheetId = incomingSheetId;
-      changed = true;
-    }
-    if (!baseSettings.reportSheetYear && incomingSettings.reportSheetYear) {
-      baseSettings.reportSheetYear = incomingSettings.reportSheetYear;
-      changed = true;
-    }
-
-    if (incomingByYear) {
-      const mergedByYear = { ...(baseSettings.reportGoogleSheetsByYear || {}) };
-      for (const [yr, cfg] of Object.entries(incomingByYear)) {
-        if (!cfg || (!String(cfg.url || "").trim() && !String(cfg.sheetId || "").trim())) {
-          continue;
-        }
-        const existingCfg = mergedByYear[yr];
-        const existingHas = Boolean(
-          existingCfg && (String(existingCfg.url || "").trim() || String(existingCfg.sheetId || "").trim())
-        );
-        if (!existingHas) {
-          mergedByYear[yr] = cfg;
-          changed = true;
-        }
-      }
-      if (changed) {
-        baseSettings.reportGoogleSheetsByYear = mergedByYear;
-      }
-    }
-
-    if (!changed) return false;
-
     const nowMs = Date.now();
-    await pool.query(
-      `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
-       VALUES ('settings', $1::jsonb, 1, 'SYS-SCHEDULER', 'Đồng bộ Cấu hình Sheet', $2, NOW())
-       ON CONFLICT (bucket_key)
-       DO UPDATE SET
-         items = EXCLUDED.items,
-         item_count = EXCLUDED.item_count,
-         updated_by_id = EXCLUDED.updated_by_id,
-         updated_by_name = EXCLUDED.updated_by_name,
-         updated_at_ms = EXCLUDED.updated_at_ms,
-         updated_at = NOW()`,
-      [JSON.stringify([baseSettings]), nowMs]
-    );
+    const client = await pool.connect();
+    let changed = false;
+    try {
+      await client.query("BEGIN");
+      const res = await client.query<{ items: Record<string, unknown>[] }>(
+        `SELECT items FROM app_buckets WHERE bucket_key = 'settings' FOR UPDATE`
+      );
+      const currentList = Array.isArray(res.rows[0]?.items) ? res.rows[0].items : [];
+      const baseSettings =
+        currentList[0] && typeof currentList[0] === "object"
+          ? ({ ...currentList[0] } as Partial<AppSettings>)
+          : ({} as Partial<AppSettings>);
+
+      if (!String(baseSettings.googleSheetUrl || "").trim() && incomingUrl) {
+        baseSettings.googleSheetUrl = incomingUrl;
+        changed = true;
+      }
+      if (!String(baseSettings.reportGoogleSheetId || "").trim() && incomingSheetId) {
+        baseSettings.reportGoogleSheetId = incomingSheetId;
+        changed = true;
+      }
+      if (!baseSettings.reportSheetYear && incomingSettings.reportSheetYear) {
+        baseSettings.reportSheetYear = incomingSettings.reportSheetYear;
+        changed = true;
+      }
+
+      if (incomingByYear) {
+        const mergedByYear = { ...(baseSettings.reportGoogleSheetsByYear || {}) };
+        for (const [yr, cfg] of Object.entries(incomingByYear)) {
+          if (!cfg || (!String(cfg.url || "").trim() && !String(cfg.sheetId || "").trim())) {
+            continue;
+          }
+          const existingCfg = mergedByYear[yr];
+          const existingHas = Boolean(
+            existingCfg && (String(existingCfg.url || "").trim() || String(existingCfg.sheetId || "").trim())
+          );
+          if (!existingHas) {
+            mergedByYear[yr] = cfg;
+            changed = true;
+          }
+        }
+        if (changed) {
+          baseSettings.reportGoogleSheetsByYear = mergedByYear;
+        }
+      }
+
+      if (!changed) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+
+      await client.query(
+        `INSERT INTO app_buckets (bucket_key, items, item_count, updated_by_id, updated_by_name, updated_at_ms, updated_at)
+         VALUES ('settings', $1::jsonb, 1, 'SYS-SCHEDULER', 'Đồng bộ Cấu hình Sheet', $2, NOW())
+         ON CONFLICT (bucket_key)
+         DO UPDATE SET
+           items = EXCLUDED.items,
+           item_count = EXCLUDED.item_count,
+           updated_by_id = EXCLUDED.updated_by_id,
+           updated_by_name = EXCLUDED.updated_by_name,
+           updated_at_ms = EXCLUDED.updated_at_ms,
+           updated_at = NOW()`,
+        [JSON.stringify([baseSettings]), nowMs]
+      );
+      await syncNormalizedRowsFromBucketInTx(
+        client,
+        "settings",
+        [baseSettings as Record<string, unknown>],
+        "SYS-SCHEDULER",
+        "Đồng bộ Cấu hình Sheet",
+        nowMs,
+        true
+      );
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     broadcastPostgresChange(pool, {
       type: "bucket",

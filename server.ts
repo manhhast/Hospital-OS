@@ -39,7 +39,7 @@ const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "12mb" }));
+app.use(express.json({ limit: "24mb" }));
 registerPostgresSyncRoutes(app);
 registerScheduledAlertRoutes(app);
 

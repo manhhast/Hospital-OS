@@ -6,12 +6,16 @@ import {
 } from 'lucide-react';
 import { medicalSearchEngine, SearchResultItem, SearchCategory, removeVietnameseTones } from '../../services/searchService';
 
+import { postgresSyncService } from '../../services/postgresSyncService';
+
 interface GlobalSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (module: string, targetId?: string, extraData?: any) => void;
   initialQuery?: string;
 }
+
+const DEFAULT_RECENT_SEARCHES = ['SOP', 'ISO 15189', 'MRI 3.0 Tesla', 'MSCT 128', 'Kiểm chuẩn'];
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   isOpen,
@@ -23,11 +27,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const [activeCategory, setActiveCategory] = useState<SearchCategory>('all');
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    if (postgresSyncService.isActiveBackend()) {
+      const srv = postgresSyncService.getPreference<string[]>('recent_searches');
+      return Array.isArray(srv) ? srv : DEFAULT_RECENT_SEARCHES;
+    }
     try {
       const saved = localStorage.getItem('cls_recent_searches');
-      return saved ? JSON.parse(saved) : ['SOP', 'ISO 15189', 'MRI 3.0 Tesla', 'MSCT 128', 'Kiểm chuẩn'];
+      return saved ? JSON.parse(saved) : DEFAULT_RECENT_SEARCHES;
     } catch {
-      return ['SOP', 'ISO 15189', 'MRI 3.0 Tesla', 'MSCT 128', 'Kiểm chuẩn'];
+      return DEFAULT_RECENT_SEARCHES;
     }
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -35,11 +43,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const resultListRef = useRef<HTMLDivElement>(null);
 
-  // Sync initial query when opened
+  // Sync initial query and server preferences when opened
   useEffect(() => {
     if (isOpen) {
       setQuery(initialQuery);
       setSelectedIndex(0);
+      if (postgresSyncService.isActiveBackend()) {
+        const srv = postgresSyncService.getPreference<string[]>('recent_searches');
+        if (Array.isArray(srv)) {
+          setRecentSearches(srv);
+        }
+      }
       setTimeout(() => {
         inputRef.current?.focus();
         inputRef.current?.select();
@@ -64,6 +78,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     if (!trimmed || trimmed.length < 2) return;
     const updated = [trimmed, ...recentSearches.filter(s => s.toLowerCase() !== trimmed.toLowerCase())].slice(0, 8);
     setRecentSearches(updated);
+    if (postgresSyncService.isActiveBackend()) {
+      void postgresSyncService.savePreference('recent_searches', updated);
+      return;
+    }
     try {
       localStorage.setItem('cls_recent_searches', JSON.stringify(updated));
     } catch (e) {
@@ -73,14 +91,30 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   const clearRecentSearches = () => {
     setRecentSearches([]);
-    localStorage.removeItem('cls_recent_searches');
+    if (postgresSyncService.isActiveBackend()) {
+      void postgresSyncService.savePreference('recent_searches', []);
+      return;
+    }
+    try {
+      localStorage.removeItem('cls_recent_searches');
+    } catch {
+      // ignore
+    }
   };
 
   const removeRecentSearchItem = (e: React.MouseEvent, item: string) => {
     e.stopPropagation();
     const updated = recentSearches.filter(s => s !== item);
     setRecentSearches(updated);
-    localStorage.setItem('cls_recent_searches', JSON.stringify(updated));
+    if (postgresSyncService.isActiveBackend()) {
+      void postgresSyncService.savePreference('recent_searches', updated);
+      return;
+    }
+    try {
+      localStorage.setItem('cls_recent_searches', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
   };
 
   // Handle Item Selection & Navigation

@@ -76,6 +76,138 @@ export const SINGLETON_OBJECT_BUCKETS: ReadonlyArray<CloudBucketKey> = [
   'equipment_duration_defaults'
 ];
 
+export interface EntityMutationOp {
+  op: 'upsert' | 'delete';
+  entityType: CloudBucketKey;
+  id: string;
+  record?: Record<string, unknown>;
+  expectedVersion?: number;
+}
+
+export interface ServerEntityChangeItem {
+  entityType: string;
+  id: string;
+  version: number;
+  updatedAtMs: number;
+  deletedAtMs: number | null;
+  record: Record<string, unknown> | null;
+}
+
+export function extractBucketRecordId(
+  bucketKey: CloudBucketKey,
+  record: Record<string, unknown>,
+  fallbackIdx = 0
+): string {
+  if (SINGLETON_OBJECT_BUCKETS.includes(bucketKey)) return 'default';
+  if (bucketKey === 'staff_profiles') {
+    const uid = typeof record.userId === 'string' ? record.userId.trim() : '';
+    if (uid) return uid;
+  }
+  const id = typeof record.id === 'string' ? record.id.trim() : '';
+  if (id) return id;
+  if (typeof record.userId === 'string' && record.userId.trim()) return record.userId.trim();
+  return `row-${fallbackIdx}`;
+}
+
+export function sanitizeRecordForCloud(
+  bucketKey: CloudBucketKey,
+  rec: Record<string, unknown>
+): Record<string, unknown> {
+  if (bucketKey === 'documents') {
+    const copy = { ...rec };
+    delete copy.rawFileData;
+    return copy;
+  }
+  return rec;
+}
+
+export function computeBucketSnapshotDiffOps(
+  bucketKey: CloudBucketKey,
+  prevSerialized: string,
+  nextSerialized: string,
+  entityVersions: ReadonlyMap<string, number> = new Map()
+): EntityMutationOp[] {
+  const ops: EntityMutationOp[] = [];
+  if (SINGLETON_OBJECT_BUCKETS.includes(bucketKey)) {
+    try {
+      const nextObj = nextSerialized ? JSON.parse(nextSerialized) : null;
+      if (nextObj && typeof nextObj === 'object' && !Array.isArray(nextObj)) {
+        ops.push({
+          op: 'upsert',
+          entityType: bucketKey,
+          id: 'default',
+          record: nextObj as Record<string, unknown>,
+          expectedVersion: entityVersions.get(`${bucketKey}:default`) || 0
+        });
+      }
+    } catch {
+      // ignore invalid json
+    }
+    return ops;
+  }
+
+  let prevList: Record<string, unknown>[] = [];
+  let nextList: Record<string, unknown>[] = [];
+  try {
+    const p = prevSerialized ? JSON.parse(prevSerialized) : [];
+    if (Array.isArray(p)) prevList = p;
+  } catch {
+    prevList = [];
+  }
+  try {
+    const n = nextSerialized ? JSON.parse(nextSerialized) : [];
+    if (Array.isArray(n)) nextList = n;
+  } catch {
+    nextList = [];
+  }
+
+  const prevMap = new Map<string, { raw: string; rec: Record<string, unknown> }>();
+  prevList.forEach((rawRec, idx) => {
+    if (!rawRec || typeof rawRec !== 'object') return;
+    const rec = sanitizeRecordForCloud(bucketKey, rawRec);
+    const id = extractBucketRecordId(bucketKey, rec, idx);
+    prevMap.set(id, { raw: JSON.stringify(rec), rec });
+  });
+
+  const nextMap = new Map<string, { raw: string; rec: Record<string, unknown> }>();
+  nextList.forEach((rawRec, idx) => {
+    if (!rawRec || typeof rawRec !== 'object') return;
+    const rec = sanitizeRecordForCloud(bucketKey, rawRec);
+    const id = extractBucketRecordId(bucketKey, rec, idx);
+    nextMap.set(id, { raw: JSON.stringify(rec), rec });
+  });
+
+  for (const [id, nextEntry] of nextMap.entries()) {
+    const prevEntry = prevMap.get(id);
+    if (!prevEntry || prevEntry.raw !== nextEntry.raw) {
+      ops.push({
+        op: 'upsert',
+        entityType: bucketKey,
+        id,
+        record: nextEntry.rec,
+        expectedVersion: entityVersions.get(`${bucketKey}:${id}`) || 0
+      });
+    }
+  }
+
+  for (const id of prevMap.keys()) {
+    if (!nextMap.has(id)) {
+      ops.push({
+        op: 'delete',
+        entityType: bucketKey,
+        id,
+        expectedVersion: entityVersions.get(`${bucketKey}:${id}`) || 0
+      });
+    }
+  }
+
+  return ops;
+}
+
+const STORAGE_KEY_TO_BUCKET: Record<string, CloudBucketKey> = Object.fromEntries(
+  (Object.entries(CLOUD_BUCKET_STORAGE_MAP) as [CloudBucketKey, string][]).map(([bucket, sKey]) => [sKey, bucket])
+);
+
 const DEFAULT_DEPARTMENTS: DepartmentUnit[] = [
   {
     id: 'DEPT-CDHA',
@@ -110,8 +242,12 @@ class HospitalStorageService {
   private listeners: Array<() => void> = [];
   private idSeq = 0;
   private isApplyingRemote = false;
+  private serverModeEnabled = false;
+  private memoryBuckets: Partial<Record<CloudBucketKey, string>> = {};
+  private entityVersions = new Map<string, number>();
   private lastBucketSnapshots: Partial<Record<CloudBucketKey, string>> = {};
   private cloudBucketChangeHandler: ((bucketKey: CloudBucketKey) => void) | null = null;
+  private cloudMutationsHandler: ((ops: EntityMutationOp[]) => void) | null = null;
   private isCloudSyncedChecker: (() => boolean) | null = null;
   private dirtyBucketTimestamps: Partial<Record<CloudBucketKey, number>> = {};
   private sessionAuthenticated = false;
@@ -191,7 +327,114 @@ class HospitalStorageService {
     this.dirtyBucketTimestamps = {};
   }
 
+  public setServerMode(enabled: boolean) {
+    this.serverModeEnabled = enabled;
+    if (enabled) {
+      // Seed memory buckets from any untouched defaults so pre-login screens remain consistent
+      (Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]).forEach((bucketKey) => {
+        if (this.memoryBuckets[bucketKey] === undefined) {
+          this.memoryBuckets[bucketKey] = this.getDefaultSerializedBucket(bucketKey);
+        }
+      });
+    }
+  }
+
+  public isServerMode(): boolean {
+    return this.serverModeEnabled;
+  }
+
+  private getDefaultSerializedBucket(bucketKey: CloudBucketKey): string {
+    switch (bucketKey) {
+      case 'tasks': return JSON.stringify(initialTasks);
+      case 'documents': return JSON.stringify(initialDocuments);
+      case 'users': return JSON.stringify(initialUsers);
+      case 'notifications': return JSON.stringify(initialNotifications);
+      case 'audit_logs': return JSON.stringify(initialAuditLogs);
+      case 'settings': return JSON.stringify(initialSettings);
+      case 'shifts': return JSON.stringify(initialShifts);
+      case 'work_task_rows': return JSON.stringify(initialWorkTaskRows);
+      case 'meetings': return JSON.stringify(initialWeeklyMeetings);
+      case 'messages': return JSON.stringify(initialChatMessages);
+      case 'channels': return JSON.stringify(initialChannels);
+      case 'announcements': return JSON.stringify(initialAnnouncements);
+      case 'equipment': return JSON.stringify(initialEquipment);
+      case 'departments': return JSON.stringify(DEFAULT_DEPARTMENTS);
+      case 'rooms': return JSON.stringify(initialRooms);
+      case 'equipment_duration_defaults':
+        return JSON.stringify({ permitMonths: 60, calibrationMonths: 12, radiationSurveyMonths: 12, maintenanceMonths: 3 });
+      case 'staff_profiles': return JSON.stringify(initialStaffProfiles);
+      case 'leave_requests': return JSON.stringify(initialLeaveRequests);
+      case 'training_courses': return JSON.stringify(initialTrainingCourses);
+      case 'meeting_items': return JSON.stringify(initialMeetings);
+      case 'integration_endpoints': return JSON.stringify(initialIntegrationEndpoints);
+      case 'integration_payloads': return JSON.stringify(initialIntegrationPayloads);
+      case 'sync_history': return '[]';
+      default: return '[]';
+    }
+  }
+
+  public clearLegacyLocalStorageBuckets(): void {
+    try {
+      Object.values(STORAGE_KEYS).forEach((k) => {
+        localStorage.removeItem(k);
+      });
+      localStorage.removeItem(DIRTY_BUCKETS_KEY);
+      localStorage.removeItem(PRODUCTION_MODE_KEY);
+      localStorage.removeItem('cls_workhub_pg_session_token_v1');
+      localStorage.removeItem('cls_recent_searches');
+      localStorage.removeItem('cls_pinned_clinical_services_v1');
+      localStorage.removeItem('cls_task_reminder_logs');
+      localStorage.removeItem('cls_equipment_reminder_logs');
+      localStorage.removeItem('google_sheet_url');
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (
+          key &&
+          (key.startsWith('google_sheet_data_') ||
+            key.startsWith('cls_workhub_quick_access_pins_v1_'))
+        ) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // ignore storage access errors
+    }
+  }
+
+  public readBucketRaw(storageKey: string): string | null {
+    const bucketKey = STORAGE_KEY_TO_BUCKET[storageKey];
+    if (this.serverModeEnabled && bucketKey) {
+      const val = this.memoryBuckets[bucketKey];
+      return val !== undefined ? val : null;
+    }
+    try {
+      return localStorage.getItem(storageKey);
+    } catch {
+      return null;
+    }
+  }
+
+  public writeBucketRaw(storageKey: string, value: string): void {
+    if (storageKey === STORAGE_KEYS.CURRENT_USER) {
+      if (!this.serverModeEnabled) {
+        try {
+          localStorage.setItem(storageKey, value);
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
+    const bucketKey = STORAGE_KEY_TO_BUCKET[storageKey];
+    if (this.serverModeEnabled && bucketKey) {
+      this.memoryBuckets[bucketKey] = value;
+      return;
+    }
+    this.safeSetItem(storageKey, value);
+  }
+
   private saveDirtyBucketTimestamps() {
+    if (this.serverModeEnabled) return;
     try {
       localStorage.setItem(DIRTY_BUCKETS_KEY, JSON.stringify(this.dirtyBucketTimestamps));
     } catch {
@@ -200,6 +443,7 @@ class HospitalStorageService {
   }
 
   public markBucketDirty(bucketKey: CloudBucketKey, timestampMs = Date.now()) {
+    if (this.serverModeEnabled) return;
     this.dirtyBucketTimestamps[bucketKey] = timestampMs;
     this.saveDirtyBucketTimestamps();
   }
@@ -217,7 +461,7 @@ class HospitalStorageService {
   }
 
   public getDirtyBucketTimestamps(): Partial<Record<CloudBucketKey, number>> {
-    return { ...this.dirtyBucketTimestamps };
+    return this.serverModeEnabled ? {} : { ...this.dirtyBucketTimestamps };
   }
 
   public getIsApplyingRemote(): boolean {
@@ -231,16 +475,42 @@ class HospitalStorageService {
   private captureCurrentBucketSnapshots() {
     (Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]).forEach((bucketKey) => {
       const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
-      try {
-        this.lastBucketSnapshots[bucketKey] = localStorage.getItem(storageKey) || '';
-      } catch {
-        this.lastBucketSnapshots[bucketKey] = '';
-      }
+      this.lastBucketSnapshots[bucketKey] = this.readBucketRaw(storageKey) || '';
     });
   }
 
   public registerCloudBucketChangeHandler(handler: ((bucketKey: CloudBucketKey) => void) | null) {
     this.cloudBucketChangeHandler = handler;
+  }
+
+  public registerCloudMutationsHandler(handler: ((ops: EntityMutationOp[]) => void) | null) {
+    this.cloudMutationsHandler = handler;
+  }
+
+  public getEntityVersion(entityType: CloudBucketKey, recordId: string): number {
+    return this.entityVersions.get(`${entityType}:${recordId}`) || 0;
+  }
+
+  public setEntityVersions(versionMap: Record<string, number> | undefined | null) {
+    if (!versionMap || typeof versionMap !== 'object') return;
+    for (const [key, ver] of Object.entries(versionMap)) {
+      if (typeof ver === 'number' && ver > 0) {
+        this.entityVersions.set(key, ver);
+      }
+    }
+  }
+
+  public updateEntityVersionsFromResults(
+    results: Array<{ entityType: string; id: string; op: 'upsert' | 'delete'; version: number }>
+  ) {
+    for (const r of results) {
+      const key = `${r.entityType}:${r.id}`;
+      if (r.op === 'delete') {
+        this.entityVersions.delete(key);
+      } else if (typeof r.version === 'number' && r.version > 0) {
+        this.entityVersions.set(key, r.version);
+      }
+    }
   }
 
   public isUntouchedSeedData(
@@ -375,7 +645,7 @@ class HospitalStorageService {
     const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
     let parsed: unknown = null;
     try {
-      const raw = localStorage.getItem(storageKey);
+      const raw = this.readBucketRaw(storageKey);
       if (raw) {
         parsed = JSON.parse(raw);
       }
@@ -400,7 +670,7 @@ class HospitalStorageService {
 
     if (Array.isArray(parsed)) {
       if (bucketKey === 'documents') {
-        // Keep SOP/ISO document files stored on Google Drive; only metadata & Drive link go to database
+        // Keep binary files in PostgreSQL / Google Drive; only metadata & links go to documents table
         return parsed.slice(0, 1000).map((doc: any) => {
           const copy = { ...doc };
           delete copy.rawFileData;
@@ -435,7 +705,7 @@ class HospitalStorageService {
 
     this.isApplyingRemote = true;
     try {
-      this.safeSetItem(storageKey, serialized);
+      this.writeBucketRaw(storageKey, serialized);
       this.lastBucketSnapshots[bucketKey] = serialized;
       this.clearBucketDirty(bucketKey);
       // Keep in-memory currentUser synced when users bucket updates remotely
@@ -452,6 +722,176 @@ class HospitalStorageService {
     }
   }
 
+  public applyServerInitialState(
+    remoteBuckets: Record<string, { items: Record<string, unknown>[] }>,
+    versions?: Record<string, number>,
+    sessionUserId?: string
+  ): void {
+    this.setServerMode(true);
+    this.clearLegacyLocalStorageBuckets();
+    if (versions) {
+      this.entityVersions.clear();
+      this.setEntityVersions(versions);
+    }
+
+    const hasRemoteData = Object.keys(remoteBuckets).length > 0;
+    this.isApplyingRemote = true;
+    try {
+      (Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]).forEach((bucketKey) => {
+        const remote = remoteBuckets[bucketKey];
+        let serialized: string;
+        if (remote && Array.isArray(remote.items)) {
+          if (SINGLETON_OBJECT_BUCKETS.includes(bucketKey)) {
+            serialized =
+              remote.items[0] && typeof remote.items[0] === 'object'
+                ? JSON.stringify(remote.items[0])
+                : this.getDefaultSerializedBucket(bucketKey);
+          } else {
+            serialized = JSON.stringify(remote.items);
+          }
+        } else if (!hasRemoteData) {
+          serialized = this.getDefaultSerializedBucket(bucketKey);
+        } else {
+          serialized = SINGLETON_OBJECT_BUCKETS.includes(bucketKey)
+            ? this.getDefaultSerializedBucket(bucketKey)
+            : '[]';
+        }
+        this.memoryBuckets[bucketKey] = serialized;
+        this.lastBucketSnapshots[bucketKey] = serialized;
+      });
+
+      if (sessionUserId) {
+        const users = this.getUsers();
+        const matched = users.find((u) => u.id === sessionUserId);
+        if (matched) {
+          this.currentUser = matched;
+        }
+      } else {
+        const users = this.getUsers();
+        const matched = users.find((u) => u.id === this.currentUser.id);
+        if (matched) {
+          this.currentUser = matched;
+        }
+      }
+
+      this.notify();
+    } finally {
+      this.isApplyingRemote = false;
+    }
+  }
+
+  public applyServerEntityChanges(changes: ServerEntityChangeItem[]): boolean {
+    if (!Array.isArray(changes) || changes.length === 0) return false;
+    const grouped = new Map<CloudBucketKey, ServerEntityChangeItem[]>();
+    for (const c of changes) {
+      const bKey = c.entityType as CloudBucketKey;
+      if (!CLOUD_BUCKET_STORAGE_MAP[bKey]) continue;
+      if (!grouped.has(bKey)) grouped.set(bKey, []);
+      grouped.get(bKey)!.push(c);
+    }
+    if (grouped.size === 0) return false;
+
+    let anyChanged = false;
+    this.isApplyingRemote = true;
+    try {
+      for (const [bucketKey, itemChanges] of grouped.entries()) {
+        if (SINGLETON_OBJECT_BUCKETS.includes(bucketKey)) {
+          const latest = itemChanges[itemChanges.length - 1];
+          if (latest) {
+            this.entityVersions.set(`${bucketKey}:${latest.id}`, latest.version);
+            if (!latest.deletedAtMs && latest.record) {
+              const serialized = JSON.stringify(latest.record);
+              if (this.lastBucketSnapshots[bucketKey] !== serialized) {
+                this.writeBucketRaw(CLOUD_BUCKET_STORAGE_MAP[bucketKey], serialized);
+                this.lastBucketSnapshots[bucketKey] = serialized;
+                anyChanged = true;
+              }
+            }
+          }
+          continue;
+        }
+
+        let currentList: Record<string, unknown>[] = [];
+        try {
+          const raw = this.readBucketRaw(CLOUD_BUCKET_STORAGE_MAP[bucketKey]);
+          const parsed = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(parsed)) currentList = parsed;
+        } catch {
+          currentList = [];
+        }
+
+        const nextList = [...currentList];
+        for (const ch of itemChanges) {
+          const verKey = `${bucketKey}:${ch.id}`;
+          if (ch.deletedAtMs) {
+            this.entityVersions.delete(verKey);
+            const idx = nextList.findIndex(
+              (row, i) => extractBucketRecordId(bucketKey, row, i) === ch.id
+            );
+            if (idx >= 0) {
+              nextList.splice(idx, 1);
+              anyChanged = true;
+            }
+          } else if (ch.record) {
+            this.entityVersions.set(verKey, ch.version);
+            const idx = nextList.findIndex(
+              (row, i) => extractBucketRecordId(bucketKey, row, i) === ch.id
+            );
+            if (idx >= 0) {
+              if (JSON.stringify(nextList[idx]) !== JSON.stringify(ch.record)) {
+                nextList[idx] = ch.record;
+                anyChanged = true;
+              }
+            } else {
+              if (
+                bucketKey === 'audit_logs' ||
+                bucketKey === 'notifications' ||
+                bucketKey === 'sync_history' ||
+                bucketKey === 'announcements'
+              ) {
+                nextList.unshift(ch.record);
+              } else {
+                nextList.push(ch.record);
+              }
+              anyChanged = true;
+            }
+          }
+        }
+
+        const serialized = JSON.stringify(nextList);
+        this.writeBucketRaw(CLOUD_BUCKET_STORAGE_MAP[bucketKey], serialized);
+        this.lastBucketSnapshots[bucketKey] = serialized;
+      }
+
+      if (grouped.has('users') || grouped.has('staff_profiles')) {
+        const users = this.getUsers();
+        const found = users.find((u) => u.id === this.currentUser.id);
+        if (found) {
+          this.currentUser = found;
+        }
+      }
+      if (anyChanged) {
+        this.notify();
+      }
+    } finally {
+      this.isApplyingRemote = false;
+    }
+    return anyChanged;
+  }
+
+  private diffBucketSnapshotsToOps(
+    bucketKey: CloudBucketKey,
+    prevSerialized: string,
+    nextSerialized: string
+  ): EntityMutationOp[] {
+    return computeBucketSnapshotDiffOps(
+      bucketKey,
+      prevSerialized,
+      nextSerialized,
+      this.entityVersions
+    );
+  }
+
   public subscribe(listener: () => void) {
     this.listeners.push(listener);
     return () => {
@@ -462,16 +902,21 @@ class HospitalStorageService {
   private notify() {
     if (!this.isApplyingRemote) {
       const cloudSynced = this.isCloudSyncedChecker ? this.isCloudSyncedChecker() : false;
+      const collectedOps: EntityMutationOp[] = [];
       (Object.keys(CLOUD_BUCKET_STORAGE_MAP) as CloudBucketKey[]).forEach((bucketKey) => {
         const storageKey = CLOUD_BUCKET_STORAGE_MAP[bucketKey];
         try {
-          const current = localStorage.getItem(storageKey) || '';
-          if (current !== (this.lastBucketSnapshots[bucketKey] ?? '')) {
+          const current = this.readBucketRaw(storageKey) || '';
+          const prev = this.lastBucketSnapshots[bucketKey] ?? '';
+          if (current !== prev) {
             this.lastBucketSnapshots[bucketKey] = current;
-            if (cloudSynced && this.cloudBucketChangeHandler) {
-              this.cloudBucketChangeHandler(bucketKey);
-            } else {
-              // Mark offline dirty modification unless audit_logs was auto-logged by a read/init
+            if (cloudSynced) {
+              if (this.cloudMutationsHandler) {
+                collectedOps.push(...this.diffBucketSnapshotsToOps(bucketKey, prev, current));
+              } else if (this.cloudBucketChangeHandler) {
+                this.cloudBucketChangeHandler(bucketKey);
+              }
+            } else if (!this.serverModeEnabled) {
               const items = this.getBucketItemsForCloud(bucketKey);
               if (!this.isUntouchedSeedData(bucketKey, items)) {
                 this.markBucketDirty(bucketKey);
@@ -482,11 +927,15 @@ class HospitalStorageService {
           // ignore read errors
         }
       });
+      if (cloudSynced && this.cloudMutationsHandler && collectedOps.length > 0) {
+        this.cloudMutationsHandler(collectedOps);
+      }
     }
     this.listeners.forEach(listener => listener());
   }
 
   private initDefaultData() {
+    if (typeof localStorage === 'undefined') return;
     // Tự động dọn sạch toàn bộ dữ liệu dùng thử cũ (nếu có trên trình duyệt) để đưa vào áp dụng thực tế
     if (localStorage.getItem(PRODUCTION_MODE_KEY) !== 'true') {
       this.purgeAllTrialData();
@@ -611,7 +1060,7 @@ class HospitalStorageService {
   // --- Shifts (Lịch trực & Lịch làm việc) ---
   public getShifts(): ShiftDuty[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.SHIFTS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.SHIFTS);
       const list: ShiftDuty[] = raw ? JSON.parse(raw) : initialShifts;
       const seen = new Set<string>();
       return list.filter(item => {
@@ -632,7 +1081,7 @@ class HospitalStorageService {
     } else {
       shifts.unshift(shift);
     }
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
     this.logAudit('SAVE_SHIFT', 'Shift', undefined, shift);
     this.notify();
     return shift;
@@ -644,7 +1093,7 @@ class HospitalStorageService {
     if (!target) return false;
 
     const filtered = shifts.filter(s => s.id !== shiftId);
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(filtered));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(filtered));
     this.logAudit('DELETE_SHIFT', 'Shift', target, undefined);
     this.notify();
     return true;
@@ -681,7 +1130,7 @@ class HospitalStorageService {
     };
 
     shifts.unshift(duplicated);
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
     this.logAudit('DUPLICATE_SHIFT', 'Shift', target, duplicated);
     this.notify();
     return duplicated;
@@ -716,7 +1165,7 @@ class HospitalStorageService {
       swapRequest: swapReq
     };
 
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
     this.logAudit('REQUEST_SHIFT_SWAP', 'Shift', currentShift, swapReq);
     this.notify();
     return true;
@@ -751,7 +1200,7 @@ class HospitalStorageService {
       swapRequest: updatedSwap
     };
 
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
     this.logAudit('APPROVE_SHIFT_SWAP', 'Shift', currentShift, shifts[idx]);
     this.notify();
     return true;
@@ -775,7 +1224,7 @@ class HospitalStorageService {
       }
     };
 
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
     this.logAudit('REJECT_SHIFT_SWAP', 'Shift', currentShift, shifts[idx]);
     this.notify();
     return true;
@@ -784,7 +1233,7 @@ class HospitalStorageService {
   // --- Work Task Rows (Danh Mục / Tên Công Việc Hàng Tuần) ---
   public getWorkTaskRows(): WorkTaskRow[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.WORK_TASK_ROWS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.WORK_TASK_ROWS);
       return raw ? JSON.parse(raw) : initialWorkTaskRows;
     } catch (e) {
       return initialWorkTaskRows;
@@ -799,7 +1248,7 @@ class HospitalStorageService {
     } else {
       rows.push(row);
     }
-    localStorage.setItem(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(rows));
+    this.writeBucketRaw(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(rows));
     this.logAudit('SAVE_WORK_TASK_ROW', 'Setting', undefined, row);
     this.notify();
     return row;
@@ -808,14 +1257,14 @@ class HospitalStorageService {
   public deleteWorkTaskRow(rowId: string): boolean {
     const rows = this.getWorkTaskRows();
     const filtered = rows.filter(r => r.id !== rowId);
-    localStorage.setItem(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(filtered));
+    this.writeBucketRaw(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(filtered));
     this.logAudit('DELETE_WORK_TASK_ROW', 'Setting', { id: rowId }, undefined);
     this.notify();
     return true;
   }
 
   public resetWorkTaskRows(): WorkTaskRow[] {
-    localStorage.setItem(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(initialWorkTaskRows));
+    this.writeBucketRaw(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(initialWorkTaskRows));
     this.notify();
     return initialWorkTaskRows;
   }
@@ -865,7 +1314,7 @@ class HospitalStorageService {
       }
     }
 
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(shifts));
     this.notify();
     return {
       newWeekMonday: nextMonday.toISOString().split('T')[0],
@@ -876,7 +1325,7 @@ class HospitalStorageService {
   // --- Weekly Meetings & Plans (Lịch họp & Kế hoạch tuần) ---
   public getMeetings(): WeeklyMeeting[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.MEETINGS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.MEETINGS);
       return raw ? JSON.parse(raw) : initialWeeklyMeetings;
     } catch (e) {
       return initialWeeklyMeetings;
@@ -891,7 +1340,7 @@ class HospitalStorageService {
     } else {
       meetings.unshift(meeting);
     }
-    localStorage.setItem(STORAGE_KEYS.MEETINGS, JSON.stringify(meetings));
+    this.writeBucketRaw(STORAGE_KEYS.MEETINGS, JSON.stringify(meetings));
     this.logAudit('SAVE_MEETING', 'Task', undefined, meeting);
     this.notify();
     return meeting;
@@ -900,7 +1349,7 @@ class HospitalStorageService {
   // --- Chat Channels & Groups ---
   public getChannels(): ChatGroupChannel[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.CHANNELS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.CHANNELS);
       return raw ? JSON.parse(raw) : initialChannels;
     } catch (e) {
       return initialChannels;
@@ -916,7 +1365,7 @@ class HospitalStorageService {
       channels.push(channel);
       this.logAudit('CREATE_CHAT_GROUP', 'System', undefined, { id: channel.id, name: channel.name });
     }
-    localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(channels));
+    this.writeBucketRaw(STORAGE_KEYS.CHANNELS, JSON.stringify(channels));
     this.notify();
     return channel;
   }
@@ -924,7 +1373,7 @@ class HospitalStorageService {
   public deleteChannel(channelId: string): boolean {
     const channels = this.getChannels();
     const filtered = channels.filter(c => c.id !== channelId);
-    localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(filtered));
+    this.writeBucketRaw(STORAGE_KEYS.CHANNELS, JSON.stringify(filtered));
     this.logAudit('DELETE_CHAT_GROUP', 'System', { channelId });
     this.notify();
     return true;
@@ -933,7 +1382,7 @@ class HospitalStorageService {
   // --- Department Announcements ---
   public getAnnouncements(): DepartmentAnnouncement[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.ANNOUNCEMENTS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.ANNOUNCEMENTS);
       return raw ? JSON.parse(raw) : initialAnnouncements;
     } catch (e) {
       return initialAnnouncements;
@@ -949,7 +1398,7 @@ class HospitalStorageService {
       announcements.unshift(announcement);
       this.logAudit('CREATE_ANNOUNCEMENT', 'System', undefined, announcement);
     }
-    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
+    this.writeBucketRaw(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
     this.notify();
     return announcement;
   }
@@ -957,7 +1406,7 @@ class HospitalStorageService {
   // --- Chat Messages (Direct & Group) ---
   public getChatMessages(): ChatChannelMessage[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.MESSAGES);
+      const raw = this.readBucketRaw(STORAGE_KEYS.MESSAGES);
       return raw ? JSON.parse(raw) : initialChatMessages;
     } catch (e) {
       return initialChatMessages;
@@ -1005,7 +1454,7 @@ class HospitalStorageService {
     };
 
     msgs.push(newMsg);
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
     this.logAudit('SEND_CHAT_MESSAGE', 'System', undefined, { id: newMsg.id, channelId: params.channelId, dmUserId: params.dmUserId });
     this.notify();
     return newMsg;
@@ -1043,7 +1492,7 @@ class HospitalStorageService {
     }
 
     msgs[idx] = { ...msg, reactions };
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
     this.notify();
   }
 
@@ -1053,7 +1502,7 @@ class HospitalStorageService {
     if (idx < 0) return;
 
     msgs[idx] = { ...msgs[idx], isPinned: !msgs[idx].isPinned };
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
     this.logAudit('TOGGLE_PIN_MESSAGE', 'System', undefined, { messageId, isPinned: msgs[idx].isPinned });
     this.notify();
   }
@@ -1064,7 +1513,7 @@ class HospitalStorageService {
     if (idx < 0) return;
 
     msgs[idx] = { ...msgs[idx], isSaved: !msgs[idx].isSaved };
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
     this.notify();
   }
 
@@ -1084,7 +1533,7 @@ class HospitalStorageService {
       editHistory: history
     };
 
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
     this.logAudit('EDIT_CHAT_MESSAGE', 'System', { old: msg.content }, { new: newContent });
     this.notify();
   }
@@ -1100,7 +1549,7 @@ class HospitalStorageService {
       isDeleted: true
     };
 
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
     this.logAudit('DELETE_CHAT_MESSAGE', 'System', { messageId });
     this.notify();
   }
@@ -1124,7 +1573,7 @@ class HospitalStorageService {
     });
 
     msgs[idx] = { ...msg, replies };
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(msgs));
     this.notify();
   }
 
@@ -1136,7 +1585,7 @@ class HospitalStorageService {
       }
       return m;
     });
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(updated));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(updated));
     this.notify();
   }
 
@@ -1169,18 +1618,23 @@ class HospitalStorageService {
       };
     }
     this.currentUser = user;
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, user.id);
+    this.writeBucketRaw(STORAGE_KEYS.CURRENT_USER, user.id);
     this.notify();
   }
 
   // --- Safe LocalStorage Wrapper to Prevent QuotaExceededError ---
   public safeSetItem(key: string, value: string): void {
+    const bucketKey = STORAGE_KEY_TO_BUCKET[key];
+    if (this.serverModeEnabled && bucketKey) {
+      this.memoryBuckets[bucketKey] = value;
+      return;
+    }
     try {
       localStorage.setItem(key, value);
     } catch (e) {
       console.warn(`[StorageService] Dung lượng lưu trữ đầy đối với "${key}", đang tự động tối ưu hóa...`, e);
       try {
-        // Tự động thu gọn nhật ký để giải phóng dung lượng ngay lập tức
+        // Tự động thu gọn nhật ký để giải phóng dung lượng ngay lập tức (chỉ khi không dùng PostgreSQL)
         localStorage.removeItem(STORAGE_KEYS.AUDIT_LOGS);
         localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
         localStorage.setItem(key, value);
@@ -1255,7 +1709,7 @@ class HospitalStorageService {
 
   public getAuditLogs(): AuditLogItem[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.AUDIT_LOGS);
       const parsed: AuditLogItem[] = raw ? JSON.parse(raw) : [];
       return this.ensureUniqueIds(Array.isArray(parsed) ? parsed : []);
     } catch (e) {
@@ -1266,7 +1720,7 @@ class HospitalStorageService {
   // --- Tasks CRUD & Operations ---
   public getTasks(): TaskItem[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.TASKS);
       return raw ? JSON.parse(raw) : [];
     } catch (e) {
       return initialTasks;
@@ -1296,7 +1750,7 @@ class HospitalStorageService {
       this.logAudit('CREATE_TASK', 'Task', undefined, updatedTask);
     }
 
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    this.writeBucketRaw(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
     this.notify();
     return updatedTask;
   }
@@ -1307,7 +1761,7 @@ class HospitalStorageService {
     if (!target) return false;
 
     const filtered = tasks.filter(t => t.id !== taskId);
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(filtered));
+    this.writeBucketRaw(STORAGE_KEYS.TASKS, JSON.stringify(filtered));
     this.logAudit('DELETE_TASK', 'Task', target, undefined);
     this.notify();
     return true;
@@ -1318,7 +1772,7 @@ class HospitalStorageService {
     const toDelete = tasks.filter(t => taskIds.includes(t.id));
     const remaining = tasks.filter(t => !taskIds.includes(t.id));
 
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(remaining));
+    this.writeBucketRaw(STORAGE_KEYS.TASKS, JSON.stringify(remaining));
     this.logAudit(`BULK_DELETE_TASKS (${taskIds.length})`, 'Task', toDelete, undefined);
     this.notify();
     return toDelete.length;
@@ -1335,7 +1789,7 @@ class HospitalStorageService {
       return t;
     });
 
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(updated));
+    this.writeBucketRaw(STORAGE_KEYS.TASKS, JSON.stringify(updated));
     this.logAudit(`BULK_COMPLETE_TASKS (${count})`, 'Task', undefined, { completedIds: taskIds });
     this.notify();
     return count;
@@ -1359,7 +1813,7 @@ class HospitalStorageService {
     };
 
     tasks.unshift(duplicated);
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    this.writeBucketRaw(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
     this.logAudit('DUPLICATE_TASK', 'Task', target, duplicated);
     this.notify();
     return duplicated;
@@ -1368,7 +1822,7 @@ class HospitalStorageService {
   // --- Documents CRUD & Operations ---
   public getDocuments(): DocumentItem[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.DOCUMENTS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.DOCUMENTS);
       if (raw === null) {
         return initialDocuments;
       }
@@ -1496,7 +1950,7 @@ class HospitalStorageService {
   // --- Notifications Log ---
   public getNotifications(): NotificationLog[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.NOTIFICATIONS);
       const parsed: NotificationLog[] = raw ? JSON.parse(raw) : [];
       return this.ensureUniqueIds(Array.isArray(parsed) ? parsed : []);
     } catch (e) {
@@ -1512,7 +1966,7 @@ class HospitalStorageService {
       sentAt: new Date().toLocaleString('sv-SE').replace('T', ' ').slice(0, 16)
     };
     logs.unshift(newNotif);
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(logs));
+    this.writeBucketRaw(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(logs));
     this.logAudit(`SEND_NOTIFICATION_${notif.channel.toUpperCase()}`, 'System', undefined, newNotif);
     this.notify();
     return newNotif;
@@ -1535,7 +1989,7 @@ class HospitalStorageService {
   // --- Settings ---
   public getSettings(): AppSettings {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.SETTINGS);
       return raw ? JSON.parse(raw) : initialSettings;
     } catch (e) {
       return initialSettings;
@@ -1544,7 +1998,7 @@ class HospitalStorageService {
 
   public saveSettings(settings: AppSettings) {
     const old = this.getSettings();
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    this.writeBucketRaw(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     this.logAudit('UPDATE_SETTINGS', 'Setting', old, settings);
     this.notify();
   }
@@ -1588,7 +2042,7 @@ class HospitalStorageService {
       next = [created, ...current].slice(0, 60);
     }
 
-    localStorage.setItem(
+    this.writeBucketRaw(
       STORAGE_KEYS.SETTINGS,
       JSON.stringify({ ...settings, assistantMemories: next })
     );
@@ -1600,7 +2054,7 @@ class HospitalStorageService {
     const settings = this.getSettings();
     const current = Array.isArray(settings.assistantMemories) ? settings.assistantMemories : [];
     const next = current.filter((m) => m.id !== id);
-    localStorage.setItem(
+    this.writeBucketRaw(
       STORAGE_KEYS.SETTINGS,
       JSON.stringify({ ...settings, assistantMemories: next })
     );
@@ -1610,7 +2064,7 @@ class HospitalStorageService {
 
   public clearAssistantMemories(): void {
     const settings = this.getSettings();
-    localStorage.setItem(
+    this.writeBucketRaw(
       STORAGE_KEYS.SETTINGS,
       JSON.stringify({ ...settings, assistantMemories: [] })
     );
@@ -1697,7 +2151,7 @@ class HospitalStorageService {
       resetRequestNote: undefined
     };
 
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(users));
     if (this.currentUser.id === userId) {
       this.currentUser = users[idx];
     }
@@ -1719,7 +2173,7 @@ class HospitalStorageService {
       resetRequestNote: note || 'Yêu cầu khôi phục mật khẩu từ trang đăng nhập'
     };
 
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(users));
     this.logAudit('REQUEST_PASSWORD_RESET', 'User', undefined, { email, note });
     this.notify();
     return { success: true, message: 'Đã gửi yêu cầu reset mật khẩu tới Admin. Vui lòng liên hệ Admin để nhận mật khẩu mới.' };
@@ -1739,7 +2193,7 @@ class HospitalStorageService {
       resetRequestNote: undefined
     };
 
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(users));
     if (this.currentUser.id === userId) {
       this.currentUser = users[idx];
     }
@@ -1755,11 +2209,11 @@ class HospitalStorageService {
   // --- Users List ---
   public getUsers(): User[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.USERS);
       const users: User[] = raw ? JSON.parse(raw) : [...initialUsers];
 
       // Merge with staff profiles if present so all hospital personnel can log in
-      const staffRaw = localStorage.getItem(STORAGE_KEYS.STAFF_PROFILES);
+      const staffRaw = this.readBucketRaw(STORAGE_KEYS.STAFF_PROFILES);
       if (staffRaw) {
         const staffList: StaffProfile[] = JSON.parse(staffRaw);
         for (const s of staffList) {
@@ -1833,7 +2287,7 @@ class HospitalStorageService {
     } else {
       users.push(user);
     }
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(users));
 
     // Sync RBAC & department/room fields back to matching StaffProfile if it exists
     try {
@@ -1853,7 +2307,7 @@ class HospitalStorageService {
           managedRooms: user.managedRooms,
           permissionOverrides: user.permissionOverrides,
         };
-        localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(profiles));
+        this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(profiles));
       }
     } catch (e) {
       // ignore staff profile sync error
@@ -1871,7 +2325,7 @@ class HospitalStorageService {
   // --- Equipment & Machine Management ---
   public getEquipment(): EquipmentItem[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT);
+      const raw = this.readBucketRaw(STORAGE_KEYS.EQUIPMENT);
       if (!raw) return initialEquipment;
       const parsed: EquipmentItem[] = JSON.parse(raw);
       const seen = new Set<string>();
@@ -1927,7 +2381,7 @@ class HospitalStorageService {
       maintenanceMonths: 3
     };
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS);
       if (!raw) return fallback;
       const parsed = JSON.parse(raw);
       return {
@@ -1948,7 +2402,7 @@ class HospitalStorageService {
       radiationSurveyMonths: Math.max(1, Math.round(Number(defaults.radiationSurveyMonths) || 12)),
       maintenanceMonths: Math.max(1, Math.round(Number(defaults.maintenanceMonths) || 3))
     };
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS, JSON.stringify(normalized));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS, JSON.stringify(normalized));
     this.notify();
     return normalized;
   }
@@ -1961,7 +2415,7 @@ class HospitalStorageService {
     } else {
       list.unshift(item);
     }
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
     this.logAudit('SAVE_EQUIPMENT', 'Equipment', undefined, item);
     this.notify();
     return item;
@@ -1972,7 +2426,7 @@ class HospitalStorageService {
     const target = list.find(e => e.id === equipmentId);
     if (!target) return false;
     const updated = list.filter(e => e.id !== equipmentId);
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(updated));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(updated));
     this.logAudit('DELETE_EQUIPMENT', 'Equipment', target, undefined);
     this.notify();
     return true;
@@ -1986,7 +2440,7 @@ class HospitalStorageService {
     item.maintenanceHistory.unshift(log);
     item.lastMaintenanceDate = log.date;
     if (log.nextDueDate) item.nextMaintenanceDate = log.nextDueDate;
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
     this.logAudit('ADD_MAINTENANCE_LOG', 'Equipment', undefined, log);
     this.notify();
     return item;
@@ -2004,7 +2458,7 @@ class HospitalStorageService {
       item.lastMaintenanceDate = updatedLog.date;
       if (updatedLog.nextDueDate) item.nextMaintenanceDate = updatedLog.nextDueDate;
     }
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
     this.logAudit('UPDATE_MAINTENANCE_LOG', 'Equipment', oldLog, updatedLog);
     this.notify();
     return item;
@@ -2023,7 +2477,7 @@ class HospitalStorageService {
         item.nextMaintenanceDate = item.maintenanceHistory[0].nextDueDate;
       }
     }
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
     this.logAudit('DELETE_MAINTENANCE_LOG', 'Equipment', target, undefined);
     this.notify();
     return item;
@@ -2040,7 +2494,7 @@ class HospitalStorageService {
     } else {
       item.status = 'Sự cố hỏng hóc';
     }
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
     this.logAudit('ADD_REPAIR_LOG', 'Equipment', undefined, log);
     this.notify();
     return item;
@@ -2057,7 +2511,7 @@ class HospitalStorageService {
     // Update equipment status based on recent repairs
     const hasUnresolved = item.repairHistory.some(r => r.status !== 'Đã khôi phục');
     item.status = hasUnresolved ? 'Sự cố hỏng hóc' : 'Hoạt động tốt';
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
     this.logAudit('UPDATE_REPAIR_LOG', 'Equipment', oldLog, updatedLog);
     this.notify();
     return item;
@@ -2072,7 +2526,7 @@ class HospitalStorageService {
     item.repairHistory = item.repairHistory.filter(r => r.id !== logId);
     const hasUnresolved = item.repairHistory.some(r => r.status !== 'Đã khôi phục');
     item.status = hasUnresolved ? 'Sự cố hỏng hóc' : 'Hoạt động tốt';
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
     this.logAudit('DELETE_REPAIR_LOG', 'Equipment', target, undefined);
     this.notify();
     return item;
@@ -2081,7 +2535,7 @@ class HospitalStorageService {
   // --- Level 1 Departments (Bộ phận) ---
   public getDepartments(): DepartmentUnit[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.DEPARTMENTS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.DEPARTMENTS);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -2105,7 +2559,9 @@ class HospitalStorageService {
           });
         }
       });
-      localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(seeded));
+      if (!this.serverModeEnabled) {
+        this.writeBucketRaw(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(seeded));
+      }
       return seeded;
     } catch (e) {
       return [...DEFAULT_DEPARTMENTS];
@@ -2127,7 +2583,7 @@ class HospitalStorageService {
       depts.push(dept);
     }
 
-    localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(depts));
+    this.writeBucketRaw(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(depts));
     this.logAudit('SAVE_DEPARTMENT', 'Room', oldDept, dept);
     this.notify();
     return dept;
@@ -2145,7 +2601,7 @@ class HospitalStorageService {
       }
     });
     if (roomsUpdated) {
-      localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
+      this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
     }
 
     const staffList = this.getStaffProfiles();
@@ -2157,10 +2613,10 @@ class HospitalStorageService {
       }
     });
     if (staffUpdated) {
-      localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+      this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
     }
 
-    const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
+    const rawUsers = this.readBucketRaw(STORAGE_KEYS.USERS);
     if (rawUsers) {
       try {
         const users: User[] = JSON.parse(rawUsers);
@@ -2172,7 +2628,7 @@ class HospitalStorageService {
           }
         });
         if (usersUpdated) {
-          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+          this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(users));
         }
       } catch (e) {
         // Ignore parse errors
@@ -2189,7 +2645,7 @@ class HospitalStorageService {
     if (!targetDept) return false;
 
     const filteredDepts = depts.filter(d => d.id !== deptId);
-    localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(filteredDepts));
+    this.writeBucketRaw(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(filteredDepts));
 
     const mode = options?.mode || 'unassign';
     const targetDeptName = options?.targetDepartmentName?.trim();
@@ -2201,7 +2657,7 @@ class HospitalStorageService {
 
     if (mode === 'delete_rooms') {
       const remainingRooms = rooms.filter(r => r.departmentSection !== targetDept.name);
-      localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(remainingRooms));
+      this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(remainingRooms));
 
       const staffList = this.getStaffProfiles();
       let staffUpdated = false;
@@ -2216,7 +2672,7 @@ class HospitalStorageService {
         }
       });
       if (staffUpdated) {
-        localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+        this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
       }
 
       const eqList = this.getEquipment();
@@ -2228,7 +2684,7 @@ class HospitalStorageService {
         }
       });
       if (eqUpdated) {
-        localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
+        this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
       }
     } else {
       const newSection = mode === 'transfer' && targetDeptName ? targetDeptName : 'Chưa phân bộ phận';
@@ -2240,7 +2696,7 @@ class HospitalStorageService {
         }
       });
       if (roomsUpdated) {
-        localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
+        this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
       }
 
       const staffList = this.getStaffProfiles();
@@ -2252,7 +2708,7 @@ class HospitalStorageService {
         }
       });
       if (staffUpdated) {
-        localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+        this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
       }
     }
 
@@ -2264,7 +2720,7 @@ class HospitalStorageService {
   // --- Level 2 Paraclinical Rooms (Phòng trực thuộc Bộ phận) ---
   public getRooms(): ParaclinicalRoom[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.ROOMS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.ROOMS);
       const list: ParaclinicalRoom[] = raw ? JSON.parse(raw) : initialRooms;
       const seen = new Set<string>();
       return list.filter(r => {
@@ -2291,7 +2747,7 @@ class HospitalStorageService {
     } else {
       rooms.unshift(room);
     }
-    localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
+    this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
     this.logAudit('SAVE_ROOM', 'Room', oldRoom, room);
     this.notify();
     return room;
@@ -2303,7 +2759,7 @@ class HospitalStorageService {
     if (!targetRoom) return false;
 
     const filtered = rooms.filter(r => r.id !== roomId);
-    localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(filtered));
+    this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(filtered));
 
     // Cascade staff and equipment reassignment
     const staffList = this.getStaffProfiles();
@@ -2315,7 +2771,7 @@ class HospitalStorageService {
       }
     });
     if (staffUpdated) {
-      localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+      this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
     }
 
     const eqList = this.getEquipment();
@@ -2327,7 +2783,7 @@ class HospitalStorageService {
       }
     });
     if (eqUpdated) {
-      localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
+      this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
     }
 
     this.logAudit('DELETE_ROOM', 'Room', targetRoom, { transferRoomName });
@@ -2348,7 +2804,7 @@ class HospitalStorageService {
       }
     });
     if (staffUpdated) {
-      localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+      this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
     }
 
     // Update Equipment
@@ -2364,7 +2820,7 @@ class HospitalStorageService {
       }
     });
     if (eqUpdated) {
-      localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
+      this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
     }
   }
 
@@ -2379,7 +2835,7 @@ class HospitalStorageService {
       staff.departmentSection = departmentSection;
     }
 
-    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+    this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
     this.logAudit('ASSIGN_STAFF_TO_ROOM', 'HR', { staffUserId, oldRoom }, { staffUserId, newRoom: targetRoomName });
     this.notify();
     return true;
@@ -2392,7 +2848,7 @@ class HospitalStorageService {
 
     const oldRoom = staff.room;
     staff.room = 'Chưa phân phòng';
-    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
+    this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(staffList));
     this.logAudit('REMOVE_STAFF_FROM_ROOM', 'HR', { staffUserId, oldRoom });
     this.notify();
     return true;
@@ -2405,7 +2861,7 @@ class HospitalStorageService {
 
     const oldRoom = eq.room;
     eq.room = targetRoomName;
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
     this.logAudit('ASSIGN_EQUIPMENT_TO_ROOM', 'Equipment', { equipmentId, oldRoom }, { equipmentId, newRoom: targetRoomName });
     this.notify();
     return true;
@@ -2418,7 +2874,7 @@ class HospitalStorageService {
 
     const oldRoom = eq.room;
     eq.room = 'Kho thiết bị / Chưa phân phòng';
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(eqList));
     this.logAudit('REMOVE_EQUIPMENT_FROM_ROOM', 'Equipment', { equipmentId, oldRoom });
     this.notify();
     return true;
@@ -2430,7 +2886,7 @@ class HospitalStorageService {
     if (!room) return null;
     if (!room.reservations) room.reservations = [];
     room.reservations.unshift(reservation);
-    localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
+    this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
     this.logAudit('ADD_ROOM_RESERVATION', 'Room', undefined, reservation);
     this.notify();
     return room;
@@ -2439,7 +2895,7 @@ class HospitalStorageService {
   // --- Staff Profiles & HR ---
   public getStaffProfiles(): StaffProfile[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.STAFF_PROFILES);
+      const raw = this.readBucketRaw(STORAGE_KEYS.STAFF_PROFILES);
       const list: StaffProfile[] = raw ? JSON.parse(raw) : initialStaffProfiles;
       const seen = new Set<string>();
       return list
@@ -2492,7 +2948,7 @@ class HospitalStorageService {
       };
     });
     if (roomsChanged) {
-      localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(nextRooms));
+      this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(nextRooms));
     }
 
     // 2. Clear department manager standing on departments
@@ -2504,7 +2960,7 @@ class HospitalStorageService {
       return { ...d, managerName: undefined };
     });
     if (deptsChanged) {
-      localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(nextDepts));
+      this.writeBucketRaw(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(nextDepts));
     }
 
     // 3. Clear equipment manager / assigned technician
@@ -2522,12 +2978,12 @@ class HospitalStorageService {
       };
     });
     if (eqChanged) {
-      localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(nextEq));
+      this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(nextEq));
     }
 
     // 4. Mark corresponding user account Inactive
     try {
-      const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
+      const rawUsers = this.readBucketRaw(STORAGE_KEYS.USERS);
       if (rawUsers) {
         const users: User[] = JSON.parse(rawUsers);
         let usersChanged = false;
@@ -2544,7 +3000,7 @@ class HospitalStorageService {
           return u;
         });
         if (usersChanged) {
-          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
+          this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
         }
       }
     } catch (e) {
@@ -2561,11 +3017,11 @@ class HospitalStorageService {
     } else {
       list.unshift(profile);
     }
-    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
 
     // Sync RBAC and structural assignment updates to USERS bucket
     try {
-      const rawUsers = localStorage.getItem(STORAGE_KEYS.USERS);
+      const rawUsers = this.readBucketRaw(STORAGE_KEYS.USERS);
       if (rawUsers) {
         const users: User[] = JSON.parse(rawUsers);
         const targetName = (profile.fullName || '').trim().toLowerCase();
@@ -2601,7 +3057,7 @@ class HospitalStorageService {
           return u;
         });
         if (usersChanged) {
-          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
+          this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(nextUsers));
           const updatedSelf = nextUsers.find(u => u.id === this.currentUser.id);
           if (updatedSelf) {
             this.currentUser = updatedSelf;
@@ -2630,7 +3086,7 @@ class HospitalStorageService {
         list.push(p);
       }
     }
-    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(list));
     const resigned = newProfiles.filter(isResignedOrEndedStaff);
     if (resigned.length > 0) {
       this.clearResignedStaffAssignments(resigned);
@@ -2644,7 +3100,7 @@ class HospitalStorageService {
     const target = list.find(s => s.userId === userId);
     if (!target) return false;
     const filtered = list.filter(s => s.userId !== userId);
-    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(filtered));
+    this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(filtered));
     this.logAudit('DELETE_STAFF_PROFILE', 'HR', target, undefined);
     this.notify();
     return true;
@@ -2652,7 +3108,7 @@ class HospitalStorageService {
 
   public getLeaveRequests(): LeaveRequest[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.LEAVE_REQUESTS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.LEAVE_REQUESTS);
       return raw ? JSON.parse(raw) : initialLeaveRequests;
     } catch (e) {
       return initialLeaveRequests;
@@ -2667,7 +3123,7 @@ class HospitalStorageService {
     } else {
       list.unshift(req);
     }
-    localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(list));
     this.logAudit('SAVE_LEAVE_REQUEST', 'HR', undefined, req);
     this.notify();
     return req;
@@ -2679,7 +3135,7 @@ class HospitalStorageService {
     if (!req) return null;
     req.status = status;
     req.approvedBy = approvedBy;
-    localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(list));
     this.logAudit('UPDATE_LEAVE_STATUS', 'HR', undefined, req);
     this.notify();
     return req;
@@ -2690,7 +3146,7 @@ class HospitalStorageService {
     const target = list.find(l => l.id === id);
     if (!target) return false;
     const next = list.filter(l => l.id !== id);
-    localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(next));
+    this.writeBucketRaw(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(next));
     this.logAudit('DELETE_LEAVE_REQUEST', 'HR', target);
     this.notify();
     return true;
@@ -2698,7 +3154,7 @@ class HospitalStorageService {
 
   public getTrainingCourses(): TrainingCourse[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.TRAINING_COURSES);
+      const raw = this.readBucketRaw(STORAGE_KEYS.TRAINING_COURSES);
       return raw ? JSON.parse(raw) : initialTrainingCourses;
     } catch (e) {
       return initialTrainingCourses;
@@ -2713,7 +3169,7 @@ class HospitalStorageService {
     } else {
       list.unshift(course);
     }
-    localStorage.setItem(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(list));
     this.logAudit('SAVE_TRAINING_COURSE', 'HR', undefined, course);
     this.notify();
     return course;
@@ -2722,7 +3178,7 @@ class HospitalStorageService {
   // --- Meeting Management ---
   public getMeetingItems(): MeetingItem[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.MEETING_ITEMS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.MEETING_ITEMS);
       return raw ? JSON.parse(raw) : initialMeetings;
     } catch (e) {
       return initialMeetings;
@@ -2737,7 +3193,7 @@ class HospitalStorageService {
     } else {
       list.unshift(meeting);
     }
-    localStorage.setItem(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(list));
     this.logAudit('SAVE_MEETING', 'Meeting', undefined, meeting);
     this.notify();
     return meeting;
@@ -2749,7 +3205,7 @@ class HospitalStorageService {
     if (!meeting) return null;
     meeting.minutes = minutes;
     meeting.status = 'Đã hoàn thành';
-    localStorage.setItem(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(list));
     this.logAudit('SAVE_MEETING_MINUTES', 'Meeting', undefined, minutes);
     this.notify();
     return meeting;
@@ -2758,7 +3214,7 @@ class HospitalStorageService {
   // --- Integration Hub ---
   public getIntegrationEndpoints(): IntegrationEndpoint[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.INTEGRATION_ENDPOINTS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.INTEGRATION_ENDPOINTS);
       return raw ? JSON.parse(raw) : initialIntegrationEndpoints;
     } catch (e) {
       return initialIntegrationEndpoints;
@@ -2767,7 +3223,7 @@ class HospitalStorageService {
 
   public getIntegrationPayloads(): IntegrationPayloadSample[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.INTEGRATION_PAYLOADS);
+      const raw = this.readBucketRaw(STORAGE_KEYS.INTEGRATION_PAYLOADS);
       return raw ? JSON.parse(raw) : initialIntegrationPayloads;
     } catch (e) {
       return initialIntegrationPayloads;
@@ -2777,7 +3233,7 @@ class HospitalStorageService {
   public addIntegrationPayload(payload: IntegrationPayloadSample): IntegrationPayloadSample {
     const list = this.getIntegrationPayloads();
     list.unshift(payload);
-    localStorage.setItem(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(list));
+    this.writeBucketRaw(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(list));
     this.notify();
     return payload;
   }
@@ -2788,32 +3244,32 @@ class HospitalStorageService {
    * Xóa sạch 100% dữ liệu dùng thử / demo, đưa hệ thống về trạng thái sẵn sàng vận hành thực tế
    */
   public purgeAllTrialData() {
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(initialTasks));
-    localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(initialDocuments));
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(initialUsers));
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(initialNotifications));
-    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(initialAuditLogs));
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(initialShifts));
-    localStorage.setItem(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(initialWorkTaskRows));
-    localStorage.setItem(STORAGE_KEYS.MEETINGS, JSON.stringify(initialWeeklyMeetings));
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(initialChatMessages));
-    localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(initialChannels));
-    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(initialAnnouncements));
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(initialEquipment));
-    localStorage.setItem(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(DEFAULT_DEPARTMENTS));
-    localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(initialRooms));
-    localStorage.setItem(
+    this.writeBucketRaw(STORAGE_KEYS.TASKS, JSON.stringify(initialTasks));
+    this.writeBucketRaw(STORAGE_KEYS.DOCUMENTS, JSON.stringify(initialDocuments));
+    this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(initialUsers));
+    this.writeBucketRaw(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(initialNotifications));
+    this.writeBucketRaw(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(initialAuditLogs));
+    this.writeBucketRaw(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(initialShifts));
+    this.writeBucketRaw(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(initialWorkTaskRows));
+    this.writeBucketRaw(STORAGE_KEYS.MEETINGS, JSON.stringify(initialWeeklyMeetings));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(initialChatMessages));
+    this.writeBucketRaw(STORAGE_KEYS.CHANNELS, JSON.stringify(initialChannels));
+    this.writeBucketRaw(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(initialAnnouncements));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(initialEquipment));
+    this.writeBucketRaw(STORAGE_KEYS.DEPARTMENTS, JSON.stringify(DEFAULT_DEPARTMENTS));
+    this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(initialRooms));
+    this.writeBucketRaw(
       STORAGE_KEYS.EQUIPMENT_DURATION_DEFAULTS,
       JSON.stringify({ permitMonths: 60, calibrationMonths: 12, radiationSurveyMonths: 12, maintenanceMonths: 3 })
     );
-    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(initialStaffProfiles));
-    localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(initialLeaveRequests));
-    localStorage.setItem(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(initialTrainingCourses));
-    localStorage.setItem(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(initialMeetings));
-    localStorage.setItem(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(initialIntegrationEndpoints));
-    localStorage.setItem(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(initialIntegrationPayloads));
-    localStorage.setItem(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify([]));
+    this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(initialStaffProfiles));
+    this.writeBucketRaw(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(initialLeaveRequests));
+    this.writeBucketRaw(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(initialTrainingCourses));
+    this.writeBucketRaw(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(initialMeetings));
+    this.writeBucketRaw(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(initialIntegrationEndpoints));
+    this.writeBucketRaw(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(initialIntegrationPayloads));
+    this.writeBucketRaw(STORAGE_KEYS.SYNC_HISTORY, JSON.stringify([]));
     
     // Xóa bộ nhớ tạm Google Sheet demo (tất cả 12 tháng)
     Array.from({ length: 12 }, (_, idx) => `Tháng ${idx + 1}`).forEach(m => {
@@ -2822,7 +3278,7 @@ class HospitalStorageService {
     localStorage.removeItem('google_sheet_url');
 
     this.currentUser = initialUsers[0];
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, initialUsers[0].id);
+    this.writeBucketRaw(STORAGE_KEYS.CURRENT_USER, initialUsers[0].id);
 
     this.logAudit('PURGE_TRIAL_DATA', 'System', undefined, { 
       note: 'Đã dọn sạch toàn bộ dữ liệu dùng thử để áp dụng thực tế.' 
@@ -2834,29 +3290,29 @@ class HospitalStorageService {
    * Nạp lại dữ liệu dùng thử mẫu (dùng cho đào tạo hoặc thử nghiệm tính năng)
    */
   public loadSampleDemoData() {
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(sampleDemoData.initialTasks));
-    localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(sampleDemoData.initialDocuments));
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(sampleDemoData.initialUsers));
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(sampleDemoData.initialNotifications));
-    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(sampleDemoData.initialAuditLogs));
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(sampleDemoData.initialSettings));
-    localStorage.setItem(STORAGE_KEYS.SHIFTS, JSON.stringify(sampleDemoData.initialShifts));
-    localStorage.setItem(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(sampleDemoData.initialWorkTaskRows));
-    localStorage.setItem(STORAGE_KEYS.MEETINGS, JSON.stringify(sampleDemoData.initialWeeklyMeetings));
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(sampleDemoData.initialChatMessages));
-    localStorage.setItem(STORAGE_KEYS.CHANNELS, JSON.stringify(sampleDemoData.initialChannels));
-    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(sampleDemoData.initialAnnouncements));
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(sampleDemoData.initialEquipment));
-    localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(sampleDemoData.initialRooms));
-    localStorage.setItem(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(sampleDemoData.initialStaffProfiles));
-    localStorage.setItem(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(sampleDemoData.initialLeaveRequests));
-    localStorage.setItem(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(sampleDemoData.initialTrainingCourses));
-    localStorage.setItem(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(sampleDemoData.initialMeetings));
-    localStorage.setItem(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(sampleDemoData.initialIntegrationEndpoints));
-    localStorage.setItem(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(sampleDemoData.initialIntegrationPayloads));
+    this.writeBucketRaw(STORAGE_KEYS.TASKS, JSON.stringify(sampleDemoData.initialTasks));
+    this.writeBucketRaw(STORAGE_KEYS.DOCUMENTS, JSON.stringify(sampleDemoData.initialDocuments));
+    this.writeBucketRaw(STORAGE_KEYS.USERS, JSON.stringify(sampleDemoData.initialUsers));
+    this.writeBucketRaw(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(sampleDemoData.initialNotifications));
+    this.writeBucketRaw(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(sampleDemoData.initialAuditLogs));
+    this.writeBucketRaw(STORAGE_KEYS.SETTINGS, JSON.stringify(sampleDemoData.initialSettings));
+    this.writeBucketRaw(STORAGE_KEYS.SHIFTS, JSON.stringify(sampleDemoData.initialShifts));
+    this.writeBucketRaw(STORAGE_KEYS.WORK_TASK_ROWS, JSON.stringify(sampleDemoData.initialWorkTaskRows));
+    this.writeBucketRaw(STORAGE_KEYS.MEETINGS, JSON.stringify(sampleDemoData.initialWeeklyMeetings));
+    this.writeBucketRaw(STORAGE_KEYS.MESSAGES, JSON.stringify(sampleDemoData.initialChatMessages));
+    this.writeBucketRaw(STORAGE_KEYS.CHANNELS, JSON.stringify(sampleDemoData.initialChannels));
+    this.writeBucketRaw(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(sampleDemoData.initialAnnouncements));
+    this.writeBucketRaw(STORAGE_KEYS.EQUIPMENT, JSON.stringify(sampleDemoData.initialEquipment));
+    this.writeBucketRaw(STORAGE_KEYS.ROOMS, JSON.stringify(sampleDemoData.initialRooms));
+    this.writeBucketRaw(STORAGE_KEYS.STAFF_PROFILES, JSON.stringify(sampleDemoData.initialStaffProfiles));
+    this.writeBucketRaw(STORAGE_KEYS.LEAVE_REQUESTS, JSON.stringify(sampleDemoData.initialLeaveRequests));
+    this.writeBucketRaw(STORAGE_KEYS.TRAINING_COURSES, JSON.stringify(sampleDemoData.initialTrainingCourses));
+    this.writeBucketRaw(STORAGE_KEYS.MEETING_ITEMS, JSON.stringify(sampleDemoData.initialMeetings));
+    this.writeBucketRaw(STORAGE_KEYS.INTEGRATION_ENDPOINTS, JSON.stringify(sampleDemoData.initialIntegrationEndpoints));
+    this.writeBucketRaw(STORAGE_KEYS.INTEGRATION_PAYLOADS, JSON.stringify(sampleDemoData.initialIntegrationPayloads));
 
     this.currentUser = sampleDemoData.initialUsers[0];
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, sampleDemoData.initialUsers[0].id);
+    this.writeBucketRaw(STORAGE_KEYS.CURRENT_USER, sampleDemoData.initialUsers[0].id);
 
     this.logAudit('LOAD_SAMPLE_DATA', 'System', undefined, { 
       note: 'Đã nạp lại bộ dữ liệu dùng thử mẫu để minh họa tính năng.' 
@@ -2872,7 +3328,7 @@ class HospitalStorageService {
   // --- Data Sync History (Google Sheet <-> System / PostgreSQL) ---
   public getSyncHistory(): SyncHistoryEntry[] {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.SYNC_HISTORY);
+      const raw = this.readBucketRaw(STORAGE_KEYS.SYNC_HISTORY);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? (parsed as SyncHistoryEntry[]) : [];
